@@ -37,7 +37,9 @@ import dev.chrisbanes.haze.hazeSource
     liveScreen: TerminalScreen?,frames: Map<String,TerminalScreen>,programs: Map<String,ProgramIdentity>,controlled: Boolean,fontSize: Float,
     onInput: (String)->Unit,onScroll: (Int)->Unit,onWheel: (Int,Int,Int,Int,Int)->Unit,onActivate: ()->Unit,onBottom: ()->Unit,onDimensions: (Int,Int)->Unit,onSelect: (String)->Unit,onPanes: ()->Unit,
     onView: (TerminalView)->Unit,modifier: Modifier=Modifier,bindLiveView: ((String,TerminalView)->Boolean)?=null,
-    onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false) {
+    onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,
+    padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true,
+    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false) {
     val switchLayout=remember(paneLayout,blocks) {paneLayout.filter {p->blocks.any {it.id==p.id}}.sortedBy {it.layer}}
     val hasMinimap=blocks.all {b->switchLayout.any {it.id==b.id}}
     val localHaze=remember {HazeState()}
@@ -120,7 +122,8 @@ import dev.chrisbanes.haze.hazeSource
                             factory={TerminalView(it)},modifier=Modifier.fillMaxSize().clipToBounds(),
                             update={view ->
                                 view.onDimensions=if(center && block.id==liveBlock) onDimensions else {_,_->}
-                                view.setTerminalPaddingDp(12,8,if(blocks.size>1 || bottomControlsInset>0.dp) 36 else 6)
+                                view.setTerminalPaddingDp(padding.horizontal,padding.top,if(bottomControlsInset>0.dp) 36 else if(blocks.size>1) padding.pagedBottom else padding.bottom)
+                                view.extendPadding=extendPadding
                                 view.palette=palette;view.textSp=fontSize
                                 if(block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
                                 view.interactive=center

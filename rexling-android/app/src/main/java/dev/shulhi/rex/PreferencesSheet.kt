@@ -16,7 +16,8 @@ import androidx.compose.ui.unit.dp
 @Composable internal fun PreferencesSheet(onAppearance: ()->Unit,onFont: ()->Unit,onAlerts: ()->Unit,onAbout: ()->Unit,onClose: ()->Unit,
     shortcutGesture: ControlShortcutGesture=ControlShortcutGesture.HOLD,onShortcutGesture: (ControlShortcutGesture)->Unit={},onNeovim: ()->Unit={},
     arrowJoystickEnabled: Boolean=true,onArrowJoystick: (Boolean)->Unit={},codexTitleAttention: Boolean=false,onCodexTitleAttention: (Boolean)->Unit={},
-    minimizeFloatingPanes: Boolean=false,onMinimizeFloatingPanes: (Boolean)->Unit={},language: String="system",onLanguage: ()->Unit={}) {
+    minimizeFloatingPanes: Boolean=false,onMinimizeFloatingPanes: (Boolean)->Unit={},language: String="system",onLanguage: ()->Unit={},
+    terminalPadding: TerminalPadding=TerminalPadding.NORMAL,onTerminalPadding: (TerminalPadding)->Unit={},extendPadding: Boolean=true,onExtendPadding: (Boolean)->Unit={}) {
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
             SettingsHeader(stringResource(R.string.preferences),stringResource(R.string.close_preferences),onClose)
@@ -26,6 +27,25 @@ import androidx.compose.ui.unit.dp
                 SettingsRow(stringResource(R.string.font_size),stringResource(R.string.font_size_detail),SettingsGlyph.FONT,onFont)
                 SettingsDivider()
                 SettingsRow(stringResource(R.string.language),when(language){"zh"->stringResource(R.string.language_zh);"en"->stringResource(R.string.language_en);else->stringResource(R.string.language_system)},SettingsGlyph.APPEARANCE,onLanguage)
+                SettingsDivider()
+                Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Text("Terminal padding",style=SettingsType.row)
+                    Text("Space around the terminal",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        TerminalPadding.entries.forEach {option->
+                            FilterChip(selected=terminalPadding==option,onClick={onTerminalPadding(option)},label={Text(option.label,style=SettingsType.row)})
+                        }
+                    }
+                }
+                SettingsDivider()
+                Row(Modifier.fillMaxWidth().toggleable(extendPadding,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onExtendPadding)
+                    .padding(horizontal=16.dp,vertical=14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                        Text("Extend colors into padding",style=SettingsType.row)
+                        Text(if(extendPadding) "Edge cell colors fill the padding, like Neovim's background" else "Padding keeps the theme background",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked=extendPadding,onCheckedChange=null)
+                }
             }
             SettingsSection(stringResource(R.string.section_panes)) {
                 Row(Modifier.fillMaxWidth().toggleable(minimizeFloatingPanes,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onMinimizeFloatingPanes)
