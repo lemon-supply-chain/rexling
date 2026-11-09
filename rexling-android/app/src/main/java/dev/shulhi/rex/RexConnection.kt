@@ -99,7 +99,7 @@ internal class RexConnection(application: Application, private val scope: Corout
             // Program identity must be live, not the last-known chrome cache.
             val kind=active.programs[block]?.kind
             if(visible && foreground && active.connected && active.controlled && !active.creating && !navigationRequest.pending &&
-                active.selectedBlock==block && (kind==ProgramKind.CODEX || kind==ProgramKind.CLAUDE)) view.keyboard()
+                active.selectedBlock==block && (kind==ProgramKind.CODEX || kind==ProgramKind.CLAUDE || kind==ProgramKind.ANTIGRAVITY)) view.keyboard()
         }
         boundTarget=frameTarget(current);boundView=java.lang.ref.WeakReference(view)
         val latest=mutableTerminal.value.takeIf {displayedTarget==boundTarget} ?: return false

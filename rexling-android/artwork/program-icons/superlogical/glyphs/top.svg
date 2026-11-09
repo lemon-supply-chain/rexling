@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="48px" height="48px" viewBox="0 0 48 48" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>top</title>
+    <g id="top" stroke="none" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="3">
+        <path d="M6.07538,41.9246667 C3,38.8493333 3,33.8994 3,24 C3,14.1005067 3,9.15076 6.07538,6.07538 C9.15076,3 14.1005067,3 24,3 C33.8994,3 38.8493333,3 41.9246667,6.07538 C45,9.15076 45,14.1005067 45,24 C45,33.8994 45,38.8493333 41.9246667,41.9246667 C38.8493333,45 33.8994,45 24,45 C14.1005067,45 9.15076,45 6.07538,41.9246667 Z" id="Path" stroke="color(display-p3 0.000 0.000 0.000)"></path>
+        <polyline id="Path" stroke="color(display-p3 0.000 0.000 0.000)" points="10 24 15.8333333 24 20.5 14.6666667 27.5 33.3333333 32.1666667 24 38 24"></polyline>
+    </g>
+</svg>

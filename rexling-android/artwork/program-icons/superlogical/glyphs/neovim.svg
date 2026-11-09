@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>neovim</title>
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-1">
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.8" offset="0%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-2">
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" offset="0%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.8" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="neovim" stroke="none" fill="none" fill-rule="evenodd" stroke-width="1">
+        <g id="Group" transform="translate(2, 0)">
+            <polygon id="Path" fill="url(#linearGradient-1)" points="0 5.16036131 5.1111687 0 5.1111687 23.9936672 0 18.8930155"></polygon>
+            <polygon id="Path" fill="url(#linearGradient-2)" transform="translate(17.176, 11.9981) scale(-1, 1) translate(-17.176, -11.9981)" points="14.6029676 5.20910158 19.7840237 0.00271407502 19.6790795 23.9935541 14.5679108 18.8929024 14.6029676 5.2088754"></polygon>
+            <polygon id="Path" fill-opacity="0.9" fill="color(display-p3 1.000 1.000 1.000)" points="5.10777611 0.00407111254 18.3961136 20.2816041 14.6776046 24 1.38225579 3.76736231"></polygon>
+        </g>
+    </g>
+</svg>

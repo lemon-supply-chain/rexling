@@ -27,6 +27,10 @@ internal class ProgramTilePicture private constructor(private val picture: Pictu
     companion object {
         private var catalog: JSONObject?=null
         private val cache=mutableMapOf<String,ProgramTilePicture>()
+        @Synchronized fun has(assets: AssetManager,name: String): Boolean {
+            val icons=catalog ?: assets.open("program_tiles.json").bufferedReader().use {JSONObject(it.readText()).getJSONObject("icons")}.also {catalog=it}
+            return icons.has(name)
+        }
         @Synchronized fun load(assets: AssetManager,name: String): ProgramTilePicture = cache.getOrPut(name) {
             val icons=catalog ?: assets.open("program_tiles.json").bufferedReader().use {JSONObject(it.readText()).getJSONObject("icons")}.also {catalog=it}
             val picture=Picture();val canvas=picture.beginRecording(61,48)
@@ -79,6 +83,10 @@ internal class ProgramTilePicture private constructor(private val picture: Pictu
         }
         private fun coordinate(value: String)=if(value.endsWith('%')) value.dropLast(1).toFloat()/100f else value.toFloat()
         private fun paint(value: JSONObject,bounds: RectF): Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            if(value.optBoolean("stroke")) {
+                style=Paint.Style.STROKE
+                strokeWidth=value.optDouble("strokeWidth",1.0).toFloat()
+            }
             if(!value.has("gradient")) {color=color(value.getString("color"),value.float("alpha"));return@apply}
             val attributes=value.getJSONObject("attributes");val stops=value.getJSONArray("stops")
             val positions=FloatArray(stops.length());val colors=IntArray(stops.length())

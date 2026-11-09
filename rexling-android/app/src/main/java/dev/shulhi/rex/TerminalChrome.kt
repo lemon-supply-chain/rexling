@@ -73,7 +73,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, ADD, KEYBOARD, HIDE_KEYBOARD, LEFT, RIGHT, UP, DOWN, TAB, CLOSE, ESCAPE, CONTROL, ALT, SHIFT, POINTER, EYE, BACKSPACE, ARROWS, ENTER, SETTINGS, PASTE, IMAGE, SERVER, REFRESH, SUN, MOON, EDIT, UNPLUG, DELETE }
+internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, ADD, KEYBOARD, HIDE_KEYBOARD, LEFT, RIGHT, UP, DOWN, TAB, CLOSE, ESCAPE, CONTROL, ALT, SHIFT, POINTER, EYE, BACKSPACE, ARROWS, ENTER, SETTINGS, PASTE, IMAGE, SERVER, REFRESH, SUN, MOON, EDIT, UNPLUG, DELETE, QR }
 
 @Composable internal fun ChromeSymbol(icon: ChromeIcon, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
     Canvas(modifier.size(19.dp)) {
@@ -101,6 +101,12 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
             }
             ChromeIcon.UNPLUG -> {box(7f,7f,10f,7f);line(9f,3f,9f,7f);line(15f,3f,15f,7f);line(12f,14f,12f,20f);line(12f,20f,18f,20f);line(3f,3f,21f,21f)}
             ChromeIcon.DELETE -> {box(7f,8f,10f,13f,1f);line(5f,6f,19f,6f);box(9f,3f,6f,3f,1f);line(10f,11f,10f,17f);line(14f,11f,14f,17f)}
+            ChromeIcon.QR -> {
+                box(3f,3f,7f,7f,1f);drawRect(color,Offset(5.5f*u,5.5f*u),Size(2f*u,2f*u))
+                box(14f,3f,7f,7f,1f);drawRect(color,Offset(16.5f*u,5.5f*u),Size(2f*u,2f*u))
+                box(3f,14f,7f,7f,1f);drawRect(color,Offset(5.5f*u,16.5f*u),Size(2f*u,2f*u))
+                line(14f,14f,18f,14f);line(14f,18f,14f,21f);line(18f,18f,21f,18f);drawRect(color,Offset(17.5f*u,13.5f*u),Size(3f*u,3f*u))
+            }
             ChromeIcon.IMAGE -> {box(3f,4f,18f,16f);drawCircle(color,1.4f*u,Offset(16f*u,8f*u));line(3f,17f,8f,12f);line(8f,12f,12f,16f);line(12f,16f,15f,13f);line(15f,13f,21f,18f)}
             ChromeIcon.SERVER -> {
                 for(y in listOf(4f,14f)) {box(4f,y,16f,6f,1.5f);drawCircle(color,.8f*u,Offset(7f*u,(y+3f)*u));line(11f,y+3f,17f,y+3f)}

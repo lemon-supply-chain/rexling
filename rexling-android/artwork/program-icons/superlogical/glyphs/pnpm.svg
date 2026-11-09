@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="400px" height="400px" viewBox="0 0 400 400" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>pnpm</title>
+    <g id="pnpm" stroke="none" fill="none" fill-rule="evenodd" stroke-width="1">
+        <g id="Group" transform="translate(57.0306, 57.0345)" fill="color(display-p3 1.000 1.000 1.000)">
+            <polygon id="b45vdTD8hs" opacity="0.5" points="284 88.7444535 195.255547 88.7444535 195.255547 0 284 0"></polygon>
+            <polygon id="a40WtxIl8d" opacity="0.5" points="186.363352 88.7444535 97.6188988 88.7444535 97.6188988 0 186.363352 0"></polygon>
+            <polygon id="h2CN9AEEpe" opacity="0.5" points="88.7444535 88.7444535 0 88.7444535 0 0 88.7444535 0"></polygon>
+            <polygon id="dqv5133G8" opacity="0.5" points="284 186.363352 195.255547 186.363352 195.255547 97.6188988 284 97.6188988"></polygon>
+            <polygon id="b1Lv79ypvm" points="186.363352 186.363352 97.6188988 186.363352 97.6188988 97.6188988 186.363352 97.6188988"></polygon>
+            <polygon id="hy1IZWwLX" points="186.363352 283.982251 97.6188988 283.982251 97.6188988 195.237798 186.363352 195.237798"></polygon>
+            <polygon id="akQfjxQes" points="284 283.982251 195.255547 283.982251 195.255547 195.237798 284 195.237798"></polygon>
+            <polygon id="bdSrwE5pk" points="88.7444535 283.982251 0 283.982251 0 195.237798 88.7444535 195.237798"></polygon>
+        </g>
+    </g>
+</svg>

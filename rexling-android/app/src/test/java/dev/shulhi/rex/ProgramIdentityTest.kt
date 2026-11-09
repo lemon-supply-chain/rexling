@@ -17,12 +17,35 @@ class ProgramIdentityTest {
         assertEquals(ProgramKind.CLOUDFLARE,state.programs["a"]?.kind)
         assertEquals(ProgramKind.TERMINAL,state.programs["b"]?.kind)
     }
+    @Test fun rexFollowsExecutableAndEffectiveAppMetadataWithoutGuessingFromTitles() {
+        for(candidate in listOf("rex","/opt/rex/bin/rex","C:\\tools\\rex.exe","rex-server","rex-cli","rex-aarch64-unknown-linux-musl")) {
+            val program=ProgramIdentity.resolve(listOf(candidate,"fish"))
+            assertEquals(ProgramKind.REX,program.kind)
+            assertEquals("Rex",program.label)
+            assertEquals("rex",program.title)
+        }
+        assertEquals(ProgramKind.REX,ProgramIdentity.resolve(listOf("fish","rex")).kind)
+        assertEquals(ProgramKind.TERMINAL,ProgramIdentity.resolve(listOf("my-rex-helper")).kind)
+        val state=AppState.parse("""{"programs":{"a":["/usr/local/bin/rex"],"b":["fish"]},"titles":{"b":"rex"}}""")
+        assertEquals(ProgramKind.REX,state.programs["a"]?.kind)
+        assertEquals(ProgramKind.TERMINAL,state.programs["b"]?.kind)
+    }
     @Test fun recognizesAgentsInsideInterpretersAndNativeInstallations() {
         assertEquals(ProgramKind.CLAUDE,ProgramIdentity.resolve(listOf("claude-code","node")).kind)
         assertEquals(ProgramKind.CLAUDE,ProgramIdentity.resolve(listOf("/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js","node")).kind)
         assertEquals(ProgramKind.CODEX,ProgramIdentity.resolve(listOf("/usr/bin/codex-aarch64-unknown-linux-musl")).kind)
         assertEquals(ProgramKind.CODEX,ProgramIdentity.resolve(listOf("C:\\tools\\codex.exe")).kind)
         assertEquals(ProgramKind.CODEX,ProgramIdentity.resolve(listOf("/usr/lib/node_modules/@openai/codex/bin/codex.js","node")).kind)
+        for (candidate in listOf("agy", "antigravity", "antigravity-cli", "/Users/xiaobo/.gemini/antigravity/bin/agy", "/usr/local/bin/antigravity")) {
+            val program = ProgramIdentity.resolve(listOf(candidate, "zsh"))
+            assertEquals(ProgramKind.ANTIGRAVITY, program.kind)
+            assertEquals("Antigravity", program.label)
+            assertEquals("antigravity", program.title)
+            assertFalse(program.isShell)
+        }
+        assertTrue(ProgramIdentity.resolve(listOf("zsh")).isShell)
+        assertTrue(ProgramIdentity.resolve(listOf("bash")).isShell)
+        assertTrue(ProgramIdentity.resolve(listOf("fish")).isShell)
     }
     @Test fun usesExecutableMetadataAndFallsBackWithoutGuessingFromTitles() {
         assertEquals(ProgramKind.NEOVIM,ProgramIdentity.resolve(listOf("/usr/local/bin/nvim")).kind)
@@ -89,6 +112,24 @@ class ProgramIdentityTest {
         }
         assertEquals("Window management",codex.tabTitle("Window management","shell",1))
         assertEquals("Task title",ProgramIdentity.Loading.paneTitle("shell","Task title"))
+    }
+
+    @Test fun prefersChildCommandOverShellInProcessHierarchy() {
+        val docker = ProgramIdentity.resolve(listOf("fish", "docker"))
+        assertEquals("docker", docker.label)
+        assertFalse(docker.isShell)
+
+        val cargo = ProgramIdentity.resolve(listOf("zsh", "cargo"))
+        assertEquals("cargo", cargo.label)
+        assertFalse(cargo.isShell)
+
+        val bun = ProgramIdentity.resolve(listOf("bun", "node"))
+        assertEquals(ProgramKind.NODE, bun.kind)
+        assertEquals("bun", bun.executable)
+
+        val top = ProgramIdentity.resolve(listOf("top"))
+        assertEquals(ProgramKind.MONITOR, top.kind)
+        assertEquals("top", top.executable)
     }
 
 }

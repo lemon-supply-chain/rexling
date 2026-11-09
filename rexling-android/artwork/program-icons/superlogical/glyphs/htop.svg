@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="134px" height="108px" viewBox="0 0 134 108" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>htop</title>
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-1">
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" offset="0%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.698411458" offset="22.9753059%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.649973958" offset="72.6458333%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.4" offset="98.8255208%"></stop>
+        </linearGradient>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-2">
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" offset="0%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.698411458" offset="22.9753059%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.649973958" offset="72.6458333%"></stop>
+            <stop stop-color="color(display-p3 1.000 1.000 1.000)" stop-opacity="0.4" offset="98.8255208%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="htop" stroke="none" fill="none" fill-rule="evenodd">
+        <path d="M4,37 L4,11 L14,11 L14,15 L10,15 L10,33 L14,33 L14,37 L4,37 Z M130,37 L130,11 L120,11 L120,15 L124,15 L124,33 L120,33 L120,37 L130,37 Z" id="Combined-Shape" fill="url(#linearGradient-1)" opacity="0.4"></path>
+        <path d="M4,67 L4,41 L14,41 L14,45 L10,45 L10,63 L14,63 L14,67 L4,67 Z M130,67 L130,41 L120,41 L120,45 L124,45 L124,63 L120,63 L120,67 L130,67 Z" id="Combined-Shape" fill="url(#linearGradient-1)" opacity="0.4"></path>
+        <path d="M4,97 L4,71 L14,71 L14,75 L10,75 L10,93 L14,93 L14,97 L4,97 Z M130,97 L130,71 L120,71 L120,75 L124,75 L124,93 L120,93 L120,97 L130,97 Z" id="Combined-Shape" fill="url(#linearGradient-1)" opacity="0.4"></path>
+        <path d="M16,41 L22,41 L22,67 L16,67 L16,41 Z M28,41 L34,41 L34,67 L28,67 L28,41 Z M40,41 L46,41 L46,67 L40,67 L40,41 Z M52,41 L58,41 L58,67 L52,67 L52,41 Z M64,41 L70,41 L70,67 L64,67 L64,41 Z M76,41 L82,41 L82,67 L76,67 L76,41 Z M88,41 L94,41 L94,67 L88,67 L88,41 Z M100,41 L106,41 L106,67 L100,67 L100,41 Z M112,41 L118,41 L118,67 L112,67 L112,41 Z" id="Combined-Shape" fill="url(#linearGradient-2)"></path>
+        <path d="M16,71 L22,71 L22,97 L16,97 Z M28,71 L34,71 L34,97 L28,97 Z M40,71 L46,71 L46,97 L40,97 Z M88,71 L94,71 L94,97 L88,97 Z M100,71 L106,71 L106,97 L100,97 Z M112,71 L118,71 L118,97 L112,97 Z" id="Combined-Shape" fill="url(#linearGradient-2)"></path>
+        <path d="M16,11 L22,11 L22,37 L16,37 Z M28,11 L34,11 L34,37 L28,37 Z M40,11 L46,11 L46,37 L40,37 Z M88,11 L94,11 L94,37 L88,37 Z M100,11 L106,11 L106,37 L100,37 Z M112,11 L118,11 L118,37 L112,37 Z" id="Combined-Shape" fill="url(#linearGradient-2)"></path>
+    </g>
+</svg>

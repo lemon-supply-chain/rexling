@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="480px" height="392px" viewBox="0 0 480 392" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>zsh</title>
+    <g id="zsh" stroke="none" fill="none">
+        <circle id="Oval" stroke="color(display-p3 0.596 0.894 0.569)" stroke-width="30" cx="95.6377953" cy="109" r="51"></circle>
+        <circle id="Oval" stroke="color(display-p3 0.596 0.894 0.569)" stroke-width="30" cx="208.362205" cy="273" r="51"></circle>
+        <line x1="38.9606299" y1="316.858268" x2="265.03937" y2="62.8110236" id="Line" stroke="color(display-p3 0.596 0.894 0.569)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"></line>
+        <line x1="294" y1="346" x2="448.408455" y2="345.649812" id="Line" stroke="color(display-p3 0.596 0.894 0.569)" stroke-width="22" opacity="0.7" stroke-linecap="round" stroke-linejoin="round"></line>
+    </g>
+</svg>

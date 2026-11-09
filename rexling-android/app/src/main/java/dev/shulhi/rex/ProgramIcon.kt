@@ -22,21 +22,25 @@ import androidx.compose.ui.unit.dp
     val resource = when(program.kind) {
         ProgramKind.CLAUDE -> R.drawable.ic_program_claude
         ProgramKind.CODEX -> R.drawable.ic_program_openai
+        ProgramKind.ANTIGRAVITY -> R.drawable.ic_program_antigravity
         ProgramKind.NEOVIM -> R.drawable.ic_program_neovim
         ProgramKind.VIM -> R.drawable.ic_program_vim
         ProgramKind.GIT -> R.drawable.ic_program_git
         ProgramKind.PYTHON -> R.drawable.ic_program_python
         ProgramKind.NODE -> R.drawable.ic_program_nodedotjs
         ProgramKind.CLOUDFLARE -> R.drawable.ic_program_cloudflare
+        ProgramKind.REX -> R.drawable.ic_program_rex
         else -> null
     }
     val tint = color ?: when(program.kind) {
         ProgramKind.CLAUDE -> Color(if(dark) 0xffe6a28a else 0xffb65f42)
+        ProgramKind.ANTIGRAVITY -> Color(if(dark) 0xff818cf8 else 0xff6366f1)
         ProgramKind.NEOVIM, ProgramKind.VIM -> Color(if(dark) 0xff81be79 else 0xff43853d)
         ProgramKind.GIT -> Color(if(dark) 0xfff2876c else 0xffc7462b)
         ProgramKind.PYTHON -> Color(if(dark) 0xff8cbde5 else 0xff326f9f)
         ProgramKind.NODE -> Color(if(dark) 0xff8bc77a else 0xff477b32)
         ProgramKind.CLOUDFLARE -> Color(if(dark) 0xffffb85c else 0xffb85b00)
+        ProgramKind.REX -> Color(if(dark) 0xff7293ff else 0xff3156f4)
         else -> MaterialTheme.colorScheme.onSurface
     }
     if(resource != null) Icon(painterResource(resource), program.label, modifier.size(16.dp), tint)

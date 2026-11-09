@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 @Composable internal fun ServersSheet(model: RexModel,onDismiss: ()->Unit) {
     var editing by remember {mutableStateOf<ServerProfile?>(null)}
     var editor by remember {mutableStateOf(false)}
+    var scanning by remember {mutableStateOf(false)}
     ModalBottomSheet(onDismissRequest=onDismiss,containerColor=MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().heightIn(max=600.dp).verticalScroll(rememberScrollState()).padding(horizontal=18.dp).padding(bottom=25.dp)) {
             Row(Modifier.fillMaxWidth().padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -31,6 +32,10 @@ import androidx.compose.ui.unit.sp
                     Text("Servers",fontSize=20.sp,fontWeight=FontWeight.Bold)
                     Text("${model.connectedCount} connected",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                IconButton(onClick={scanning=true}) {
+                    ChromeSymbol(ChromeIcon.QR,color=MaterialTheme.colorScheme.primary)
+                }
+                Spacer(Modifier.width(4.dp))
                 Button(onClick={editing=null;editor=true}) {Text("+ Add server")}
             }
             if(model.servers.isEmpty()) Text("Add a Rex server to get started.",Modifier.padding(vertical=16.dp))
@@ -67,6 +72,15 @@ import androidx.compose.ui.unit.sp
             Text("Switch servers without closing their connections.",Modifier.padding(top=9.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+    if(scanning) {
+        QrScannerDialog(onDismiss={scanning=false},onScanned={label,endpoint->
+            val err=model.saveServer(null,label,endpoint)
+            if(err==null) onDismiss() else {
+                editing=model.servers.firstOrNull {it.endpoint==endpoint}
+                editor=true
+            }
+        })
+    }
     if(editor) ServerEditor(editing,onClose={editor=false},onSave={label,endpoint->model.saveServer(editing?.id,label,endpoint)})
 }
 
@@ -74,10 +88,21 @@ import androidx.compose.ui.unit.sp
     var name by remember(server?.id) {mutableStateOf(server?.label.orEmpty())}
     var endpoint by remember(server?.id) {mutableStateOf(server?.endpoint.orEmpty())}
     var error by remember {mutableStateOf<String?>(null)}
+    var scanning by remember {mutableStateOf(false)}
+    if(scanning) {
+        QrScannerDialog(onDismiss={scanning=false},onScanned={label,url->
+            name=label;endpoint=url;scanning=false
+        })
+    }
     AlertDialog(onDismissRequest=onClose,title={Text(if(server==null) "Add server" else "Edit server")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(name,{name=it;error=null},Modifier.fillMaxWidth(),label={Text("Name")},singleLine=true)
             OutlinedTextField(endpoint,{endpoint=it;error=null},Modifier.fillMaxWidth(),label={Text("Server URL")},singleLine=true,
+                trailingIcon={
+                    IconButton(onClick={scanning=true}) {
+                        ChromeSymbol(ChromeIcon.QR,color=MaterialTheme.colorScheme.primary)
+                    }
+                },
                 keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri),placeholder={Text("https://host.tailnet.ts.net",fontSize=11.sp)})
             Text("Use the server's authenticated Tailscale address.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
             error?.let {Text(it,color=MaterialTheme.colorScheme.error,fontSize=12.sp)}
