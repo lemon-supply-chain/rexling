@@ -346,7 +346,8 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
         codexTitleAttention=model.experimentalCodexAttention,onCodexTitleAttention=model::changeCodexAttention,
         minimizeFloatingPanes=model.minimizeFloatingPanes,onMinimizeFloatingPanes=model::changeMinimizeFloatingPanes,
         language=model.language,onLanguage={languageDialog=true},
-        terminalPadding=model.terminalPadding,onTerminalPadding=model::changeTerminalPadding,extendPadding=model.extendPadding,onExtendPadding=model::changeExtendPadding)
+        terminalPadding=model.terminalPadding,onTerminalPadding=model::changeTerminalPadding,extendPadding=model.extendPadding,onExtendPadding=model::changeExtendPadding,
+        predictiveEcho=model.predictiveEcho,onPredictiveEcho=model::changePredictiveEcho)
     if(languageDialog) LanguageDialog(model.language,model::changeLanguage){languageDialog=false}
     if(shortcutSettings && editingProfile==null) ShortcutProfilesSheet(model.shortcutProfiles,onEdit={editingProfile=it},onNew={editingProfile=""},
         onEnabled=model::enableShortcutProfile,onClose={shortcutSettings=false},

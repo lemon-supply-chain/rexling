@@ -166,6 +166,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_readUpdate(
 }
 
 mod input_queue;
+mod prediction;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadCreate(
