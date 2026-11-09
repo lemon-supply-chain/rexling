@@ -8,9 +8,10 @@ data class ProgramIdentity(
     val label: String,
     val executable: String = "",
     val pending: Boolean = false,
+    val candidates: List<String> = emptyList(),
 ) {
-    var candidates: List<String> = emptyList()
-        internal set
+    /** Names and paths Rex reported for the foreground program; falls back to the resolved name. */
+    internal val matchNames: List<String> get()=candidates.ifEmpty {listOf(executable,label).filter {it.isNotBlank()}.distinct()}
     val title: String get() = when(kind) {
         ProgramKind.CLAUDE -> "claude"; ProgramKind.CODEX -> "codex"; ProgramKind.ANTIGRAVITY -> "antigravity"
         ProgramKind.NEOVIM -> "nvim"; ProgramKind.VIM -> "vim"; ProgramKind.GIT -> "git"; ProgramKind.PYTHON -> "python"
@@ -43,7 +44,7 @@ data class ProgramIdentity(
         val Terminal = ProgramIdentity(ProgramKind.TERMINAL, "Terminal")
         val Loading = ProgramIdentity(ProgramKind.TERMINAL,"Loading…",pending=true)
         fun resolve(candidates: List<String>): ProgramIdentity {
-            fun create(identity: ProgramIdentity) = identity.apply { this.candidates = candidates }
+            fun create(identity: ProgramIdentity) = identity.copy(candidates = candidates)
             var runtime: ProgramIdentity? = null
             for (candidate in candidates) {
                 val path = candidate.replace('\\', '/').lowercase(Locale.ROOT)
