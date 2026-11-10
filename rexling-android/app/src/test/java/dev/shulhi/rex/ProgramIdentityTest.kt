@@ -136,6 +136,11 @@ class ProgramIdentityTest {
         val top = ProgramIdentity.resolve(listOf("top"))
         assertEquals(ProgramKind.MONITOR, top.kind)
         assertEquals("top", top.executable)
+
+        val brewCurl = ProgramIdentity.resolve(listOf("curl", "ruby", "/opt/homebrew/bin/brew"))
+        assertEquals("brew", brewCurl.label)
+        assertEquals("brew", brewCurl.executable)
+        assertFalse(brewCurl.isShell)
     }
 
 }

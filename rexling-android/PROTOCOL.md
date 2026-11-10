@@ -490,10 +490,11 @@ the frozen screen. The existing Copy viewport menu remains available.
 The pane picker now uses the current program tile, live title (or executable
 name), directory caption, and selected-pane marker. The supplied Superlogical
 catalog SVGs are retained under artwork/program-icons/superlogical with hashes
-and attribution. A local WebKit converter renders their SVG masks, gradients
-and Display-P3 colors into packaged PNG tiles. Runtime Android rendering needs
-no browser or network request. Supported kinds use those tiles in the header,
-tabs, pane picker and swipe preview; unsupported kinds retain their fallback.
+and attribution. A local WebKit converter renders the same sources into
+test-only reference PNGs, while runtime Android rendering compiles them to
+native Canvas paths and needs no browser or network request. Supported kinds use
+those tiles in the header, tabs, pane picker and swipe preview; unsupported kinds
+retain their fallback.
 The user's final transparent launcher PNG is copied exactly, preserving alpha.
 
 

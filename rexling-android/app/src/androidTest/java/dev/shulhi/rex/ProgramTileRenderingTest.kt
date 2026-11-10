@@ -27,17 +27,16 @@ import kotlin.math.abs
 class ProgramTileRenderingTest {
     @get:Rule val ui=createComposeRule()
     private val context=InstrumentationRegistry.getInstrumentation().targetContext
+    private val testAssets=InstrumentationRegistry.getInstrumentation().context.assets
     private val names=listOf("codex","claude_code","neovim","vim","git","python","node","shell","htop","btop","cloudflare")
-    private val resources=listOf(R.drawable.catalog_codex,R.drawable.catalog_claude_code,R.drawable.catalog_neovim,R.drawable.catalog_vim,
-        R.drawable.catalog_git,R.drawable.catalog_python,R.drawable.catalog_node,R.drawable.catalog_shell,R.drawable.catalog_htop,R.drawable.catalog_btop,R.drawable.catalog_cloudflare)
     @Test fun nativeVectorsKeepTheCatalogGeometryColorsAndLogoMasks() {
         val atlas=Bitmap.createBitmap(976,384*names.size,Bitmap.Config.ARGB_8888);val out=Canvas(atlas)
         val deltas=mutableListOf<String>()
         for((i,name) in names.withIndex()) {
-            val reference=BitmapFactory.decodeResource(context.resources,resources[i])
+            val reference=BitmapFactory.decodeStream(testAssets.open("program_tiles/$name.png"))
             val actual=Bitmap.createBitmap(488,384,Bitmap.Config.ARGB_8888)
-            ProgramTilePicture.load(context.assets,name).draw(Canvas(actual),488f,384f)
-            assertSame(ProgramTilePicture.load(context.assets,name),ProgramTilePicture.load(context.assets,name))
+            ProgramVectorPicture.load(context.assets,name).draw(Canvas(actual),488f,384f)
+            assertSame(ProgramVectorPicture.load(context.assets,name),ProgramVectorPicture.load(context.assets,name))
             var difference=0L
             for(y in 0 until 384) for(x in 0 until 488) {
                 val a=actual.getPixel(x,y);val b=reference.getPixel(x,y)
@@ -79,13 +78,34 @@ class ProgramTileRenderingTest {
             for(version in 0..1) {
                 val save=canvas.save();canvas.translate((column*2+version)*cellWidth+16f,row*cellHeight+14f)
                 if(version==0) {
-                    val image=BitmapFactory.decodeResource(context.resources,resources[row])
+                    val image=BitmapFactory.decodeStream(testAssets.open("program_tiles/$name.png"))
                     canvas.rotate(config.third,width/2,height/2)
                     canvas.drawBitmap(image,null,RectF(0f,0f,width,height),Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-                } else ProgramTilePicture.load(context.assets,name).draw(canvas,width,height,config.third)
+                } else ProgramVectorPicture.load(context.assets,name).draw(canvas,width,height,config.third)
                 canvas.restoreToCount(save)
             }
         }
         File(context.cacheDir,"program-tile-small.png").outputStream().use {atlas.compress(Bitmap.CompressFormat.PNG,100,it)}
+    }
+    @Test fun catalogResolvesTilesGlyphsVariantsAndAliases() {
+        fun tile(vararg names: String)=ProgramCatalog.tile(ProgramIdentity.resolve(names.toList()),context.assets)
+        fun glyph(vararg names: String)=ProgramCatalog.glyph(ProgramIdentity.resolve(names.toList()),context.assets)
+        assertEquals("claude_code",tile("claude-code"))
+        assertEquals("claude",glyph("claude-code"))
+        assertEquals("bun",tile("bun"))
+        assertEquals("pnpm",tile("pnpm"))
+        assertEquals("top",tile("top"))
+        assertEquals("rust",tile("cargo"))
+        assertEquals("shell",tile("fish"))
+        assertEquals("terminal",glyph("fish"))
+        assertEquals("tmux",glyph("tmux"))
+        assertEquals("ssh",glyph("ssh"))
+        assertEquals("terminal",glyph("unmapped-program"))
+    }
+    @Test fun glyphTintIsAppliedToNativePaths() {
+        val bitmap=Bitmap.createBitmap(64,64,Bitmap.Config.ARGB_8888)
+        ProgramVectorPicture.loadGlyph(context.assets,"claude",0xFFFF0000.toInt()).draw(Canvas(bitmap),64f,64f)
+        val pixel=(0 until 64).asSequence().flatMap {y->(0 until 64).asSequence().map {x->bitmap.getPixel(x,y)}}.first {Color.alpha(it)>0}
+        assertTrue(Color.red(pixel)>Color.green(pixel) && Color.red(pixel)>Color.blue(pixel))
     }
 }

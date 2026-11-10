@@ -5,13 +5,16 @@ No rasterization: SVG masks are monochrome alpha logos and can be drawn as tinte
 paths. Unsupported SVG features fail generation instead of silently losing art.
 """
 import base64
+import hashlib
 import json
 import re
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "artwork/program-icons/superlogical"
+OVERLAY = ROOT / "artwork/program-icons/rexling"
 OUTPUT = ROOT / "app/src/main/assets/program_tiles.json"
 
 
@@ -57,10 +60,18 @@ def reference(value):
     return value[5:-1]
 
 
-def compile_icon(root):
-    commands = [{"op": "translate", "x": -6, "y": -6}]
+def viewport(root):
+    box = root.get("viewBox")
+    if box:
+        return tuple(map(float, box.split()))
+    return 0.0, 0.0, number(root.get("width", 24)), number(root.get("height", 24))
 
-    def draw(node, inherited, definitions, ink=None, opacity=1):
+
+def compile_icon(root, ink=None, crop=True):
+    commands = [{"op": "translate", "x": -6, "y": -6}] if crop else []
+
+    def draw(node, inherited, definitions, tint=None, opacity=1):
+        ink_color = tint or ink
         kind = tag(node)
         assert node.get("filter") is None, "SVG filters are not supported"
         if kind in ("defs", "title", "desc"):
@@ -88,7 +99,7 @@ def compile_icon(root):
             href = image.get("href", "")
             assert href.startswith("data:image/svg+xml;base64,")
             logo = ET.fromstring(base64.b64decode(href.split(",", 1)[1]))
-            color = node[0].attrib["fill"] if len(node) > 0 and "fill" in node[0].attrib else ink or "#ffffff"
+            color = ink_color or (node[0].attrib["fill"] if len(node) > 0 and "fill" in node[0].attrib else "#ffffff")
             x, y, w, h = [number(image.get(k)) for k in ("x", "y", "width", "height")]
             vx, vy, vw, vh = map(float, logo.attrib["viewBox"].split())
             scale = min(w/vw, h/vh)
@@ -101,24 +112,24 @@ def compile_icon(root):
         elif kind == "use":
             href = node.attrib.get("{http://www.w3.org/1999/xlink}href") or node.attrib.get("href") or node.attrib.get("xlink:href", "")
             if href.startswith("#") and href[1:] in definitions:
-                draw(definitions[href[1:]], style, definitions, ink, opacity)
+                draw(definitions[href[1:]], style, definitions, tint, opacity)
         elif kind in ("svg", "g"):
             for child in node:
-                draw(child, style, definitions, ink, opacity)
+                draw(child, style, definitions, tint, opacity)
         elif kind in ("path", "rect", "polygon", "polyline", "circle", "ellipse", "line"):
             fill = style.get("fill", "black")
             stroke = style.get("stroke")
             if fill != "none":
-                paint = {"color": ink or fill, "alpha": opacity*float(style.get("fill-opacity", 1))}
+                paint = {"color": ink_color or fill, "alpha": opacity*float(style.get("fill-opacity", 1))}
                 if fill.startswith("url("):
                     gradient = definitions[reference(fill)]
                     assert tag(gradient) in ("linearGradient", "radialGradient")
                     paint = {"gradient": tag(gradient), "attributes": gradient.attrib,
-                             "stops": [dict(s.attrib, **{"stop-color": ink or s.get("stop-color", "black")}) for s in gradient],
+                             "stops": [dict(s.attrib, **{"stop-color": ink_color or s.get("stop-color", "black")}) for s in gradient],
                              "alpha": paint["alpha"]}
                 commands.append({"op": "path", "path": shapes(node), "evenOdd": style.get("fill-rule") == "evenodd", "paint": paint})
             if stroke and stroke not in ("none", "transparent"):
-                paint = {"color": ink or stroke, "alpha": opacity*float(style.get("stroke-opacity", 1)),
+                paint = {"color": ink_color or stroke, "alpha": opacity*float(style.get("stroke-opacity", 1)),
                          "stroke": True, "strokeWidth": float(style.get("stroke-width", 1))}
                 commands.append({"op": "path", "path": shapes(node), "evenOdd": False, "paint": paint})
         else:
@@ -129,10 +140,70 @@ def compile_icon(root):
     return commands
 
 
-def main():
+def compile_glyph(root):
+    x, y, width, height = viewport(root)
+    commands = compile_icon(root, ink="#FFFFFF", crop=False)
+    if x or y:
+        commands.insert(0, {"op": "translate", "x": -x, "y": -y})
+    return {"width": width, "height": height, "commands": commands}
+
+
+def program_kinds():
+    text = (ROOT / "app/src/main/java/dev/shulhi/rex/ProgramIdentity.kt").read_text()
+    body = re.search(r"enum class ProgramKind\s*\{([^}]*)\}", text).group(1)
+    return {name.strip() for name in body.split(",") if name.strip()}
+
+
+def check_sources():
+    metadata = json.loads((SOURCE / "metadata.json").read_text())
+    for key, folder in (("sha256", SOURCE), ("glyph_sha256", SOURCE / "glyphs")):
+        for name, digest in metadata[key].items():
+            path = folder / f"{name}.svg"
+            assert path.exists(), f"Missing source: {path}"
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, f"Changed source: {path}"
+
+
+def validate(manifest, icons, glyphs):
+    assert manifest["version"] == 1
+    assert set(manifest["skins"]) == program_kinds(), "Skins must cover every ProgramKind"
+    for kind, skin in manifest["skins"].items():
+        if skin.get("tile"):
+            assert skin["tile"] in icons, f"{kind} tile is missing: {skin['tile']}"
+        if skin.get("glyph"):
+            assert skin["glyph"] in glyphs, f"{kind} glyph is missing: {skin['glyph']}"
+        for name, tile in skin.get("variants", {}).items():
+            assert tile in icons, f"{kind} variant {name} is missing: {tile}"
+        colors = skin.get("colors", [])
+        assert not colors or len(colors) == 3, f"{kind} needs three colors"
+        assert all(re.fullmatch(r"#[0-9A-Fa-f]{6}", color) for color in colors), f"{kind} has an invalid color"
+    for name, tile in manifest["aliases"].items():
+        assert tile in icons, f"Alias {name} is missing: {tile}"
+
+
+def build():
+    check_sources()
     icons = {p.stem.replace("-", "_"): compile_icon(ET.parse(p).getroot()) for p in sorted(SOURCE.glob("*.svg"))}
-    OUTPUT.write_text(json.dumps({"width": 61, "height": 48, "icons": icons}, separators=(",", ":")) + "\n")
-    print(f"Compiled {len(icons)} vector tiles to {OUTPUT.relative_to(ROOT)} ({OUTPUT.stat().st_size:,} bytes)")
+    icons.update({p.stem.replace("-", "_"): compile_icon(ET.parse(p).getroot())
+                  for p in sorted((OVERLAY / "tiles").glob("*.svg"))})
+    glyphs = {p.stem.replace("-", "_"): compile_glyph(ET.parse(p).getroot())
+              for folder in (SOURCE / "glyphs", OVERLAY / "glyphs") for p in sorted(folder.glob("*.svg"))}
+    manifest = json.loads((OVERLAY / "manifest.json").read_text())
+    validate(manifest, icons, glyphs)
+    payload = {"width": 61, "height": 48, "icons": icons, "glyphs": glyphs,
+               "skins": manifest["skins"], "aliases": manifest["aliases"]}
+    return json.dumps(payload, separators=(",", ":")) + "\n", len(icons), len(glyphs)
+
+
+def main():
+    payload, icon_count, glyph_count = build()
+    if "--check" in sys.argv[1:]:
+        current = OUTPUT.read_text() if OUTPUT.exists() else ""
+        assert current == payload, f"{OUTPUT.relative_to(ROOT)} is stale; rebuild the vector catalog"
+        print(f"Verified {icon_count} tiles and {glyph_count} glyphs in {OUTPUT.relative_to(ROOT)}")
+        return
+    OUTPUT.write_text(payload)
+    print(f"Compiled {icon_count} tiles and {glyph_count} glyphs to {OUTPUT.relative_to(ROOT)} "
+          f"({OUTPUT.stat().st_size:,} bytes)")
 
 
 if __name__ == "__main__":

@@ -160,18 +160,33 @@ The screenshot is written to ignored `rexling-android/.build/activity-attention.
 
 ## Program icon artwork
 
-Program tiles use retained catalog SVG geometry compiled to native Canvas vector
-commands. To update them after changing the SVG sources:
+Program tiles and compact glyphs use retained catalog SVG geometry compiled to
+native Canvas vector commands. The sources are:
+
+- `rexling-android/artwork/program-icons/superlogical/*.svg` upstream tiles
+- `rexling-android/artwork/program-icons/superlogical/glyphs/*.svg` upstream glyphs
+- `rexling-android/artwork/program-icons/rexling/manifest.json` local skins and aliases
+- `rexling-android/artwork/program-icons/rexling/tiles/*.svg` local tiles
+- `rexling-android/artwork/program-icons/rexling/glyphs/*.svg` local glyphs
+
+To update them after changing the SVG sources:
 
 ```sh
 python3 rexling-android/scripts/build_program_vectors.py
+python3 rexling-android/scripts/build_program_vectors.py --check
 ```
 
 Commit `app/src/main/assets/program_tiles.json` under `rexling-android/` with the
-source changes. The converter supports the catalog's paths, gradients, transforms
-and monochrome alpha masks; unsupported SVG features fail generation. Original
-PNG renders are retained for visual regression comparisons. No browser or network
-is needed to regenerate the native commands.
+source changes. The converter validates the retained source hashes, compiles both
+tiles and glyphs, and merges the local manifest. Unsupported SVG features fail
+generation. Reference PNGs under `app/src/androidTest/assets/program_tiles/` are
+test fixtures and are not packaged in the app. No browser or network is needed to
+regenerate the native commands.
+
+To add a program icon, put its SVG under `rexling/tiles/` and rebuild. Add an entry
+to `manifest.json` only when the command name differs from the tile name or the
+icon needs a custom glyph, palette, or executable variant. Put local glyphs under
+`rexling/glyphs/`; upstream catalog files stay unmodified.
 
 ## Native upload checks
 

@@ -1,6 +1,5 @@
 package dev.shulhi.rex
 
-import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -63,57 +62,16 @@ import androidx.compose.ui.unit.dp
         return
     }
     val assets=LocalContext.current.assets
-    val directCatalog=when(program.kind) {
-        ProgramKind.CLAUDE -> "claude_code"
-        ProgramKind.CODEX -> "codex"
-        ProgramKind.ANTIGRAVITY -> "antigravity"
-        ProgramKind.NEOVIM -> "neovim"
-        ProgramKind.VIM -> "vim"
-        ProgramKind.GIT -> "git"
-        ProgramKind.PYTHON -> "python"
-        ProgramKind.NODE -> if(program.executable=="bun") "bun" else if(program.executable=="pnpm") "pnpm" else "node"
-        ProgramKind.CLOUDFLARE -> "cloudflare"
-        ProgramKind.REX -> "rex"
-        ProgramKind.MONITOR -> if(program.executable=="btop") "btop" else if(program.executable=="top") "top" else "htop"
-        else -> null
-    }
-    val catalog = when {
-        directCatalog != null -> directCatalog
-        program.isShell -> "shell"
-        else -> {
-            val exec = program.executable.lowercase(Locale.ROOT)
-            val label = program.label.lowercase(Locale.ROOT)
-            val mapped = tileAliases[exec] ?: tileAliases[exec.replace('-', '_')] ?: tileAliases[label] ?: tileAliases[label.replace('-', '_')]
-            val candidate = mapped ?: exec.replace('-', '_')
-            val candidateLabel = label.replace('-', '_')
-            when {
-                candidate.isNotEmpty() && ProgramTilePicture.has(assets, candidate) -> candidate
-                candidateLabel.isNotEmpty() && ProgramTilePicture.has(assets, candidateLabel) -> candidateLabel
-                program.kind == ProgramKind.TERMINAL -> "shell"
-                else -> null
-            }
-        }
-    }
+    val skin=ProgramCatalog.skin(program,assets)
+    val catalog=ProgramCatalog.tile(program,assets)
     if(catalog!=null) {
-        val picture=remember(assets,catalog) {ProgramTilePicture.load(assets,catalog)}
+        val picture=remember(assets,catalog) {ProgramVectorPicture.load(assets,catalog)}
         Canvas(modifier) {picture.draw(drawContext.canvas.nativeCanvas,size.width,size.height,rotation)}
         return
     }
     val dark=LocalTerminalPalette.current.dark
-    val colors=when(program.kind) {
-        ProgramKind.CLAUDE -> listOf(0xffffb27b,0xffee743f,0xffcb4f28)
-        ProgramKind.ANTIGRAVITY -> listOf(0xff818cf8,0xff6366f1,0xff4338ca)
-        ProgramKind.NEOVIM,ProgramKind.VIM -> listOf(0xff8dc492,0xff4a9760,0xff296f48)
-        ProgramKind.GIT -> listOf(0xffffa485,0xffdb6544,0xffad3e2d)
-        ProgramKind.PYTHON -> listOf(0xff93bfe6,0xff4f8ec4,0xff305e92)
-        ProgramKind.NODE -> listOf(0xffa6ce91,0xff6aa057,0xff3c7138)
-        ProgramKind.TMUX -> listOf(0xffc1b6e3,0xff9183bb,0xff645487)
-        ProgramKind.MONITOR -> listOf(0xff9ed8d8,0xff5da4ae,0xff326b81)
-        ProgramKind.REX -> listOf(0xff7293ff,0xff3156f4,0xff1d40c7)
-        else -> if(dark) listOf(0xff65788f,0xff3f5067,0xff253347) else listOf(0xffffffff,0xfff0f3f7,0xffd3dbe6)
-    }.map {Color(it)}
-    val neutral=program.kind in listOf(ProgramKind.CODEX,ProgramKind.TERMINAL,ProgramKind.SSH)
-    val ink=if(neutral && !dark) Color(0xff323e50) else Color.White
+    val colors=if(skin.neutral || skin.colors.isEmpty()) neutralColors(dark) else skin.colors.map(::Color)
+    val ink=if(skin.neutral && !dark) Color(0xff323e50) else Color.White
     val radius=if(large) 7.dp else 5.dp
     val shape=RoundedCornerShape(radius)
     val reflection=Brush.verticalGradient(0f to Color.White.copy(alpha=.34f),.22f to Color.White.copy(alpha=.08f),
@@ -132,38 +90,6 @@ import androidx.compose.ui.unit.dp
     }
 }
 
-private val tileAliases = mapOf(
-    "agy" to "antigravity", "antigravity-cli" to "antigravity",
-    "claude-code" to "claude_code",
-    "cargo" to "rust", "rustc" to "rust",
-    "kubectl" to "kube", "helm" to "kube", "k3s" to "kube", "minikube" to "kube",
-    "gh" to "github", "glab" to "gitlab",
-    "helix" to "hx", "az" to "azure",
-    "psql" to "postgres", "pgcli" to "postgres",
-    "sqlite3" to "sqlite", "duck" to "duckdb",
-    "turbo" to "turborepo",
-    "mix" to "elixir", "iex" to "elixir",
-    "kak" to "kakoune", "jujutsu" to "jj",
-    "orb" to "orbstack",
-    "huggingface" to "hugging_face", "hf" to "hugging_face",
-    "vp" to "vite_plus", "vite-plus" to "vite_plus",
-    "batcat" to "bat",
-    "clang++" to "clang", "gcc" to "clang", "g++" to "clang", "cc" to "clang", "c++" to "clang",
-    "docker-compose" to "docker", "podman-compose" to "podman",
-    "container" to "apple_container",
-    "adb" to "android", "homebrew" to "brew", "hombrew" to "brew", "brew.rb" to "brew", "brew.sh" to "brew",
-    "emacsclient" to "emacs",
-    "xcodebuild" to "xcode", "xcrun" to "xcode",
-    "jupyter-lab" to "jupyter", "jupyter-notebook" to "jupyter", "ipython" to "jupyter",
-    "llama-cli" to "llama_cpp", "llamacpp" to "llama_cpp",
-    "oh-my-posh" to "omp",
-    "poolside" to "poolside_icon",
-    "irb" to "ruby", "gem" to "ruby", "bundle" to "ruby",
-    "unreal" to "unreal_engine", "ue" to "unreal_engine",
-    "buck2" to "buck", "bazelisk" to "bazel", "ibazel" to "bazel",
-    "gradlew" to "gradle", "tofu" to "terraform",
-    "golang" to "go",
-    "lazygit" to "git", "tig" to "git",
-    "nix-shell" to "nix", "nixos-rebuild" to "nix",
-    "gh-copilot" to "copilot", "github-copilot" to "copilot"
-)
+private fun neutralColors(dark: Boolean): List<Color> =
+    if(dark) listOf(0xff65788f,0xff3f5067,0xff253347).map(::Color)
+    else listOf(0xffffffff,0xfff0f3f7,0xffd3dbe6).map(::Color)

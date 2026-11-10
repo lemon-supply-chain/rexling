@@ -4,6 +4,8 @@ import java.util.Locale
 
 enum class ProgramKind { TERMINAL, CLAUDE, CODEX, NEOVIM, VIM, GIT, PYTHON, NODE, SSH, TMUX, MONITOR, CLOUDFLARE, REX, ANTIGRAVITY }
 data class ProgramIdentity(val kind: ProgramKind, val label: String, val executable: String="",val pending: Boolean=false) {
+    var candidates: List<String> = emptyList()
+        internal set
     val title: String get() = when(kind) {
         ProgramKind.CLAUDE -> "claude"; ProgramKind.CODEX -> "codex"; ProgramKind.ANTIGRAVITY -> "antigravity"
         ProgramKind.NEOVIM -> "nvim"; ProgramKind.VIM -> "vim"; ProgramKind.GIT -> "git"; ProgramKind.PYTHON -> "python"
@@ -26,13 +28,19 @@ data class ProgramIdentity(val kind: ProgramKind, val label: String, val executa
     }
 
     companion object {
-        private val shellNames = setOf("fish", "zsh", "bash", "sh", "dash", "ash", "ksh", "mksh", "tcsh", "csh", "nu", "nushell", "pwsh", "powershell", "cmd")
+        internal val shellNames = setOf("fish", "zsh", "bash", "sh", "dash", "ash", "ksh", "mksh", "tcsh", "csh", "nu", "nushell", "pwsh", "powershell", "cmd")
         private val defaultTitle = Regex("(?:(?:Window|Tab|Block)[ _:-]+[0-9a-f]+(?:-[0-9a-f]+)*|Terminal \\d+|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", RegexOption.IGNORE_CASE)
         private fun genericTitle(value: String): Boolean = value.isBlank() ||
             value.lowercase(Locale.ROOT) in setOf("shell", "terminal", "window") || defaultTitle.matches(value)
         val Terminal = ProgramIdentity(ProgramKind.TERMINAL, "Terminal")
         val Loading = ProgramIdentity(ProgramKind.TERMINAL,"Loading…",pending=true)
         fun resolve(candidates: List<String>): ProgramIdentity {
+            fun create(identity: ProgramIdentity) = identity.apply { this.candidates = candidates }
+            val isBrew = candidates.any { it.replace('\\', '/').lowercase(Locale.ROOT).let { p ->
+                p == "brew" || p.endsWith("/brew") || p.contains("/homebrew/library/homebrew/") ||
+                    p.substringAfterLast('/') in listOf("homebrew", "hombrew", "brew.rb", "brew.sh")
+            } }
+            if (isBrew) return create(ProgramIdentity(ProgramKind.TERMINAL, "brew", "brew"))
             for (candidate in candidates) {
                 val path = candidate.replace('\\', '/').lowercase(Locale.ROOT)
                 val name = path.substringAfterLast('/').trimStart('-').removeSuffix(".exe").removeSuffix(".cmd")
@@ -52,21 +60,19 @@ data class ProgramIdentity(val kind: ProgramKind, val label: String, val executa
                     name in listOf("rex", "rex-server", "rex-cli") || Regex("rex-(aarch64|x86_64)-.*").matches(name) -> ProgramKind.REX
                     else -> null
                 }
-                if (kind != null) return ProgramIdentity(kind, when(kind) {
+                if (kind != null) return create(ProgramIdentity(kind, when(kind) {
                     ProgramKind.CLAUDE -> "Claude Code"; ProgramKind.CODEX -> "Codex"; ProgramKind.ANTIGRAVITY -> "Antigravity"
                     ProgramKind.NEOVIM -> "Neovim"; ProgramKind.VIM -> "Vim"; ProgramKind.GIT -> "Git"
                     ProgramKind.PYTHON -> "Python"; ProgramKind.NODE -> "JavaScript runtime"
                     ProgramKind.SSH -> "Remote shell"; ProgramKind.TMUX -> "Terminal multiplexer"
                     ProgramKind.MONITOR -> "System monitor"; ProgramKind.CLOUDFLARE -> "Cloudflare"; ProgramKind.REX -> "Rex"; ProgramKind.TERMINAL -> "Terminal"
-                },name)
+                },name))
             }
             val nonShell = candidates.map { it.replace('\\', '/').substringAfterLast('/').trimStart('-').removeSuffix(".exe").removeSuffix(".cmd") }
                 .firstOrNull { it.lowercase(Locale.ROOT) !in shellNames && it.isNotBlank() }
             val rawName = (nonShell ?: candidates.firstOrNull()?.replace('\\', '/')?.substringAfterLast('/')?.trimStart('-'))
                 ?.filterNot { it.isISOControl() || Character.getType(it)==Character.FORMAT.toInt() }?.take(40).orEmpty()
-            val name = if (rawName.lowercase(Locale.ROOT) in listOf("homebrew", "hombrew", "brew.rb", "brew.sh") ||
-                candidates.any { it.replace('\\', '/').lowercase(Locale.ROOT).let { p -> p.contains("/homebrew/library/homebrew/") || p.endsWith("/brew") } }) "brew" else rawName
-            return ProgramIdentity(ProgramKind.TERMINAL, name.ifBlank { "Terminal" }, name)
+            return create(ProgramIdentity(ProgramKind.TERMINAL, rawName.ifBlank { "Terminal" }, rawName))
         }
     }
 }

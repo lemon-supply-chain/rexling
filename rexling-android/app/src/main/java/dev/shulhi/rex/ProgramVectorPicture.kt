@@ -13,28 +13,34 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import androidx.core.graphics.PathParser
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Cached vector drawing commands, replayed at the final pixel size and angle. */
-internal class ProgramTilePicture private constructor(private val picture: Picture) {
+internal class ProgramVectorPicture private constructor(
+    private val picture: Picture,
+    private val width: Float,
+    private val height: Float,
+) {
     fun draw(canvas: Canvas,width: Float,height: Float,rotation: Float=0f) {
         val save=canvas.save()
         canvas.rotate(rotation,width/2,height/2)
-        canvas.scale(width/61f,height/48f)
+        canvas.scale(width/this.width,height/this.height)
         canvas.drawPicture(picture)
         canvas.restoreToCount(save)
     }
     companion object {
-        private var catalog: JSONObject?=null
-        private val cache=mutableMapOf<String,ProgramTilePicture>()
-        @Synchronized fun has(assets: AssetManager,name: String): Boolean {
-            val icons=catalog ?: assets.open("program_tiles.json").bufferedReader().use {JSONObject(it.readText()).getJSONObject("icons")}.also {catalog=it}
-            return icons.has(name)
+        private val cache=mutableMapOf<String,ProgramVectorPicture>()
+        private val glyphCache=mutableMapOf<String,ProgramVectorPicture>()
+        @Synchronized fun load(assets: AssetManager,name: String): ProgramVectorPicture = cache.getOrPut(name) {
+            record(ProgramCatalog.icons(assets).getJSONArray(name),61f,48f)
         }
-        @Synchronized fun load(assets: AssetManager,name: String): ProgramTilePicture = cache.getOrPut(name) {
-            val icons=catalog ?: assets.open("program_tiles.json").bufferedReader().use {JSONObject(it.readText()).getJSONObject("icons")}.also {catalog=it}
-            val picture=Picture();val canvas=picture.beginRecording(61,48)
-            val commands=icons.getJSONArray(name)
+        @Synchronized fun loadGlyph(assets: AssetManager,name: String,tint: Int): ProgramVectorPicture = glyphCache.getOrPut("$name:$tint") {
+            val glyph=ProgramCatalog.glyphs(assets).getJSONObject(name)
+            record(glyph.getJSONArray("commands"),glyph.getDouble("width").toFloat(),glyph.getDouble("height").toFloat(),tint)
+        }
+        private fun record(commands: JSONArray,width: Float,height: Float,tint: Int?=null): ProgramVectorPicture {
+            val picture=Picture();val canvas=picture.beginRecording(width.toInt(),height.toInt())
             for(i in 0 until commands.length()) {
                 val command=commands.getJSONObject(i)
                 when(command.getString("op")) {
@@ -44,11 +50,11 @@ internal class ProgramTilePicture private constructor(private val picture: Pictu
                     "scale"->canvas.scale(command.float("x"),command.float("y"))
                     "transform"->canvas.concat(transform(command.getString("value")))
                     "clip"->canvas.clipPath(path(command))
-                    "path"->{val path=path(command);val bounds=RectF();path.computeBounds(bounds,true);canvas.drawPath(path,paint(command.getJSONObject("paint"),bounds))}
+                    "path"->{val path=path(command);val bounds=RectF();path.computeBounds(bounds,true);canvas.drawPath(path,paint(command.getJSONObject("paint"),bounds,tint))}
                     else->error("Unsupported vector command")
                 }
             }
-            picture.endRecording();ProgramTilePicture(picture)
+            picture.endRecording();return ProgramVectorPicture(picture,width,height)
         }
         private fun JSONObject.float(key: String)=getDouble(key).toFloat()
         private fun path(command: JSONObject)=requireNotNull(PathParser.createPathFromPathData(command.getString("path"))).apply {
@@ -82,10 +88,15 @@ internal class ProgramTilePicture private constructor(private val picture: Pictu
             return Color.argb((Color.alpha(color)*opacity).toInt().coerceIn(0,255),Color.red(color),Color.green(color),Color.blue(color))
         }
         private fun coordinate(value: String)=if(value.endsWith('%')) value.dropLast(1).toFloat()/100f else value.toFloat()
-        private fun paint(value: JSONObject,bounds: RectF): Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        private fun paint(value: JSONObject,bounds: RectF,tint: Int?=null): Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             if(value.optBoolean("stroke")) {
                 style=Paint.Style.STROKE
                 strokeWidth=value.optDouble("strokeWidth",1.0).toFloat()
+            }
+            if(tint!=null) {
+                color=Color.argb((Color.alpha(tint)*value.float("alpha")).toInt().coerceIn(0,255),
+                    Color.red(tint),Color.green(tint),Color.blue(tint))
+                return@apply
             }
             if(!value.has("gradient")) {color=color(value.getString("color"),value.float("alpha"));return@apply}
             val attributes=value.getJSONObject("attributes");val stops=value.getJSONArray("stops")

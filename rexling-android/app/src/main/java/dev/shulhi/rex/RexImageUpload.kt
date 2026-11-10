@@ -15,8 +15,11 @@ internal class RexImageUpload: RexUploadBackend {
     override suspend fun upload(target: ImageTarget,image: StagedImage,onProgress: (String,Float)->Unit): RexUploadResult {
         val request=JSONObject().put("endpoint",target.endpoint).put("session",target.session).put("block",target.block)
             .put("path",image.file.absolutePath).put("name",image.name).put("ref","upload:${UUID.randomUUID()}")
-        val handle=NativeBridge.uploadCreate(request.toString())
-        check(handle!=0L) {"Could not start image upload"}
+        val handle=try {
+            NativeBridge.uploadCreate(request.toString()).also {check(it!=0L) {"Could not start image upload"}}
+        } catch(error: Throwable) {
+            return RexUploadResult("failed",error.message ?: "Could not start image upload")
+        }
         try {
             while(true) {
                 currentCoroutineContext().ensureActive()

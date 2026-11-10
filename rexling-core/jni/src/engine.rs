@@ -1513,6 +1513,18 @@ fn program_candidates(process: &Value, status: &Value) -> Value {
     for key in ["script", "argv0", "invoked_path", "path", "name"] {
         add(&source[key]);
     }
+    if let Some(ancestors) = process["ancestors"].as_array() {
+        for ancestor in ancestors {
+            for key in ["script", "argv0", "invoked_path", "path", "name"] {
+                add(&ancestor[key]);
+            }
+        }
+    }
+    if foreground.is_object() {
+        for key in ["script", "argv0", "invoked_path", "path", "name"] {
+            add(&process["child"][key]);
+        }
+    }
     json!(names)
 }
 fn missing_terminal(error: &anyhow::Error) -> bool {
