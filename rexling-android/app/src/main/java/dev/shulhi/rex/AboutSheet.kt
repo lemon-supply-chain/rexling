@@ -41,7 +41,7 @@ internal data class AppBuildInfo(val version: String,val number: Int,val type: S
         AboutContent(AppBuildInfo.current,onClose,onCopy={text->
             (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Rexling build",text))
         },onOpen={url->
-            runCatching {uri.openUri(url)}.onFailure {Toast.makeText(context,"No browser available",Toast.LENGTH_SHORT).show()}
+            runCatching {uri.openUri(url)}.onFailure {Toast.makeText(context,context.getString(R.string.no_browser),Toast.LENGTH_SHORT).show()}
         })
     }
 }
@@ -49,8 +49,8 @@ internal data class AppBuildInfo(val version: String,val number: Int,val type: S
 @Composable internal fun AboutContent(info: AppBuildInfo,onClose: ()->Unit,onCopy: (String)->Unit,onOpen: (String)->Unit) {
     Column(Modifier.fillMaxWidth().heightIn(max=620.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-            Text("About",Modifier.weight(1f),fontSize=20.sp,fontWeight=FontWeight.Bold)
-            ChromeButton(ChromeIcon.CLOSE,"Close about",onClick=onClose)
+            Text(stringResource(R.string.about),Modifier.weight(1f),fontSize=20.sp,fontWeight=FontWeight.Bold)
+            ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_about),onClick=onClose)
         }
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
             Image(painterResource(R.drawable.rexlink_dinosaur),contentDescription=null,
@@ -61,18 +61,18 @@ internal data class AppBuildInfo(val version: String,val number: Int,val type: S
             }
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            BuildInfoRow("Version",info.version)
-            BuildInfoRow("Build","${info.number} · ${info.type}")
-            BuildInfoRow("Commit",info.commit)
+            BuildInfoRow(stringResource(R.string.version),info.version)
+            BuildInfoRow(stringResource(R.string.build),"${info.number} · ${info.type}")
+            BuildInfoRow(stringResource(R.string.commit),info.commit)
         }
-        OutlinedButton(onClick={onCopy(info.description)}) {ChromeSymbol(ChromeIcon.COPY,Modifier.size(16.dp));Spacer(Modifier.width(8.dp));Text("Copy build info")}
+        OutlinedButton(onClick={onCopy(info.description)}) {ChromeSymbol(ChromeIcon.COPY,Modifier.size(16.dp));Spacer(Modifier.width(8.dp));Text(stringResource(R.string.copy_build_info))}
         Column {
-            TextButton(onClick={onOpen(AppBuildInfo.repository)}) {Text("Source code on GitHub")}
-            TextButton(onClick={onOpen("${AppBuildInfo.repository}/blob/main/LICENSE")}) {Text("Apache License 2.0")}
-            TextButton(onClick={onOpen("${AppBuildInfo.repository}/blob/main/THIRD_PARTY_NOTICES.md")}) {Text("Open-source notices")}
+            TextButton(onClick={onOpen(AppBuildInfo.repository)}) {Text(stringResource(R.string.source_code_github))}
+            TextButton(onClick={onOpen("${AppBuildInfo.repository}/blob/main/LICENSE")}) {Text(stringResource(R.string.apache_license))}
+            TextButton(onClick={onOpen("${AppBuildInfo.repository}/blob/main/THIRD_PARTY_NOTICES.md")}) {Text(stringResource(R.string.opensource_notices))}
         }
-        Text("Built with Kotlin, Jetpack Compose, Rust and libghostty-vt.",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Provided on a best-effort basis, without warranty.",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.about_built_with),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.about_warranty),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

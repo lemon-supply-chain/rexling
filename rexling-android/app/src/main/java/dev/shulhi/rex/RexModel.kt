@@ -65,6 +65,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         markActivitySeen(target);rememberLastSession();connectServer(profile.id);activeClient.openActivity(record.session,record.block);showActivity(false)
     }
     private val preferences=application.getSharedPreferences(preferenceName,0)
+    init { if(preferences.contains("language")) preferences.getString("language",null)?.let {applyLanguage(it)} }
     private var serverSwitchSerial=0L
     internal var pendingImageTarget: ImageTarget?=null
     internal val images=ImageUploads(application,viewModelScope)
@@ -129,6 +130,23 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     fun changeFontSize(size: Int) {fontSize=size.coerceIn(8,20);preferences.edit {putInt("font_size",fontSize)}}
     var appearance by mutableStateOf(runCatching {Appearance.valueOf(preferences.getString("appearance","SYSTEM")!!)}.getOrDefault(Appearance.SYSTEM))
         private set
+    internal var language by mutableStateOf(preferences.getString("language","system") ?: "system")
+        private set
+    internal fun changeLanguage(value: String) {
+        language=value
+        preferences.edit {putString("language",value)}
+        applyLanguage(value)
+    }
+    private fun applyLanguage(value: String) {
+        if(android.os.Build.VERSION.SDK_INT>=33) {
+            val lm=getApplication<Application>().getSystemService(android.app.LocaleManager::class.java)
+            lm?.applicationLocales=when(value) {
+                "zh"->android.os.LocaleList.forLanguageTags("zh-CN")
+                "en"->android.os.LocaleList.forLanguageTags("en")
+                else->android.os.LocaleList.getEmptyLocaleList()
+            }
+        }
+    }
     internal var minimizeFloatingPanes by mutableStateOf(preferences.getBoolean("minimize_floating_panes",false))
         private set
     internal fun changeMinimizeFloatingPanes(value: Boolean) {

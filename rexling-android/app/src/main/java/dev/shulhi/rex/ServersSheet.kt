@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,16 +30,16 @@ import androidx.compose.ui.unit.sp
         Column(Modifier.fillMaxWidth().heightIn(max=600.dp).verticalScroll(rememberScrollState()).padding(horizontal=18.dp).padding(bottom=25.dp)) {
             Row(Modifier.fillMaxWidth().padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Servers",fontSize=20.sp,fontWeight=FontWeight.Bold)
-                    Text("${model.connectedCount} connected",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.servers),fontSize=20.sp,fontWeight=FontWeight.Bold)
+                    Text(stringResource(R.string.count_connected_format,model.connectedCount),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick={scanning=true}) {
                     ChromeSymbol(ChromeIcon.QR,color=MaterialTheme.colorScheme.primary)
                 }
                 Spacer(Modifier.width(4.dp))
-                Button(onClick={editing=null;editor=true}) {Text("+ Add server")}
+                Button(onClick={editing=null;editor=true}) {Text(stringResource(R.string.add_server))}
             }
-            if(model.servers.isEmpty()) Text("Add a Rex server to get started.",Modifier.padding(vertical=16.dp))
+            if(model.servers.isEmpty()) Text(stringResource(R.string.add_rex_server_started),Modifier.padding(vertical=16.dp))
             for(server in model.servers) {
                 val selected=server.id==model.activeServerId
                 val status=model.serverStatuses[server.id] ?: ServerStatus()
@@ -55,23 +56,26 @@ import androidx.compose.ui.unit.sp
                         Text(server.label,fontWeight=FontWeight.SemiBold,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                         Text(server.endpoint,fontFamily=MonoUi,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
                         Text(when(status.phase) {
-                            "connected"->if(selected) "Connected · viewing" else "Connected"
-                            "connecting"->"Connecting…";"reconnecting"->"Reconnecting…";"paused"->"Paused"
-                            "error"->"Connection failed";else->"Disconnected"
+                            "connected"->if(selected) stringResource(R.string.status_connected_viewing) else stringResource(R.string.status_connected)
+                            "connecting"->stringResource(R.string.status_connecting)
+                            "reconnecting"->stringResource(R.string.status_reconnecting)
+                            "paused"->stringResource(R.string.status_paused)
+                            "error"->stringResource(R.string.status_failed)
+                            else->stringResource(R.string.status_disconnected)
                         },fontSize=11.sp,color=if(status.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                         if(status.error.isNotBlank()) Text(status.error,fontSize=10.sp,maxLines=2,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.error)
                     }
                     Box {
                         ChromeButton(ChromeIcon.MORE,"Server actions for ${server.label}") {menu=true}
                         DropdownMenu(menu,{menu=false},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
-                            TerminalMenuItem("Edit",ChromeIcon.EDIT,onClick={menu=false;editing=server;editor=true})
-                            if(status.maintained) TerminalMenuItem("Disconnect",ChromeIcon.UNPLUG,onClick={menu=false;model.disconnectServer(server.id)})
-                            TerminalMenuItem("Forget server",ChromeIcon.DELETE,onClick={menu=false;model.forgetServer(server.id)})
+                            TerminalMenuItem(stringResource(R.string.edit),ChromeIcon.EDIT,onClick={menu=false;editing=server;editor=true})
+                            if(status.maintained) TerminalMenuItem(stringResource(R.string.disconnect),ChromeIcon.UNPLUG,onClick={menu=false;model.disconnectServer(server.id)})
+                            TerminalMenuItem(stringResource(R.string.forget_server),ChromeIcon.DELETE,onClick={menu=false;model.forgetServer(server.id)})
                         }
                     }
                 }
             }
-            Text("Switch servers without closing their connections.",Modifier.padding(top=9.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.switch_servers_hint),Modifier.padding(top=9.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     if(scanning) {
@@ -97,20 +101,20 @@ import androidx.compose.ui.unit.sp
             name=label;endpoint=url;scanning=false
         })
     }
-    AlertDialog(onDismissRequest=onClose,title={Text(if(server==null) "Add server" else "Edit server")},text={
+    AlertDialog(onDismissRequest=onClose,title={Text(stringResource(if(server==null) R.string.add_server_title else R.string.edit_server_title))},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             ServerIconPicker(icon) {icon=it}
-            OutlinedTextField(name,{name=it;error=null},Modifier.fillMaxWidth(),label={Text("Name")},singleLine=true)
-            OutlinedTextField(endpoint,{endpoint=it;error=null},Modifier.fillMaxWidth(),label={Text("Server URL")},singleLine=true,
+            OutlinedTextField(name,{name=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.name))},singleLine=true)
+            OutlinedTextField(endpoint,{endpoint=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.server_url))},singleLine=true,
                 trailingIcon={
                     IconButton(onClick={scanning=true}) {
                         ChromeSymbol(ChromeIcon.QR,color=MaterialTheme.colorScheme.primary)
                     }
                 },
                 keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri),placeholder={Text("https://host.tailnet.ts.net",fontSize=11.sp)})
-            Text("Use the server's authenticated Tailscale address.",fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.tailscale_address_hint),fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
             error?.let {Text(it,color=MaterialTheme.colorScheme.error,fontSize=12.sp)}
         }
-    },confirmButton={Button(onClick={error=onSave(name,endpoint,icon);if(error==null) onClose()},enabled=endpoint.isNotBlank()) {Text("Save & connect")}},
-        dismissButton={TextButton(onClick=onClose) {Text("Cancel")}})
+    },confirmButton={Button(onClick={error=onSave(name,endpoint,icon);if(error==null) onClose()},enabled=endpoint.isNotBlank()) {Text(stringResource(R.string.save_and_connect))}},
+        dismissButton={TextButton(onClick=onClose) {Text(stringResource(R.string.cancel))}})
 }

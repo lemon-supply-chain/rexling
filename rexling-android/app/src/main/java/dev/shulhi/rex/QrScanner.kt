@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,13 +76,13 @@ internal fun parseQrServer(raw: String): Pair<String, String>? = runCatching {
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Camera permission required", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.camera_permission_required), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
-                    Text("Grant camera access to scan your Rex pairing QR code.", color = Color.White.copy(alpha = .7f), fontSize = 14.sp)
+                    Text(stringResource(R.string.camera_permission_desc), color = Color.White.copy(alpha = .7f), fontSize = 14.sp)
                     Spacer(Modifier.height(24.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TextButton(onClick = onDismiss) { Text("Cancel", color = Color.White) }
-                        Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text("Grant permission") }
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = Color.White) }
+                        Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text(stringResource(R.string.grant_permission)) }
                     }
                 }
             }
@@ -202,7 +203,7 @@ internal fun parseQrServer(raw: String): Pair<String, String>? = runCatching {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "Scan pairing QR code in Rex",
+                stringResource(R.string.scan_pairing_qr),
                 color = Color.White,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium

@@ -1,0 +1,204 @@
+<resources>
+    <string name="app_name">Rexling</string>
+    <string name="app_subtitle">Rex 非官方 Android 客户端</string>
+
+    <!-- Common -->
+    <string name="cancel">取消</string>
+    <string name="save">保存</string>
+    <string name="done">完成</string>
+    <string name="close">关闭</string>
+    <string name="retry">重试</string>
+    <string name="connect">连接</string>
+    <string name="disconnect">断开连接</string>
+    <string name="delete">删除</string>
+    <string name="edit">编辑</string>
+    <string name="hide">隐藏</string>
+    <string name="create">创建</string>
+    <string name="icon">图标</string>
+    <string name="name">名称</string>
+
+    <!-- Main & Top Menu -->
+    <string name="terminal_menu">终端菜单</string>
+    <string name="in_control">已控制</string>
+    <string name="viewing_terminal">查看终端</string>
+    <string name="take_control">获取控制</string>
+    <string name="release_control">释放控制</string>
+    <string name="new_session">新建会话</string>
+    <string name="preferences">偏好设置</string>
+    <string name="copy_viewport">复制视口内容</string>
+    <string name="paste">粘贴</string>
+    <string name="attach_image">附加图片</string>
+    <string name="servers_connected_format">服务器 · %d 台已连接</string>
+    <string name="refresh_sessions">刷新会话</string>
+    <string name="connect_over_tailscale">通过 Tailscale 连接</string>
+    <string name="rex_server_url">Rex 服务器 URL</string>
+    <string name="servers">服务器</string>
+    <string name="try_preview">尝试预览</string>
+    <string name="floating_panes_minimized">浮动窗格已最小化</string>
+    <string name="choose_session_or_start">选择一个会话，或新建会话。</string>
+    <string name="terminals_anywhere">随时随地，触达终端。</string>
+    <string name="close_tab_title">关闭标签页？</string>
+    <string name="close_tab">关闭标签页</string>
+    <string name="move_left">左移</string>
+    <string name="move_right">右移</string>
+
+    <!-- Connection Notices -->
+    <string name="waiting_network_input_paused">等待网络 · 输入已暂停</string>
+    <string name="connecting">正在连接…</string>
+    <string name="reconnecting_input_paused">正在重新连接 · 输入已暂停</string>
+    <string name="retry_now">立即重试</string>
+    <string name="sized_by_another_client">由其他客户端调整尺寸</string>
+    <string name="take_over">接管控制</string>
+    <string name="ready_to_type">可输入</string>
+
+    <!-- Session Drawer & Actions -->
+    <string name="sessions">会话</string>
+    <string name="close_sessions">关闭会话列表</string>
+    <string name="find_session">搜索会话…</string>
+    <string name="no_sessions_yet">暂无会话</string>
+    <string name="no_matching_sessions">无匹配会话</string>
+    <string name="close_session_title">关闭会话？</string>
+    <string name="close_session_confirm">关闭 %2$s 上的“%1$s”？其所有标签页和窗格都将关闭，运行的程序也将终止。</string>
+    <string name="close_session">关闭会话</string>
+    <string name="rename_session">重命名会话</string>
+    <string name="session_name">会话名称</string>
+    <string name="on_server_format">在 %s 上</string>
+    <string name="session_name_optional">名称（可选）</string>
+    <string name="session_name_hint">留空将由 Rex 自动命名。</string>
+    <string name="start_session_on_format">在 %s 上开启一个会话。</string>
+    <string name="session_current">当前</string>
+    <string name="session_previous">上次</string>
+    <string name="details_not_loaded">未加载详情</string>
+    <string name="session_details_format">%1$s · %2$d 个标签页 · %3$d 个窗格</string>
+    <string name="session_name_empty">请输入会话名称</string>
+    <string name="session_name_too_long">最多使用 128 个字符</string>
+    <string name="session_name_control_chars">会话名称不能包含控制字符</string>
+
+    <!-- Preferences -->
+    <string name="close_preferences">关闭偏好设置</string>
+    <string name="section_display">显示</string>
+    <string name="section_panes">窗格</string>
+    <string name="section_keyboard">键盘</string>
+    <string name="section_connections">连接</string>
+    <string name="section_experimental">实验性功能</string>
+    <string name="section_app">应用</string>
+    <string name="appearance">外观</string>
+    <string name="appearance_detail">主题及明暗模式</string>
+    <string name="font_size">字体大小</string>
+    <string name="font_size_detail">终端文本字号</string>
+    <string name="language">语言</string>
+    <string name="language_detail">跟随系统、English 或 简体中文</string>
+    <string name="language_system">跟随系统</string>
+    <string name="language_en">English</string>
+    <string name="language_zh">简体中文</string>
+    <string name="minimize_floating_panes">最小化浮动窗格</string>
+    <string name="minimize_floating_panes_detail">在右下角停靠栏打开浮动窗格，滑动仅在平铺窗格间切换。</string>
+    <string name="use_joystick">方向键摇杆</string>
+    <string name="use_joystick_detail_on">长按滑动；双击切换为方向按键</string>
+    <string name="use_joystick_detail_off">点击显示方向按键</string>
+    <string name="ctrl_shortcuts">Ctrl 快捷键</string>
+    <string name="ctrl_shortcuts_detail">打开快捷键列表触发方式</string>
+    <string name="ctrl_gesture_hold">长按</string>
+    <string name="ctrl_gesture_double_tap">双击</string>
+    <string name="neovim_shortcuts">Neovim 快捷键</string>
+    <string name="neovim_shortcuts_detail">自定义浮动按键菜单</string>
+    <string name="background_alerts">后台提醒</string>
+    <string name="background_alerts_detail">任务完成与关注提醒</string>
+    <string name="codex_title_attention">Codex 标题关注</string>
+    <string name="codex_title_attention_detail">当 Codex 状态为 Working 但标题包含 Action Required 时提示关注。依赖 Codex 标题格式。</string>
+    <string name="about_rexling">关于 Rexling</string>
+    <string name="about_rexling_detail">版本、构建及项目信息</string>
+
+    <!-- Appearance -->
+    <string name="light_theme">浅色主题</string>
+    <string name="dark_theme">深色主题</string>
+    <string name="toggle_light_theme">切换为浅色主题</string>
+    <string name="toggle_dark_theme">切换为深色主题</string>
+    <string name="close_appearance">关闭外观设置</string>
+    <string name="back_to_appearance">返回外观设置</string>
+    <string name="appearance_system">跟随系统</string>
+    <string name="appearance_dark">深色</string>
+    <string name="appearance_light">浅色</string>
+
+    <!-- Background Alerts -->
+    <string name="background_alerts_desc_1">当 Rexling 处于后台或手机锁屏时，在任务完成、需要输入、审批、登录或失败时接收通知。</string>
+    <string name="background_alerts_desc_2">后台运行时将显示常驻静音通知。可在通知中停止或在此关闭。退出应用将停止监控。</string>
+    <string name="background_alerts_desc_3">设备休眠时可能会延迟提醒。</string>
+    <string name="notify_task_updates">任务更新提醒</string>
+    <string name="connect_server_for_alerts">连接服务器以开启提醒。</string>
+    <string name="allow_notifications_hint">请在系统设置中允许通知以接收提醒。</string>
+    <string name="notification_settings">通知设置</string>
+
+    <!-- About -->
+    <string name="about">关于</string>
+    <string name="close_about">关闭关于</string>
+    <string name="version">版本</string>
+    <string name="build">构建</string>
+    <string name="commit">提交</string>
+    <string name="copy_build_info">复制构建信息</string>
+    <string name="source_code_github">GitHub 源码</string>
+    <string name="apache_license">Apache 2.0 开源协议</string>
+    <string name="opensource_notices">开源声明</string>
+    <string name="about_built_with">使用 Kotlin、Jetpack Compose、Rust 与 libghostty-vt 构建。</string>
+    <string name="about_warranty">基于最大努力提供，不附带任何担保。</string>
+    <string name="no_browser">未找到可用浏览器</string>
+
+    <!-- Servers -->
+    <string name="count_connected_format">%d 台已连接</string>
+    <string name="add_server">+ 添加服务器</string>
+    <string name="add_server_title">添加服务器</string>
+    <string name="edit_server_title">编辑服务器</string>
+    <string name="add_rex_server_started">添加 Rex 服务器以开始使用。</string>
+    <string name="switch_servers_hint">无需关闭连接即可切换服务器。</string>
+    <string name="server_url">服务器 URL</string>
+    <string name="tailscale_address_hint">使用服务器经过身份验证的 Tailscale 地址。</string>
+    <string name="save_and_connect">保存并连接</string>
+    <string name="forget_server">删除服务器</string>
+    <string name="status_connected_viewing">已连接 · 正在查看</string>
+    <string name="status_connected">已连接</string>
+    <string name="status_connecting">正在连接…</string>
+    <string name="status_reconnecting">正在重新连接…</string>
+    <string name="status_paused">已暂停</string>
+    <string name="status_failed">连接失败</string>
+    <string name="status_disconnected">已断开</string>
+    <string name="choose_server_icon">选择服务器图标</string>
+    <string name="server_icon_globe">地球</string>
+    <string name="server_icon_server">服务器</string>
+    <string name="server_icon_cloud">云端</string>
+    <string name="server_icon_macbook">MacBook</string>
+    <string name="server_icon_mac_mini">Mac mini</string>
+    <string name="server_icon_mac_studio">Mac Studio</string>
+    <string name="server_icon_desktop">台式机</string>
+
+    <!-- QR Scanner -->
+    <string name="camera_permission_required">需要相机权限</string>
+    <string name="camera_permission_desc">请授予相机权限以扫描 Rex 配对二维码。</string>
+    <string name="grant_permission">授予权限</string>
+    <string name="scan_pairing_qr">扫描 Rex 中的配对二维码</string>
+
+    <!-- Activity -->
+    <string name="activity">动态</string>
+    <string name="mark_seen">标为已读</string>
+    <string name="refresh_activity">刷新动态</string>
+    <string name="close_activity">关闭动态</string>
+    <string name="offline">离线</string>
+    <string name="activity_partial">部分动态未能刷新。</string>
+    <string name="no_activity_to_show">暂无动态</string>
+    <string name="activity_checking">正在检查动态…</string>
+    <string name="no_activity">当程序报告状态时将在此处显示。</string>
+    <string name="filter_all">全部</string>
+    <string name="filter_attention">待处理</string>
+    <string name="filter_working">进行中</string>
+    <string name="filter_finished">已完成</string>
+
+    <!-- Neovim Shortcuts -->
+    <string name="enable_neovim_shortcuts">启用 Neovim 快捷键</string>
+    <string name="menu_layout">菜单布局</string>
+    <string name="layout_grid">网格</string>
+    <string name="layout_circular">环形</string>
+    <string name="opening_effect">展开动效</string>
+    <string name="selection_haptics">震动反馈</string>
+    <string name="reset_defaults">恢复默认</string>
+    <string name="customize_shortcuts">自定义快捷键</string>
+    <string name="shortcuts">快捷键</string>
+</resources>

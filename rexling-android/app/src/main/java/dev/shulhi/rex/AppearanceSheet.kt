@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 @Composable internal fun QuickThemeMenuItem(dark: Boolean,onDark: (Boolean)->Unit) {
-    TerminalMenuItem(if(dark) "Toggle Light theme" else "Toggle Dark theme",if(dark) ChromeIcon.SUN else ChromeIcon.MOON,onClick={onDark(!dark)})
+    TerminalMenuItem(stringResource(if(dark) R.string.toggle_light_theme else R.string.toggle_dark_theme),if(dark) ChromeIcon.SUN else ChromeIcon.MOON,onClick={onDark(!dark)})
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,21 +33,21 @@ import kotlin.math.roundToInt
     ModalBottomSheet(onDismissRequest=onClose,containerColor=MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().heightIn(max=650.dp).padding(bottom=24.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {
-                if(editing!=null) ChromeButton(ChromeIcon.LEFT,"Back to appearance") {editing=null}
-                Text(if(editing==null) "Appearance" else if(editing==true) "Dark theme" else "Light theme",Modifier.weight(1f),fontSize=20.sp,fontWeight=FontWeight.Bold)
-                ChromeButton(ChromeIcon.CLOSE,"Close appearance",onClick=onClose)
+                if(editing!=null) ChromeButton(ChromeIcon.LEFT,stringResource(R.string.back_to_appearance)) {editing=null}
+                Text(if(editing==null) stringResource(R.string.appearance) else if(editing==true) stringResource(R.string.dark_theme) else stringResource(R.string.light_theme),Modifier.weight(1f),fontSize=20.sp,fontWeight=FontWeight.Bold)
+                ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_appearance),onClick=onClose)
             }
             if(editing==null) {
                 Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     Appearance.entries.forEach {mode->FilterChip(selected=appearance==mode,onClick={onAppearance(mode)},
-                        label={Text(when(mode){Appearance.SYSTEM->"System";Appearance.DARK->"Dark";Appearance.LIGHT->"Light"})})}
+                        label={Text(stringResource(when(mode){Appearance.SYSTEM->R.string.appearance_system;Appearance.DARK->R.string.appearance_dark;Appearance.LIGHT->R.string.appearance_light}))})}
                 }
-                for((label,preset) in listOf("Light theme" to light,"Dark theme" to dark)) {
+                for((labelRes,preset) in listOf(R.string.light_theme to light,R.string.dark_theme to dark)) {
                     Row(Modifier.fillMaxWidth().clickable {editing=preset.terminal.dark}.padding(horizontal=20.dp,vertical=12.dp),
                         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                         ThemeSwatch(preset)
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-                            Text(label,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+                            Text(stringResource(labelRes),fontSize=14.sp,fontWeight=FontWeight.SemiBold)
                             Text(preset.name,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         ChromeSymbol(ChromeIcon.RIGHT,Modifier.size(16.dp),MaterialTheme.colorScheme.onSurfaceVariant)
@@ -83,7 +84,7 @@ import kotlin.math.roundToInt
 }
 
 @Composable internal fun FontSizeDialog(size: Int,onSize: (Int)->Unit,onClose: ()->Unit) {
-    AlertDialog(onDismissRequest=onClose,title={Text("Font size",style=SettingsType.title)},text={
+    AlertDialog(onDismissRequest=onClose,title={Text(stringResource(R.string.font_size),style=SettingsType.title)},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
                 IconButton(onClick={onSize(size-1)},enabled=size>8,modifier=Modifier.semantics {contentDescription="Decrease font size"}) {Text("−",fontSize=24.sp)}
@@ -93,5 +94,5 @@ import kotlin.math.roundToInt
             Slider(value=size.toFloat(),onValueChange={onSize(it.roundToInt())},valueRange=8f..20f,steps=11,modifier=Modifier.semantics {contentDescription="Font size"})
             Text("Aa 0123 / ~",fontFamily=MonoUi,fontSize=size.sp)
         }
-    },confirmButton={TextButton(onClick=onClose){Text("Done")}})
+    },confirmButton={TextButton(onClick=onClose){Text(stringResource(R.string.done))}})
 }

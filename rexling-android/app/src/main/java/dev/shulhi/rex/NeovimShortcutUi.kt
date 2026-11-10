@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -153,7 +154,7 @@ import kotlin.math.roundToInt
             }
             Row(Modifier.fillMaxWidth().height(28.dp),verticalAlignment=Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(11.dp)).clickable(role=Role.Button,onClick=onCustomize),contentAlignment=Alignment.CenterStart) {
-                    Text("Customize shortcuts",Modifier.padding(horizontal=8.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.customize_shortcuts),Modifier.padding(horizontal=8.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.primary)
                 }
                 if(pages>1) Text("${pager.currentPage%pages+1}/$pages",Modifier.padding(horizontal=8.dp),fontFamily=MonoUi,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 ChromeButton(ChromeIcon.CLOSE,"Close Neovim shortcuts",modifier=Modifier.size(28.dp),onClick=onDismiss)
@@ -174,20 +175,20 @@ import kotlin.math.roundToInt
     var error by remember {mutableStateOf<String?>(null)}
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            SettingsHeader("Neovim shortcuts","Close Neovim shortcuts",onClose)
+            SettingsHeader(stringResource(R.string.neovim_shortcuts),"Close Neovim shortcuts",onClose)
             Row(Modifier.fillMaxWidth().toggleable(enabled,role=Role.Switch,onValueChange=onEnabled).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                Text("Enable Neovim shortcuts",Modifier.weight(1f),style=SettingsType.row)
+                Text(stringResource(R.string.enable_neovim_shortcuts),Modifier.weight(1f),style=SettingsType.row)
                 Switch(checked=enabled,onCheckedChange=null)
             }
-            Text("Menu layout",style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.menu_layout),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 NeovimShortcutLayout.entries.forEach {choice->
                     FilterChip(selected=layout==choice,onClick={onLayout(choice)},
-                        label={Text(if(choice==NeovimShortcutLayout.GRID) "Grid" else "Circular",style=SettingsType.row)})
+                        label={Text(if(choice==NeovimShortcutLayout.GRID) stringResource(R.string.layout_grid) else stringResource(R.string.layout_circular),style=SettingsType.row)})
                 }
             }
             if(layout==NeovimShortcutLayout.CIRCULAR) {
-                Text("Opening effect",style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.opening_effect),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
                 FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     NeovimShortcutEffect.entries.forEach {choice->
                         FilterChip(selected=effect==choice,onClick={onEffect(choice)},label={Text(choice.label,style=SettingsType.row)})
@@ -200,20 +201,20 @@ import kotlin.math.roundToInt
                     NeovimShortcutEffect.NONE->"Opens and closes immediately."
                 },style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth().toggleable(hapticsEnabled,role=Role.Switch,onValueChange=onHaptics).padding(vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text("Selection haptics",Modifier.weight(1f),style=SettingsType.row)
+                    Text(stringResource(R.string.selection_haptics),Modifier.weight(1f),style=SettingsType.row)
                     Switch(checked=hapticsEnabled,onCheckedChange=null)
                 }
                 Text("Hold and slide to a segment; release to run. Swipe up/down on the outer ring for more pages.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text("One shortcut per line. Use a name followed by = for a custom label.",style=SettingsType.body)
             Text("Examples: :w or LazyGit = <Space>lg. Optional [Git] headers group following shortcuts; [] returns to ungrouped shortcuts. One group level only.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(draft,{draft=it;error=null},Modifier.fillMaxWidth(),label={Text("Shortcuts")},minLines=5,maxLines=8,
+            OutlinedTextField(draft,{draft=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.shortcuts))},minLines=5,maxLines=8,
                 textStyle=SettingsType.body.copy(fontFamily=MonoUi),isError=error!=null,shape=RoundedCornerShape(14.dp))
             error?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.error)}
             Text("Shortcuts start in Normal mode. : commands run immediately. Other key sequences are sent as configured; use <CR> for Enter. Also supports <Esc>, <Tab>, arrow keys and <C-x>. Use <Space> for a Space leader. Drag the floating button to move it.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                TextButton(onClick={draft=NeovimShortcuts.editorText(NeovimShortcuts.defaults);error=null}) {Text("Reset defaults")}
-                Button(onClick={error=onSave(draft);if(error==null) onClose()}) {Text("Save")}
+                TextButton(onClick={draft=NeovimShortcuts.editorText(NeovimShortcuts.defaults);error=null}) {Text(stringResource(R.string.reset_defaults))}
+                Button(onClick={error=onSave(draft);if(error==null) onClose()}) {Text(stringResource(R.string.save))}
             }
         }
     }

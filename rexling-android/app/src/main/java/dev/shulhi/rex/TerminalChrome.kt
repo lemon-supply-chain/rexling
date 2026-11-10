@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
@@ -454,8 +455,8 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
                         val reordered=ids.toMutableList().apply {removeAt(windowIndex);add(target,w.id)}
                         return onMove(w.id,reordered.getOrNull(target+1))
                     }
-                    val leftLabel=if(sign>0) "Move left" else "Move right"
-                    val rightLabel=if(sign>0) "Move right" else "Move left"
+                    val leftLabel=if(sign>0) stringResource(R.string.move_left) else stringResource(R.string.move_right)
+                    val rightLabel=if(sign>0) stringResource(R.string.move_right) else stringResource(R.string.move_left)
                     val active=w.id==selectedId
                     val allocation=widths[windowIndex]
                     val width=allocation.width.dp
@@ -505,7 +506,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
                     androidx.compose.material3.DropdownMenu(menuId==w.id,{menuId=null},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
                         TerminalMenuItem(leftLabel,ChromeIcon.LEFT,enabled=enabled && windowIndex>0,onClick={menuId=null;moveBy(-1)})
                         TerminalMenuItem(rightLabel,ChromeIcon.RIGHT,enabled=enabled && windowIndex<windows.lastIndex,onClick={menuId=null;moveBy(1)})
-                        TerminalMenuItem("Close tab",ChromeIcon.CLOSE,enabled=enabled,onClick={menuId=null;onClose(w)})
+                        TerminalMenuItem(stringResource(R.string.close_tab),ChromeIcon.CLOSE,enabled=enabled,onClick={menuId=null;onClose(w)})
                     }
                     }
                 }

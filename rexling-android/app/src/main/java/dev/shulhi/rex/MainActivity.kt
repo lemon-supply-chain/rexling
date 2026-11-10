@@ -125,6 +125,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     var appearance by remember {mutableStateOf(false)}
     var about by remember {mutableStateOf(false)}
     var preferencesOpen by remember {mutableStateOf(false)}
+    var languageDialog by remember {mutableStateOf(false)}
     var neovimSettings by remember {mutableStateOf(false)}
     var alerts by remember {mutableStateOf(false)}
     var closeTarget by remember {mutableStateOf<TerminalCloseTarget?>(null)}
@@ -173,7 +174,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     val floatingActive=floating.any {it.id==chosen}
     var hiddenFloating by rememberSaveable(displayedSession,window?.id) {mutableStateOf("")}
     val controlled=state.controlled && ready && client.hasScreen && (!floatingActive || hiddenFloating!=chosen)
-    SideEffect {model.setPaneObscured((floatingActive && hiddenFloating==chosen) || model.activityVisible || picker.isNotEmpty() || preferencesOpen || servers || newSession || appearance || about || neovimSettings || alerts || fontPicker || closeTarget!=null)}
+    SideEffect {model.setPaneObscured((floatingActive && hiddenFloating==chosen) || model.activityVisible || picker.isNotEmpty() || preferencesOpen || languageDialog || servers || newSession || appearance || about || neovimSettings || alerts || fontPicker || closeTarget!=null)}
     fun openPane(id: String) {hiddenFloating="";client.selectBlock(id)}
     fun minimizeFloating() {
         hiddenFloating=chosen
@@ -182,7 +183,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     LaunchedEffect(navigation.id) {if(navigation.pending) hiddenFloating=""}
     LaunchedEffect(model.minimizeFloatingPanes) {if(model.minimizeFloatingPanes && floatingActive) minimizeFloating()}
     SideEffect {window?.let {client.floatingNavigation.remember(displayedSession,it,chosen)}}
-    BackHandler(enabled=ready && model.minimizeFloatingPanes && !newSession && !appearance && !about && !neovimSettings && !alerts && !fontPicker && closeTarget==null && floatingActive && hiddenFloating!=chosen && picker.isEmpty() && !preferencesOpen && !model.activityVisible) {minimizeFloating()}
+    BackHandler(enabled=ready && model.minimizeFloatingPanes && !newSession && !appearance && !about && !neovimSettings && !alerts && !fontPicker && !languageDialog && closeTarget==null && floatingActive && hiddenFloating!=chosen && picker.isEmpty() && !preferencesOpen && !model.activityVisible) {minimizeFloating()}
     val liveBlock=state.selectedBlock.ifBlank {if(state.phase=="preview") "preview" else ""}
     fun closePaneTarget(block: BlockItem)=TerminalCloseTarget(state.selectedSession,block.id,
         (state.programs[block.id] ?: ProgramIdentity.Loading).paneTitle(block.label,state.titles[block.id].orEmpty()),false,listOf(block.id))
@@ -218,26 +219,26 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                 serverIcons=model.sessionTargets.associate {it.key to it.server.icon}+(currentSessionKey to model.activeServer.icon),
                 working=chosen in state.workingBlocks,title=(state.programs[chosen] ?: ProgramIdentity.Loading).paneTitle(blocks.firstOrNull {it.id==chosen}?.label.orEmpty(),state.titles[chosen].orEmpty()),menu={
                     Box {
-                        ChromeButton(ChromeIcon.MORE,"Terminal menu"){menu=true}
+                        ChromeButton(ChromeIcon.MORE,stringResource(R.string.terminal_menu)){menu=true}
                         DropdownMenu(menu,{menu=false},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
                             Text(model.activeServer.label,Modifier.padding(horizontal=16.dp,vertical=6.dp),fontSize=12.sp,fontWeight=FontWeight.SemiBold)
-                            Text(if(state.connected) if(controlled) "In control" else "Viewing terminal" else state.phase,
+                            Text(if(state.connected) if(controlled) stringResource(R.string.in_control) else stringResource(R.string.viewing_terminal) else state.phase,
                                 Modifier.padding(horizontal=16.dp,vertical=8.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             client.screenDimensions?.let {Text("${it.first} × ${it.second}",Modifier.padding(horizontal=16.dp),fontFamily=MonoUi,fontSize=11.sp)}
                             HorizontalDivider(Modifier.padding(vertical=6.dp))
-                            TerminalMenuItem("New session",ChromeIcon.ADD,enabled=ready,onClick={menu=false;newSession=true})
+                            TerminalMenuItem(stringResource(R.string.new_session),ChromeIcon.ADD,enabled=ready,onClick={menu=false;newSession=true})
                             OwnershipMenuItem(controlled,ready&&client.hasScreen) {menu=false;if(controlled) client.releaseControl() else client.takeControl()}
                             QuickThemeMenuItem(palette.dark) {dark->menu=false;model.changeAppearance(if(dark) Appearance.DARK else Appearance.LIGHT)}
-                            TerminalMenuItem("Preferences",ChromeIcon.SETTINGS,onClick={menu=false;preferencesOpen=true})
-                            TerminalMenuItem("Copy viewport",ChromeIcon.COPY,enabled=client.hasScreen,onClick={
+                            TerminalMenuItem(stringResource(R.string.preferences),ChromeIcon.SETTINGS,onClick={menu=false;preferencesOpen=true})
+                            TerminalMenuItem(stringResource(R.string.copy_viewport),ChromeIcon.COPY,enabled=client.hasScreen,onClick={
                                 menu=false;client.terminal.value?.let {screen->(getClipboard(model.getApplication()) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Rex terminal",screen.plainText()))}
                             })
-                            TerminalMenuItem("Paste",ChromeIcon.PASTE,enabled=controlled,onClick={
+                            TerminalMenuItem(stringResource(R.string.paste),ChromeIcon.PASTE,enabled=controlled,onClick={
                                 menu=false;pasteClipboard()
                             })
-                            TerminalMenuItem("Attach image",ChromeIcon.IMAGE,enabled=controlled && model.images.state==null,onClick={menu=false;chooseImage()})
-                            TerminalMenuItem("Servers · ${model.connectedCount} connected",ChromeIcon.SERVER,onClick={menu=false;servers=true})
-                            TerminalMenuItem("Refresh sessions",ChromeIcon.REFRESH,enabled=state.connected,onClick={menu=false;client.refresh()})
+                            TerminalMenuItem(stringResource(R.string.attach_image),ChromeIcon.IMAGE,enabled=controlled && model.images.state==null,onClick={menu=false;chooseImage()})
+                            TerminalMenuItem(stringResource(R.string.servers_connected_format,model.connectedCount),ChromeIcon.SERVER,onClick={menu=false;servers=true})
+                            TerminalMenuItem(stringResource(R.string.refresh_sessions),ChromeIcon.REFRESH,enabled=state.connected,onClick={menu=false;client.refresh()})
                         }
                     }
                 })
@@ -248,16 +249,16 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                             Column(Modifier.padding(15.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                 Text(stringResource(R.string.app_name),fontWeight=FontWeight.Bold,fontSize=20.sp)
                                 Text(stringResource(R.string.app_subtitle),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("Connect over Tailscale",fontWeight=FontWeight.SemiBold)
-                                OutlinedTextField(endpoint,{endpoint=it},Modifier.fillMaxWidth(),label={Text("Rex server URL")},singleLine=true,
+                                Text(stringResource(R.string.connect_over_tailscale),fontWeight=FontWeight.SemiBold)
+                                OutlinedTextField(endpoint,{endpoint=it},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.rex_server_url))},singleLine=true,
                                     keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri),shape=RoundedCornerShape(12.dp))
                                 connectionError?.let {Text(it,color=MaterialTheme.colorScheme.error,fontSize=11.sp)}
                                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick={connectionError=model.connect(endpoint)},enabled=state.phase!="connecting" && endpoint.isNotBlank()){Text("Connect")}
-                                    TextButton(onClick={servers=true}) {Text("Servers")}
-                                    if(state.connected || state.phase=="reconnecting") TextButton(onClick={model.disconnectServer(model.activeServerId)}){Text("Disconnect")}
-                                    else TextButton(onClick={model.previewServer(model.activeServerId)}){Text("Try preview")}
-                                    if(client.hasScreen) TextButton(onClick={showServer=false}){Text("Hide")}
+                                    Button(onClick={connectionError=model.connect(endpoint)},enabled=state.phase!="connecting" && endpoint.isNotBlank()){Text(stringResource(R.string.connect))}
+                                    TextButton(onClick={servers=true}) {Text(stringResource(R.string.servers))}
+                                    if(state.connected || state.phase=="reconnecting") TextButton(onClick={model.disconnectServer(model.activeServerId)}){Text(stringResource(R.string.disconnect))}
+                                    else TextButton(onClick={model.previewServer(model.activeServerId)}){Text(stringResource(R.string.try_preview))}
+                                    if(client.hasScreen) TextButton(onClick={showServer=false}){Text(stringResource(R.string.hide))}
                                 }
                             }
                         }
@@ -274,7 +275,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                             client::type,client::scroll,client::wheel,client::takeControl,client::scrollToBottom,client::resize,::openPane,{picker="panes"},{terminalView=it},
                             Modifier.fillMaxSize(),floatingDock=floating.isNotEmpty(),onImage=imageCommit,onPaste=::pasteClipboard)
                         if(floatingActive && hiddenFloating==chosen) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
-                            Text("Floating panes minimized",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.floating_panes_minimized),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
 
                         ConnectionNotice(state.phase,model.networkAvailable,client::retryNow,Modifier.align(Alignment.TopCenter).padding(8.dp))
@@ -289,7 +290,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                             ::openPane,::minimizeFloating,Modifier.align(Alignment.BottomEnd).padding(end=6.dp,bottom=2.dp))
                         }
                     } else Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp),contentAlignment=Alignment.Center) {
-                        Text(if(state.connected) "Choose a session, or start a new one." else "Your terminals, anywhere.",
+                        Text(if(state.connected) stringResource(R.string.choose_session_or_start) else stringResource(R.string.terminals_anywhere),
                             fontFamily=MonoUi,fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if(state.connected || state.phase=="preview") {
@@ -325,7 +326,9 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
         onClose={preferencesOpen=false},shortcutGesture=model.shortcutGesture,onShortcutGesture=model::changeShortcutGesture,
         onNeovim={preferencesOpen=false;neovimSettings=true},arrowJoystickEnabled=model.arrowJoystickEnabled,onArrowJoystick=model::changeArrowJoystick,
         codexTitleAttention=model.experimentalCodexAttention,onCodexTitleAttention=model::changeCodexAttention,
-        minimizeFloatingPanes=model.minimizeFloatingPanes,onMinimizeFloatingPanes=model::changeMinimizeFloatingPanes)
+        minimizeFloatingPanes=model.minimizeFloatingPanes,onMinimizeFloatingPanes=model::changeMinimizeFloatingPanes,
+        language=model.language,onLanguage={languageDialog=true})
+    if(languageDialog) LanguageDialog(model.language,model::changeLanguage){languageDialog=false}
     if(neovimSettings) NeovimShortcutsSheet(model.neovimShortcuts,model::saveNeovimShortcuts,onClose={neovimSettings=false},
         enabled=model.neovimShortcutsEnabled,onEnabled=model::enableNeovimShortcuts,
         layout=model.neovimShortcutLayout,onLayout=model::changeNeovimShortcutLayout,effect=model.neovimShortcutEffect,onEffect=model::changeNeovimShortcutEffect,
@@ -342,13 +345,13 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
         onCloseTab={picker="";closeTarget=closeTabTarget(it)},onClosePane={picker="";closeTarget=closePaneTarget(it)},
         onClose={picker=""},initialPage=if(picker=="panes") 1 else 0,onMoveTab=client::moveTab,onMovePane=client::movePane,reorderKey=currentSessionKey)
     closeTarget?.let {target->
-        AlertDialog(onDismissRequest={closeTarget=null},title={Text(if(target.tab) "Close tab?" else "Close pane?")},
+        AlertDialog(onDismissRequest={closeTarget=null},title={Text(if(target.tab) stringResource(R.string.close_tab_title) else stringResource(R.string.close_tab))},
             text={Text(if(target.tab) "Close “${target.label}”? This ends every program in its ${target.blocks.size} pane${if(target.blocks.size==1) "" else "s"}."
                 else "Close “${target.label}”? This ends the program running in this pane.")},
             confirmButton={TextButton(enabled=ready,onClick={closeTarget=null
                 if(target.tab) client.closeTab(target.session,target.id,target.blocks) else client.closePane(target.session,target.id)
-            }) {Text("Close",color=MaterialTheme.colorScheme.error)}},
-            dismissButton={TextButton(onClick={closeTarget=null}) {Text("Cancel")}})
+            }) {Text(stringResource(R.string.close),color=MaterialTheme.colorScheme.error)}},
+            dismissButton={TextButton(onClick={closeTarget=null}) {Text(stringResource(R.string.cancel))}})
     }
     if(appearance) AppearanceSheet(model.appearance,model.themes,model.theme(false),model.theme(true),model::changeAppearance,model::chooseTheme) {appearance=false}
     if(fontPicker) FontSizeDialog(fontSize,model::changeFontSize) {fontPicker=false}
@@ -372,12 +375,12 @@ private fun getClipboard(context: Context)=context.getSystemService(Context.CLIP
         }}) {
         Column(Modifier.fillMaxWidth().height(panelHeight).padding(bottom=4.dp)) {
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                Text("Sessions",Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold)
+                Text(stringResource(R.string.sessions),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold)
                 FilledTonalButton(onClick=onNew,enabled=canCreate,contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp),modifier=Modifier.heightIn(min=36.dp)) {
                     ChromeSymbol(ChromeIcon.ADD,Modifier.size(15.dp),scheme.primary)
-                    Spacer(Modifier.width(4.dp));Text("New session",style=SettingsType.section)
+                    Spacer(Modifier.width(4.dp));Text(stringResource(R.string.new_session),style=SettingsType.section)
                 }
-                ChromeButton(ChromeIcon.CLOSE,"Close sessions",onClick=onClose)
+                ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_sessions),onClick=onClose)
             }
             BasicTextField(search,{search=it},Modifier.fillMaxWidth().padding(horizontal=16.dp).heightIn(min=40.dp)
                 .clip(RoundedCornerShape(12.dp)).background(scheme.surfaceVariant.copy(alpha=.45f)).padding(horizontal=12.dp,vertical=10.dp),
@@ -385,10 +388,10 @@ private fun getClipboard(context: Context)=context.getSystemService(Context.CLIP
                 cursorBrush=androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox={field->Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     ChromeSymbol(ChromeIcon.SEARCH,Modifier.size(17.dp),scheme.onSurfaceVariant)
-                    Box(Modifier.weight(1f)) {if(search.isEmpty()) Text("Find session…",style=SettingsType.row,color=scheme.onSurfaceVariant);field()}
+                    Box(Modifier.weight(1f)) {if(search.isEmpty()) Text(stringResource(R.string.find_session),style=SettingsType.row,color=scheme.onSurfaceVariant);field()}
                 }})
             LazyColumn(Modifier.fillMaxWidth().weight(1f),contentPadding=PaddingValues(horizontal=16.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                if(groups.isEmpty()) item {Text(if(targets.isEmpty()) "No sessions yet" else "No matching sessions",Modifier.padding(vertical=16.dp),style=SettingsType.row,color=scheme.onSurfaceVariant)}
+                if(groups.isEmpty()) item {Text(if(targets.isEmpty()) stringResource(R.string.no_sessions_yet) else stringResource(R.string.no_matching_sessions),Modifier.padding(vertical=16.dp),style=SettingsType.row,color=scheme.onSurfaceVariant)}
                 groups.forEach {group->
                     item(key="server:${group.server.id}") {
                         Row(Modifier.fillMaxWidth().padding(top=6.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -411,11 +414,11 @@ private fun getClipboard(context: Context)=context.getSystemService(Context.CLIP
         SessionRenameDialog(target,closing.isBlank(),onSave={label->if(onRenameSession(target,label)) renameTarget=null},onDismiss={renameTarget=null})
     }
     closeTarget?.let {target->
-        AlertDialog(onDismissRequest={closeTarget=null},title={Text("Close session?")},
-            text={Text("Close “${target.session.label}” on ${target.server.label}? All its tabs and panes will close, ending the programs running in them.")},
+        AlertDialog(onDismissRequest={closeTarget=null},title={Text(stringResource(R.string.close_session_title))},
+            text={Text(stringResource(R.string.close_session_confirm,target.session.label,target.server.label))},
             confirmButton={TextButton(onClick={closeTarget=null;onCloseSession(target)},enabled=closing.isBlank()) {
-                Text("Close session",color=MaterialTheme.colorScheme.error)
-            }},dismissButton={TextButton(onClick={closeTarget=null}){Text("Cancel")}})
+                Text(stringResource(R.string.close_session),color=MaterialTheme.colorScheme.error)
+            }},dismissButton={TextButton(onClick={closeTarget=null}){Text(stringResource(R.string.cancel))}})
     }
 
 }
@@ -437,24 +440,24 @@ private fun getClipboard(context: Context)=context.getSystemService(Context.CLIP
     val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {granted->
         if(granted) {model.setBackgroundAlerts(true);denied=false} else denied=true
     }
-    AlertDialog(onDismissRequest=onClose,title={Text("Background alerts",style=SettingsType.title)},text={
+    AlertDialog(onDismissRequest=onClose,title={Text(stringResource(R.string.background_alerts),style=SettingsType.title)},text={
         Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            Text("Get notified when a task finishes, needs input, approval, sign-in, or fails while Rexling is in the background or your phone is locked.",style=SettingsType.body)
-            Text("A quiet monitoring notification stays visible. Stop it there, or turn this off. Closing Rexling stops monitoring.",style=SettingsType.body)
-            Text("Your phone may delay alerts while sleeping.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.background_alerts_desc_1),style=SettingsType.body)
+            Text(stringResource(R.string.background_alerts_desc_2),style=SettingsType.body)
+            Text(stringResource(R.string.background_alerts_desc_3),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                Text("Notify about task updates",Modifier.weight(1f),style=SettingsType.row)
+                Text(stringResource(R.string.notify_task_updates),Modifier.weight(1f),style=SettingsType.row)
                 Switch(checked=model.backgroundAlerts,onCheckedChange={enabled->
                     if(!enabled) model.setBackgroundAlerts(false)
                     else if(Build.VERSION.SDK_INT>=33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     else if(BackgroundAlerts.allowed(context)) {model.setBackgroundAlerts(true);denied=false} else denied=true
                 },enabled=model.servers.any {model.serverStatuses[it.id]?.maintained==true})
             }
-            if(model.servers.none {model.serverStatuses[it.id]?.maintained==true}) Text("Connect a server to enable alerts.",style=SettingsType.detail)
+            if(model.servers.none {model.serverStatuses[it.id]?.maintained==true}) Text(stringResource(R.string.connect_server_for_alerts),style=SettingsType.detail)
             if(denied || (model.backgroundAlerts && !BackgroundAlerts.allowed(context))) {
-                Text("Allow notifications in Android settings to receive alerts.",style=SettingsType.detail)
-                TextButton(onClick={context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName))}) {Text("Notification settings")}
+                Text(stringResource(R.string.allow_notifications_hint),style=SettingsType.detail)
+                TextButton(onClick={context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName))}) {Text(stringResource(R.string.notification_settings))}
             }
         }
-    },confirmButton={TextButton(onClick=onClose) {Text("Done")}})
+    },confirmButton={TextButton(onClick=onClose) {Text(stringResource(R.string.done))}})
 }

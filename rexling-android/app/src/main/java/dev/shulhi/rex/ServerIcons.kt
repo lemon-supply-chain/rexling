@@ -14,10 +14,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+
+internal val ServerIcon.labelRes: Int get() = when(this) {
+    ServerIcon.GLOBE->R.string.server_icon_globe
+    ServerIcon.SERVER->R.string.server_icon_server
+    ServerIcon.CLOUD->R.string.server_icon_cloud
+    ServerIcon.MACBOOK->R.string.server_icon_macbook
+    ServerIcon.MAC_MINI->R.string.server_icon_mac_mini
+    ServerIcon.MAC_STUDIO->R.string.server_icon_mac_studio
+    ServerIcon.DESKTOP->R.string.server_icon_desktop
+}
 
 /** Small stroke icons stay sharp at header and picker sizes. */
 @Composable internal fun ServerGlyph(icon: ServerIcon,modifier: Modifier=Modifier,color: Color=MaterialTheme.colorScheme.onSurfaceVariant) {
@@ -62,13 +73,13 @@ import androidx.compose.ui.unit.dp
         Row(Modifier.fillMaxWidth().clickable(role=Role.Button) {open=true}.semantics {contentDescription="Choose server icon"}
             .padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             ServerGlyph(selected,color=MaterialTheme.colorScheme.onSurface)
-            Text("Icon",Modifier.weight(1f),style=SettingsType.row)
-            Text(selected.label,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.icon),Modifier.weight(1f),style=SettingsType.row)
+            Text(stringResource(selected.labelRes),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(14.dp),MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DropdownMenu(open,{open=false},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
             ServerIcon.entries.forEach {icon->
-                DropdownMenuItem(text={Text(icon.label,style=SettingsType.row)},
+                DropdownMenuItem(text={Text(stringResource(icon.labelRes),style=SettingsType.row)},
                     leadingIcon={ServerGlyph(icon)},trailingIcon={if(selected==icon) Text("✓",color=MaterialTheme.colorScheme.primary)},
                     onClick={onSelect(icon);open=false})
             }

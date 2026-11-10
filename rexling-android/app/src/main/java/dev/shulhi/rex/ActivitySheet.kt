@@ -27,6 +27,7 @@ import kotlin.math.roundToInt
 import kotlin.math.PI
 import kotlin.math.cos
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,21 +44,28 @@ import androidx.compose.ui.unit.dp
         dragHandle={Box(Modifier.fillMaxWidth().height(16.dp),contentAlignment=Alignment.Center) {
             Box(Modifier.width(28.dp).height(3.dp).background(scheme.outlineVariant,RoundedCornerShape(3.dp)))
         }}) {
-        Column(Modifier.fillMaxWidth().height(panelHeight).padding(bottom=4.dp).semantics {paneTitle="Activity"}) {
+        val activityTitle=stringResource(R.string.activity)
+        Column(Modifier.fillMaxWidth().height(panelHeight).padding(bottom=4.dp).semantics {paneTitle=activityTitle}) {
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                Text("Activity",Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold)
-                TextButton(onClick=onMarkAll,contentPadding=PaddingValues(horizontal=8.dp),enabled=sources.any {source->source.connected && source.items.any {it.state.notifiable && it.key !in source.seen}}) {Text("Mark seen",style=SettingsType.detail)}
-                ChromeButton(ChromeIcon.REFRESH,"Refresh activity",sources.any {it.connected},onClick=onRefresh)
-                ChromeButton(ChromeIcon.CLOSE,"Close activity",onClick=onClose)
+                Text(activityTitle,Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold)
+                TextButton(onClick=onMarkAll,contentPadding=PaddingValues(horizontal=8.dp),enabled=sources.any {source->source.connected && source.items.any {it.state.notifiable && it.key !in source.seen}}) {Text(stringResource(R.string.mark_seen),style=SettingsType.detail)}
+                ChromeButton(ChromeIcon.REFRESH,stringResource(R.string.refresh_activity),sources.any {it.connected},onClick=onRefresh)
+                ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_activity),onClick=onClose)
             }
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).height(40.dp).clip(RoundedCornerShape(12.dp))
                 .background(scheme.surfaceVariant.copy(alpha=.45f)).padding(4.dp).selectableGroup()) {
                 ActivityFilter.entries.forEach {entry->
                     val active=filter==entry
+                    val filterLabel=when(entry) {
+                        ActivityFilter.ALL->stringResource(R.string.filter_all)
+                        ActivityFilter.ATTENTION->stringResource(R.string.filter_attention)
+                        ActivityFilter.WORKING->stringResource(R.string.filter_working)
+                        ActivityFilter.FINISHED->stringResource(R.string.filter_finished)
+                    }
                     Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(9.dp))
                         .background(if(active) scheme.primaryContainer else Color.Transparent)
                         .selectable(active,role=Role.Tab,onClick={filter=entry}),contentAlignment=Alignment.Center) {
-                        Text(entry.label,style=SettingsType.section,color=if(active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        Text(filterLabel,style=SettingsType.section,color=if(active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -72,10 +80,10 @@ import androidx.compose.ui.unit.dp
                                 ServerGlyph(source.server.icon,Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(source.server.label,Modifier.weight(1f),style=SettingsType.section,color=scheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                Text(if(source.connected) "${records.size}" else "Offline",style=SettingsType.detail,color=scheme.onSurfaceVariant)
+                                Text(if(source.connected) "${records.size}" else stringResource(R.string.offline),style=SettingsType.detail,color=scheme.onSurfaceVariant)
                             }
                             if(source.error.isNotBlank()) Text(source.error,Modifier.padding(bottom=4.dp),style=SettingsType.detail,color=scheme.error,maxLines=2,overflow=TextOverflow.Ellipsis)
-                            else if(source.partial) Text("Some activity could not be refreshed.",style=SettingsType.detail,color=scheme.onSurfaceVariant)
+                            else if(source.partial) Text(stringResource(R.string.activity_partial),style=SettingsType.detail,color=scheme.onSurfaceVariant)
                         }
                         items(records,key={"${source.server.id}:${it.key}"}) {record->
                             val seen=record.state.notifiable && record.key in source.seen
@@ -91,7 +99,7 @@ import androidx.compose.ui.unit.dp
                                         modifier=Modifier.height(36.dp).semantics {contentDescription="Mark ${record.label} seen"},
                                         shape=RoundedCornerShape(8.dp),contentPadding=PaddingValues(0.dp),
                                         colors=ButtonDefaults.textButtonColors(contentColor=scheme.onSurfaceVariant)
-                                    ) {Text("Mark seen",style=SettingsType.detail)}
+                                    ) {Text(stringResource(R.string.mark_seen),style=SettingsType.detail)}
                                 }
                             }
                         }
@@ -99,8 +107,8 @@ import androidx.compose.ui.unit.dp
                 }
                 if(filtered.all {it.second.isEmpty()} && sources.none {it.error.isNotBlank() || it.partial}) item {
                     Column(Modifier.fillMaxWidth().padding(vertical=20.dp,horizontal=8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                        Text(if(sources.any {it.loading}) "Checking activity…" else "No activity to show",style=SettingsType.row)
-                        Text("Programs appear here when they report a status.",style=SettingsType.detail,color=scheme.onSurfaceVariant)
+                        Text(if(sources.any {it.loading}) stringResource(R.string.activity_checking) else stringResource(R.string.no_activity_to_show),style=SettingsType.row)
+                        Text(stringResource(R.string.no_activity),style=SettingsType.detail,color=scheme.onSurfaceVariant)
                     }
                 }
             }

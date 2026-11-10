@@ -1,4 +1,204 @@
 <resources>
     <string name="app_name">Rexling</string>
     <string name="app_subtitle">Unofficial Android client for Rex</string>
+
+    <!-- Common -->
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="done">Done</string>
+    <string name="close">Close</string>
+    <string name="retry">Retry</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="hide">Hide</string>
+    <string name="create">Create</string>
+    <string name="icon">Icon</string>
+    <string name="name">Name</string>
+
+    <!-- Main & Top Menu -->
+    <string name="terminal_menu">Terminal menu</string>
+    <string name="in_control">In control</string>
+    <string name="viewing_terminal">Viewing terminal</string>
+    <string name="take_control">Take control</string>
+    <string name="release_control">Release control</string>
+    <string name="new_session">New session</string>
+    <string name="preferences">Preferences</string>
+    <string name="copy_viewport">Copy viewport</string>
+    <string name="paste">Paste</string>
+    <string name="attach_image">Attach image</string>
+    <string name="servers_connected_format">Servers · %d connected</string>
+    <string name="refresh_sessions">Refresh sessions</string>
+    <string name="connect_over_tailscale">Connect over Tailscale</string>
+    <string name="rex_server_url">Rex server URL</string>
+    <string name="servers">Servers</string>
+    <string name="try_preview">Try preview</string>
+    <string name="floating_panes_minimized">Floating panes minimized</string>
+    <string name="choose_session_or_start">Choose a session, or start a new one.</string>
+    <string name="terminals_anywhere">Your terminals, anywhere.</string>
+    <string name="close_tab_title">Close tab?</string>
+    <string name="close_tab">Close tab</string>
+    <string name="move_left">Move left</string>
+    <string name="move_right">Move right</string>
+
+    <!-- Connection Notices -->
+    <string name="waiting_network_input_paused">Waiting for network · input paused</string>
+    <string name="connecting">Connecting…</string>
+    <string name="reconnecting_input_paused">Reconnecting · input paused</string>
+    <string name="retry_now">Retry now</string>
+    <string name="sized_by_another_client">Sized by another client</string>
+    <string name="take_over">Take over</string>
+    <string name="ready_to_type">Ready to type</string>
+
+    <!-- Session Drawer & Actions -->
+    <string name="sessions">Sessions</string>
+    <string name="close_sessions">Close sessions</string>
+    <string name="find_session">Find session…</string>
+    <string name="no_sessions_yet">No sessions yet</string>
+    <string name="no_matching_sessions">No matching sessions</string>
+    <string name="close_session_title">Close session?</string>
+    <string name="close_session_confirm">Close “%1$s” on %2$s? All its tabs and panes will close, ending the programs running in them.</string>
+    <string name="close_session">Close session</string>
+    <string name="rename_session">Rename session</string>
+    <string name="session_name">Session name</string>
+    <string name="on_server_format">On %s</string>
+    <string name="session_name_optional">Name (optional)</string>
+    <string name="session_name_hint">Leave blank for a name from Rex.</string>
+    <string name="start_session_on_format">Start a session on %s.</string>
+    <string name="session_current">current</string>
+    <string name="session_previous">previous</string>
+    <string name="details_not_loaded">Details not loaded</string>
+    <string name="session_details_format">%1$s · %2$d tabs · %3$d panes</string>
+    <string name="session_name_empty">Enter a session name</string>
+    <string name="session_name_too_long">Use at most 128 characters</string>
+    <string name="session_name_control_chars">Session names cannot contain control characters</string>
+
+    <!-- Preferences -->
+    <string name="close_preferences">Close preferences</string>
+    <string name="section_display">Display</string>
+    <string name="section_panes">Panes</string>
+    <string name="section_keyboard">Keyboard</string>
+    <string name="section_connections">Connections</string>
+    <string name="section_experimental">Experimental</string>
+    <string name="section_app">App</string>
+    <string name="appearance">Appearance</string>
+    <string name="appearance_detail">Themes and light or dark mode</string>
+    <string name="font_size">Font size</string>
+    <string name="font_size_detail">Terminal text size</string>
+    <string name="language">Language</string>
+    <string name="language_detail">System default, English or Chinese</string>
+    <string name="language_system">System default</string>
+    <string name="language_en">English</string>
+    <string name="language_zh">简体中文</string>
+    <string name="minimize_floating_panes">Minimize floating panes</string>
+    <string name="minimize_floating_panes_detail">Open floating panes from a corner dock. Swipe between tiled panes only.</string>
+    <string name="use_joystick">Use joystick for arrows</string>
+    <string name="use_joystick_detail_on">Hold and slide; double-tap for arrow buttons</string>
+    <string name="use_joystick_detail_off">Tap for arrow buttons</string>
+    <string name="ctrl_shortcuts">Ctrl shortcuts</string>
+    <string name="ctrl_shortcuts_detail">Open the ^ shortcut list with</string>
+    <string name="ctrl_gesture_hold">Hold</string>
+    <string name="ctrl_gesture_double_tap">Double tap</string>
+    <string name="neovim_shortcuts">Neovim shortcuts</string>
+    <string name="neovim_shortcuts_detail">Customize the floating key menu</string>
+    <string name="background_alerts">Background alerts</string>
+    <string name="background_alerts_detail">Task completions and attention alerts</string>
+    <string name="codex_title_attention">Codex title attention</string>
+    <string name="codex_title_attention_detail">Use Codex’s explicit Action Required title when its status stays Working. Depends on Codex’s title format.</string>
+    <string name="about_rexling">About Rexling</string>
+    <string name="about_rexling_detail">Version, build and project information</string>
+
+    <!-- Appearance -->
+    <string name="light_theme">Light theme</string>
+    <string name="dark_theme">Dark theme</string>
+    <string name="toggle_light_theme">Toggle Light theme</string>
+    <string name="toggle_dark_theme">Toggle Dark theme</string>
+    <string name="close_appearance">Close appearance</string>
+    <string name="back_to_appearance">Back to appearance</string>
+    <string name="appearance_system">System</string>
+    <string name="appearance_dark">Dark</string>
+    <string name="appearance_light">Light</string>
+
+    <!-- Background Alerts -->
+    <string name="background_alerts_desc_1">Get notified when a task finishes, needs input, approval, sign-in, or fails while Rexling is in the background or your phone is locked.</string>
+    <string name="background_alerts_desc_2">A quiet monitoring notification stays visible. Stop it there, or turn this off. Closing Rexling stops monitoring.</string>
+    <string name="background_alerts_desc_3">Your phone may delay alerts while sleeping.</string>
+    <string name="notify_task_updates">Notify about task updates</string>
+    <string name="connect_server_for_alerts">Connect a server to enable alerts.</string>
+    <string name="allow_notifications_hint">Allow notifications in Android settings to receive alerts.</string>
+    <string name="notification_settings">Notification settings</string>
+
+    <!-- About -->
+    <string name="about">About</string>
+    <string name="close_about">Close about</string>
+    <string name="version">Version</string>
+    <string name="build">Build</string>
+    <string name="commit">Commit</string>
+    <string name="copy_build_info">Copy build info</string>
+    <string name="source_code_github">Source code on GitHub</string>
+    <string name="apache_license">Apache License 2.0</string>
+    <string name="opensource_notices">Open-source notices</string>
+    <string name="about_built_with">Built with Kotlin, Jetpack Compose, Rust and libghostty-vt.</string>
+    <string name="about_warranty">Provided on a best-effort basis, without warranty.</string>
+    <string name="no_browser">No browser available</string>
+
+    <!-- Servers -->
+    <string name="count_connected_format">%d connected</string>
+    <string name="add_server">+ Add server</string>
+    <string name="add_server_title">Add server</string>
+    <string name="edit_server_title">Edit server</string>
+    <string name="add_rex_server_started">Add a Rex server to get started.</string>
+    <string name="switch_servers_hint">Switch servers without closing their connections.</string>
+    <string name="server_url">Server URL</string>
+    <string name="tailscale_address_hint">Use the server\'s authenticated Tailscale address.</string>
+    <string name="save_and_connect">Save &amp; connect</string>
+    <string name="forget_server">Forget server</string>
+    <string name="status_connected_viewing">Connected · viewing</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_failed">Connection failed</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="choose_server_icon">Choose server icon</string>
+    <string name="server_icon_globe">Globe</string>
+    <string name="server_icon_server">Server</string>
+    <string name="server_icon_cloud">Cloud</string>
+    <string name="server_icon_macbook">MacBook</string>
+    <string name="server_icon_mac_mini">Mac mini</string>
+    <string name="server_icon_mac_studio">Mac Studio</string>
+    <string name="server_icon_desktop">Desktop</string>
+
+    <!-- QR Scanner -->
+    <string name="camera_permission_required">Camera permission required</string>
+    <string name="camera_permission_desc">Grant camera access to scan your Rex pairing QR code.</string>
+    <string name="grant_permission">Grant permission</string>
+    <string name="scan_pairing_qr">Scan pairing QR code in Rex</string>
+
+    <!-- Activity -->
+    <string name="activity">Activity</string>
+    <string name="mark_seen">Mark seen</string>
+    <string name="refresh_activity">Refresh activity</string>
+    <string name="close_activity">Close activity</string>
+    <string name="offline">Offline</string>
+    <string name="activity_partial">Some activity could not be refreshed.</string>
+    <string name="no_activity_to_show">No activity to show</string>
+    <string name="activity_checking">Checking activity…</string>
+    <string name="no_activity">Programs appear here when they report a status.</string>
+    <string name="filter_all">All</string>
+    <string name="filter_attention">Needs you</string>
+    <string name="filter_working">Working</string>
+    <string name="filter_finished">Finished</string>
+
+    <!-- Neovim Shortcuts -->
+    <string name="enable_neovim_shortcuts">Enable Neovim shortcuts</string>
+    <string name="menu_layout">Menu layout</string>
+    <string name="layout_grid">Grid</string>
+    <string name="layout_circular">Circular</string>
+    <string name="opening_effect">Opening effect</string>
+    <string name="selection_haptics">Selection haptics</string>
+    <string name="reset_defaults">Reset defaults</string>
+    <string name="customize_shortcuts">Customize shortcuts</string>
+    <string name="shortcuts">Shortcuts</string>
 </resources>
