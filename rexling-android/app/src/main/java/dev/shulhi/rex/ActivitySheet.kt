@@ -69,6 +69,8 @@ import androidx.compose.ui.unit.dp
                     if(records.isNotEmpty() || source.error.isNotBlank() || source.partial) {
                         item(key="server:${source.server.id}") {
                             Row(Modifier.fillMaxWidth().padding(top=6.dp),verticalAlignment=Alignment.CenterVertically) {
+                                ServerGlyph(source.server.icon,Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
                                 Text(source.server.label,Modifier.weight(1f),style=SettingsType.section,color=scheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
                                 Text(if(source.connected) "${records.size}" else "Offline",style=SettingsType.detail,color=scheme.onSurfaceVariant)
                             }

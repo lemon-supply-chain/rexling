@@ -224,6 +224,12 @@ ready; viewing another client's pane shows a contextual takeover notice. Manual
 Take/Release remain in the overflow menu. Input is paused during reconnection and
 uncertain input is never replayed.
 
+### Create a session
+
+Choose **⋮ → New session**, or tap **New session** in the session drawer.
+The dialog shows the target server; give the session a name or leave it blank
+for Rex to generate one. An empty connected server also shows a create button.
+
 ### Image attachments
 
 Updated Rex servers (API revision 11+) receive images directly. Copy an image
@@ -289,3 +295,11 @@ Copyright 2026 Shulhi Sapli and contributors. Project code is licensed under
 [Apache License 2.0](LICENSE). Third-party code, fonts, logos and sourced assets
 retain their own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 Rexling is an independent, unofficial client and is not an official Rex product.
+
+### Floating panes on the phone
+
+Enable **Preferences → Panes → Minimize floating panes** to keep floating panes in a compact icon dock at the bottom right. They are excluded from pane swipes. A single floating pane opens directly from its icon. Multiple floating panes use a stacked icon: tap it to fan their icons and titles upward, and tap it again to collapse the list. The stack is highlighted while a floating pane is open. Tap an item to open its terminal; tap the active item again or press Back to minimize it and return to the last tiled pane in that tab. Floating panes remain available in the pane drawer. This preference is off by default and does not change the server’s layout.
+
+### Server icons
+
+Open **Servers → ⋮ → Edit → Icon** to choose Globe, Server, Cloud, MacBook, Mac mini, Mac Studio or Desktop, then save. The icon is stored on this phone and shown beside that server in the server list, session header and drawer, and Activity groups. Existing servers default to Globe.

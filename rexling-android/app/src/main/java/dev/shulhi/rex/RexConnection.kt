@@ -326,7 +326,10 @@ internal class RexConnection(application: Application, private val scope: Corout
     fun selectWindow(id: String) {
         val current = state.value
         current.windows.firstOrNull { it.id == id }?.let { window ->
-            navigation.pane(current.selectedSession, window)?.let(::selectBlock)
+            val target=navigation.pane(current.selectedSession,window)
+            val next=if(preferences.getBoolean("minimize_floating_panes",false) && window.floatingPanes().any {it.id==target})
+                floatingNavigation.returnPane(current.selectedSession,window) ?: target else target
+            next?.let(::selectBlock)
         }
     }
     fun rememberCurrentTerminal() {
@@ -345,9 +348,13 @@ internal class RexConnection(application: Application, private val scope: Corout
             else target.block?.let(::selectBlock)
         }
     }
+    val floatingNavigation=FloatingPaneNavigation()
     fun swipePane(step: Int) {
         val current = state.value
-        if (current.connected && !current.creating) navigation.neighbour(orderedWindows(current), navigationRequest.block ?: current.selectedBlock, step)?.let(::selectBlock)
+        val windows=orderedWindows(current).map {window->
+            if(preferences.getBoolean("minimize_floating_panes",false)) window.copy(blocks=window.tiledPanes()) else window
+        }
+        if (current.connected && !current.creating) navigation.neighbour(windows, navigationRequest.block ?: current.selectedBlock, step)?.let(::selectBlock)
     }
     fun swipeSession(step: Int) {
         val current = state.value
@@ -377,7 +384,11 @@ internal class RexConnection(application: Application, private val scope: Corout
         if(!current.connected || current.creating || navigationRequest.pending || current.sessions.none {it.id==id}) return false
         command("close_session","id" to id);return true
     }
-    fun createSession(label: String) { if(state.value.connected && !state.value.creating && !navigationRequest.pending) {activation.navigate();resizeJob?.cancel();cancelKeyRepeats();command("new_session","label" to label)} }
+    fun createSession(label: String): Boolean {
+        if(!state.value.connected || state.value.creating || navigationRequest.pending) return false
+        activation.navigate();resizeJob?.cancel();cancelKeyRepeats()
+        return command("new_session","label" to label)
+    }
     fun createTab() {
         val current = state.value
         if (current.connected && !current.creating && !navigationRequest.pending && current.selectedSession.isNotBlank()) {activation.navigate();resizeJob?.cancel();cancelKeyRepeats();command("new_tab", "session" to current.selectedSession)}

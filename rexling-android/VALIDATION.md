@@ -3232,3 +3232,68 @@ at the existing 12sp/18sp size. The existing both-theme layout/action check and
 visual review passed, along with release/lint/static APK and whitespace checks.
 Installed build 87 via USB with matching checksum; settings preserved and app
 not launched. Evidence: validation/upload-text-baseline-2026-11-07.json.
+
+
+## Discoverable session creation — release 88 (2026-11-07)
+
+Added New session to the terminal three-dot menu. The session drawer's small New
+text action is now an explicit New session tonal button, and connected servers
+with no sessions have a centered creation action. The empty header says Sessions
+instead of Connect. A shared dialog identifies the current server and accepts
+an optional name. The connection creation method reports whether it accepted the
+command; rejection keeps the dialog/name available instead of silently closing.
+
+Five Android checks passed: drawer selection/search/actions, creation from an
+empty drawer, optional-name/rejected-request behavior and empty-server entry.
+157 JVM checks passed (one optional benchmark skipped). Release/lint/static APK
+and whitespace checks passed. Built the shareable build 88 APK with checksum
+and verification sidecars. Installed via wireless ADB at 100.97.157.23:37229 on
+SM-S906E and verified installed checksum; settings preserved, app not launched.
+Evidence: validation/session-creation-2026-11-07.json.
+
+### 2026-11-10 — Floating-pane corner dock (build 89)
+
+- Added the saved, default-off **Preferences → Panes → Minimize floating panes** option. Floating panes use a compact bottom-right program-icon dock, stay in the management drawer, and are excluded from carousel and shortcut swipes. The server layout is unchanged.
+- Opening a dock icon shows that terminal alone. The active icon, down arrow, or Back minimizes it and returns to the last tiled pane in that session/tab; closed tiled panes fall back safely. Floating-only tabs can minimize to an empty terminal area with the dock still available. Hidden floating terminals do not count as watched Activity panes.
+- Kept the dock above the pane indicator and separated it from Latest, upload progress, and the default Neovim shortcut position.
+- JVM checks: 160 passed, 1 optional skipped. Three new policy cases cover swipe exclusion/wrap, per-session/tab return history, closed-pane and missing-geometry/floating-only fallbacks.
+- API 37 emulator: 6 instrumented checks passed (dock open/switch/minimize, preference on/off, pane indicator, saved workspace). Reviewed the light-theme dock capture. Release lint, APK signature, baseline profiles, arm64 JNI exports and 16 KB alignment passed.
+- Installed the release over USB on S22+ `RFCT21390SD`. Verified the installed base APK matches SHA-256 `35e06b42b5749e96ecd5125cb213517bf5543297b947fb3480d7dc1f4c38485c`. Settings preserved; did not launch the app or modify existing Rex sessions for testing. Physical-device gesture behavior awaits user testing.
+- Evidence: `validation/floating-panes-2026-11-10.json`, `validation/apk.json`; APK and verification/installation records in `dist/`.
+
+### 2026-11-10 — Compact floating stack and bottom bar (build 90)
+
+- Replaced the floating dock with a title-free 40×36 dp program stack, using the same sharp icons as tabs. Multiple panes expand upward into a straight icon fan; tapping the group again collapses it. Selecting an item collapses the fan. A single pane opens directly, and the active item minimizes it.
+- Reduced tab rows from 49 to 45 dp and keyboard rows from 53 to 45 dp (vertical padding 8 to 4 dp; key faces retain their height). Increased the fixed pane-indicator strip from 14 to 40 dp and matched terminal bottom padding; the floating stack occupies its bottom-right corner. Moved swipe labels/Latest clear of the strip and kept the expanded fan above Neovim controls.
+- JVM: 160 passed, 1 optional skipped. Release lint and static APK checks passed. Emulator: all 39 checks passed across FloatingPaneDockTest, PaneChromeTest, KeyboardBarTest and AdaptiveTabsTest. Updated keyboard fixtures to respect system insets (matching the real workspace) and the tab test to assert the new compact height. Reviewed collapsed and expanded light-theme captures.
+- Installed build 90 over USB on S22+ `RFCT21390SD`, settings preserved, app not launched. Installed SHA-256 matches `0652eb7c3027e81ea2eadac84cbca2635413410faef26940211b781aa438cf2f`. Server icon picker deferred until the user's UI review.
+- Evidence: `validation/floating-panes-compact-2026-11-10.json`; APK, checksum, verification and installation records in `dist/`.
+
+### 2026-11-10 — Reviewed and merged PR #1
+
+- Reviewed contributor commit `8c299d1d13a7e25bb52489a93b22767cd211152f` (Shift+Enter) in an isolated checkout. It preserves plain Enter and paste handling while translating the dedicated Shift+Enter sequence into a Rex key event.
+- PR checkout JVM suite: 157 passed, 1 optional skipped. JNI suite: 44 passed, 14 ignored, including the new Shift+Enter event test. No GitHub CI runs/statuses were attached.
+- Merged with the expected PR head pinned; GitHub merge commit `4fefbf46c3c1170839d07740f8f18343b7d71bef`. Fast-forwarded local main and preserved all pending UI/session changes. Installed build 90 predates this merge; the Shift+Enter fix will be included in the next APK.
+
+### 2026-11-10 — Floating-pane titles, active highlight and spacing (build 91)
+
+- Expanded floating items now show content-sized title pills with their sharp program icons at the right. Labels use 13 sp medium text, cap at 260 dp and ellipsize. The collapsed stack stays icon-only and keeps its position when the menu expands. Both the stack and selected menu item use the primary selection container while viewing a floating pane.
+- Reduced the pane-indicator strip and matching terminal inset from 40 to 36 dp, the collapsed button from 36 to 32 dp high, and the terminal-to-tab gap from 7 to 3 dp. This APK includes merged PR #1's Shift+Enter fix.
+- Emulator checks: all 12 tests passed across FloatingPaneDockTest and PaneChromeTest, covering visible titles, stable anchor position, active semantics, open/minimize/group toggle and swipe chrome. JVM: 160 passed, 1 optional skipped. Release lint, signature, JNI exports, baseline profiles and 16 KB alignment passed. Reviewed the expanded title-pill/active-stack screenshot.
+- Shareable APK: `dist/Rexling-2026.11.10-build91-4fefbf46c3-modified-arm64-release.apk`; SHA-256 `a43762ac04d72d5e40c9dddd1e5875ed00093e687e42de9728d27f0d448cbe41`. Phone disconnected; installation pending. `validation/apk.json` continues to describe installed build 90.
+- Evidence: `validation/floating-pane-titles-2026-11-10.json` and the APK's `.verification.json` / `.apk.sha256` records.
+
+Build 91 installation follow-up: installed over USB on S22+ `RFCT21390SD`; verified installed base APK SHA-256 matches the build 91 report. Settings preserved; app not launched. `validation/apk.json` now describes installed build 91.
+
+### 2026-11-10 — Floating surfaces (build 92)
+
+- Added rounded opaque surfaces and soft 4 dp drop shadows to the collapsed icon-only floating stack and expanded icon/title pills. Preserved blue active highlights. Reserved scroll padding and allowed the fan animation to draw its shadows outside its bounds.
+- Three existing floating-dock interaction tests passed; reviewed the light-theme screenshot. Release lint, APK signature, JNI exports, baseline profiles and 16 KB alignment passed.
+- Installed over USB on S22+ `RFCT21390SD`, preserving settings without launching the app. Verified the installed base APK matches SHA-256 `49c82b466ba97d30ae051a700461b6d1d114501bda2bfd078fdd49e77b629dd5`. Evidence: `validation/floating-pane-surfaces-2026-11-10.json` and the build 92 APK verification/installation records in `dist/`.
+
+### 2026-11-10 — Server icons and bare floating toggle (build 93)
+
+- Added per-server icons via Servers → server actions → Edit → Icon: Globe, Server, Cloud, MacBook, Mac mini, Mac Studio and Desktop. Icons are saved with the existing profile identity/endpoint and displayed in the server list, session header and drawer, and Activity group headings. Old/unknown values safely fall back to Globe. Icon-only saves preserve existing connections.
+- Removed the pill and rectangular touch indication around the floating-menu toggle. Shadows apply to the individual program tiles; a primary-color outline marks the active front icon. Expanded icon/title pills retain their surfaces and shadows.
+- JVM: 162 passed, 1 optional skipped, including all-icon round-trip persistence and old/unknown-icon migration. Emulator: 13 checks passed across ServerIconPickerTest, FloatingPaneDockTest, HeaderLineLayoutTest and SessionHeaderLoopTest. Header checks now include a MacBook glyph; corrected the older test expectation for the already-connected empty-session label (Sessions). Reviewed the picker and bare-toggle light screenshots. Release lint and static APK checks passed.
+- Installed build 93 over USB on S22+ RFCT21390SD; settings preserved, app not launched. Installed SHA-256 verified: `12bf3f5bc869818dea7e43af45be63e79e17f5ef762f8d7ac0192c2a93f2a894`. Evidence: `validation/server-icons-2026-11-10.json`, `validation/apk.json`, and build 93 artifacts in `dist/`.

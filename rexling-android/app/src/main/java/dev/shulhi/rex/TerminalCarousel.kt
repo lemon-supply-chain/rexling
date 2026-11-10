@@ -35,7 +35,7 @@ import kotlin.math.roundToInt
     liveScreen: TerminalScreen?,frames: Map<String,TerminalScreen>,programs: Map<String,ProgramIdentity>,controlled: Boolean,fontSize: Float,
     onInput: (String)->Unit,onScroll: (Int)->Unit,onWheel: (Int,Int,Int,Int,Int)->Unit,onActivate: ()->Unit,onBottom: ()->Unit,onDimensions: (Int,Int)->Unit,onSelect: (String)->Unit,onPanes: ()->Unit,
     onView: (TerminalView)->Unit,modifier: Modifier=Modifier,bindLiveView: ((String,TerminalView)->Boolean)?=null,
-    onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget) {
+    onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp) {
     val palette=LocalTerminalPalette.current
     val backdrop=MaterialTheme.colorScheme.background
     val scope=rememberCoroutineScope()
@@ -112,7 +112,7 @@ import kotlin.math.roundToInt
                             factory={TerminalView(it)},modifier=Modifier.fillMaxSize().clipToBounds(),
                             update={view ->
                                 view.onDimensions=if(center && block.id==liveBlock) onDimensions else {_,_->}
-                                view.setTerminalPaddingDp(12,8,if(blocks.size>1) 14 else 6)
+                                view.setTerminalPaddingDp(12,8,if(blocks.size>1 || bottomControlsInset>0.dp) 36 else 6)
                                 view.palette=palette;view.textSp=fontSize
                                 if(block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
                                 view.interactive=center
@@ -142,7 +142,7 @@ import kotlin.math.roundToInt
                         }
                     }
                     if(center && (frame?.scroll?.below ?: 0)>0) {
-                        Text("↓ Latest",Modifier.align(Alignment.BottomEnd).padding(end=12.dp,bottom=if(blocks.size>1) 64.dp else 10.dp)
+                        Text("↓ Latest",Modifier.align(Alignment.BottomEnd).padding(end=12.dp,bottom=(if(blocks.size>1) 96.dp else 10.dp)+bottomControlsInset)
                             .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
                             .clickable(role=Role.Button,onClick=onBottom).padding(horizontal=12.dp,vertical=7.dp),
                             fontSize=11.sp,color=MaterialTheme.colorScheme.primary)
@@ -152,14 +152,14 @@ import kotlin.math.roundToInt
             }
         }
         if(blocks.size>1) {
-            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(14.dp)
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(36.dp)
                 .clickable(role=Role.Button,onClick=onPanes)
                 .semantics {contentDescription="Pane position indicator";stateDescription="Pane ${candidate+1} of ${blocks.size}"},contentAlignment=Alignment.Center) {
                 PanePositionIndicator(index,blocks.size,offset={-drag/stride})
             }
         }
         if((dragging || settling || toast) && blocks.size>1 && blocks.getOrNull(candidate)!=null) {
-            Row(Modifier.align(Alignment.BottomCenter).padding(bottom=20.dp)
+            Row(Modifier.align(Alignment.BottomCenter).padding(bottom=42.dp)
                 .widthIn(max=(maxWidth-32.dp).coerceIn(80.dp,240.dp)).heightIn(min=36.dp)
                 .clip(RoundedCornerShape(13.dp)).background(MaterialTheme.colorScheme.surface)
                 .semantics {contentDescription="Pane switch indicator";stateDescription=blocks[candidate].id}
