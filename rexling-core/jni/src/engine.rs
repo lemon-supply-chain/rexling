@@ -154,7 +154,9 @@ fn collect_pane_layout(node: &Value,ids: &BTreeSet<&str>,layer: usize,floating: 
     for child in ["before","after"] {collect_pane_layout(&node["split"][child],ids,layer,floating,depth+1,out);}
 }
 type ConnectTask = Pin<Box<dyn Future<Output = Result<Control>>>>;
-type ProgramTask = Pin<Box<dyn Future<Output = Result<Value>>>>;
+type ProgramConnection = (Control, String);
+type ProgramTask = Pin<Box<dyn Future<Output = (Result<Value>, Option<ProgramConnection>)>>>;
+type ActivityTask = Pin<Box<dyn Future<Output = Result<Value>>>>;
 type SummaryTask = Pin<Box<dyn Future<Output = Result<Value>>>>;
 struct Actor {
     shared: Arc<Mutex<Shared>>,
@@ -198,7 +200,7 @@ struct Actor {
     summary_task: Option<SummaryTask>,
     activity_open: bool,
     monitoring: bool,
-    activity_task: Option<ProgramTask>,
+    activity_task: Option<ActivityTask>,
     activity_refresh: tokio::time::Instant,
     activity: Value,
     activity_snapshot: Arc<Value>,
@@ -214,6 +216,7 @@ struct Actor {
     activity_error: String,
     activity_partial: bool,
     program_task: Option<ProgramTask>,
+    program_control: Option<ProgramConnection>,
     programs: Value,
     directories: Value,
     titles: Value,
@@ -262,6 +265,7 @@ impl Actor {
             activity_open:false,monitoring:false,activity_task:None,activity_refresh:tokio::time::Instant::now(),
             activity:json!([]),activity_snapshot:Arc::default(),activity_dirty:true,activity_panes:json!([]),activity_titles:BTreeMap::new(),activity_full:false,activity_inflight_full:false,activity_pending:BTreeSet::new(),activity_inflight:BTreeSet::new(),activity_seen:json!({}),attention_count:0,activity_error:String::new(),activity_partial:false,
             program_task: None,
+            program_control: None,
             programs: json!({}),
             directories: json!({}),
             titles: json!({}),
@@ -409,7 +413,17 @@ impl Actor {
                 },
                 result=async {match &mut self.program_task {Some(task)=>task.await,None=>pending().await}}=>{
                     self.program_task=None;
-                    if let Ok(details)=result {self.apply_program_details(details);self.publish();}
+                    let (res, connection) = result;
+                    self.program_control = connection;
+                    match res {
+                        Ok(details) => {
+                            self.apply_program_details(details);
+                            self.publish();
+                        }
+                        Err(_) => {
+                            self.program_refresh = tokio::time::Instant::now() + Duration::from_secs(1);
+                        }
+                    }
                 },
                 _=async {if active {tokio::time::sleep_until(if self.dirty && self.visible {render_at}else{maintenance_at}).await;}else{pending::<()>().await;}}=>{
                     let now=tokio::time::Instant::now();
@@ -437,9 +451,16 @@ impl Actor {
                     if self.phase=="connected" && self.program_task.is_none() && !self.selected_session.is_empty()
                         && self.program_refresh<=tokio::time::Instant::now()
                     {
-                        let ids=self.windows.as_array().into_iter().flatten().flat_map(|w|
+                        let mut ids: Vec<String> = self.windows.as_array().into_iter().flatten().flat_map(|w|
                             w["blocks"].as_array().into_iter().flatten().filter_map(|b|b["id"].as_str().map(str::to_owned))).collect();
-                        self.program_task=Some(program_task(self.endpoint.clone().unwrap(),self.selected_session.clone(),ids));
+                        if let Some(pos) = ids.iter().position(|id| id == &self.selected_block) {
+                            if pos > 0 {
+                                let active = ids.remove(pos);
+                                ids.insert(0, active);
+                            }
+                        }
+                        let connection = self.program_control.take();
+                        self.program_task=Some(program_task(self.endpoint.clone().unwrap(),self.selected_session.clone(),ids,connection));
                         self.program_refresh=tokio::time::Instant::now()+Duration::from_secs(4);
                     }
                     if self.dirty && self.visible {
@@ -471,6 +492,9 @@ impl Actor {
         self.summary_task = None;
         self.activity_task=None;
         self.program_task = None;
+        if let Some((mut c, _)) = self.program_control.take() {
+            let _ = tokio::time::timeout(Duration::from_secs(2), c.close()).await;
+        }
         self.preview_updates.clear();
         self.session_details = json!({});self.activity=json!([]);self.activity_dirty=true;self.activity_panes=json!([]);self.activity_titles.clear();self.attention_count=0;self.activity_pending.clear();self.activity_inflight.clear();self.activity_full=false;self.activity_error.clear();self.activity_partial=false;
         self.programs = json!({});
@@ -493,6 +517,7 @@ impl Actor {
         self.summary_task = None;
         self.activity_task=None;
         self.program_task = None;
+        self.program_control = None;
         if let Some(c) = self.control.take() {
             self.control_token = c.token().map(str::to_owned);
             drop(c);
@@ -996,7 +1021,7 @@ impl Actor {
                 if self.selected_session==id {
                     self.selected_session.clear();self.selected_block.clear();self.windows=json!([]);
                     self.data=None;self.data_resume=None;self.replica=None;self.screen=None;self.controlled=false;
-                    self.preview_task=None;self.program_task=None;self.summary_task=None;
+                    self.preview_task=None;self.program_task=None;self.summary_task=None;self.program_control=None;
                     self.programs=json!({});self.directories=json!({});self.titles=json!({});self.working=json!([]);self.title_owners=json!({});self.title_events.clear();self.process_events.clear();self.preview_updates.clear();
                 }
                 self.sessions=self.control.as_mut().context("not connected")?.call("session.list",json!({})).await?["sessions"].clone();
@@ -1091,6 +1116,9 @@ impl Actor {
                 self.preview_task = None;
                 self.summary_task = None;
                 self.program_task = None;
+        if let Some((mut c, _)) = self.program_control.take() {
+            let _ = tokio::time::timeout(Duration::from_secs(2), c.close()).await;
+        }
                 self.programs = json!({});
                 self.directories = json!({});self.titles=json!({});self.working=json!([]);self.title_owners=json!({});self.title_events.clear();self.process_events.clear();
                 self.program_refresh = tokio::time::Instant::now();
@@ -1412,7 +1440,7 @@ impl Actor {
             Err(error) if error.downcast_ref::<rex_core::control::RpcError>().is_some_and(|e|e.code=="session_not_found")=>{
                 self.selected_session.clear();self.selected_block.clear();self.windows=json!([]);self.screen=None;
                 self.data=None;self.data_resume=None;self.replica=None;self.controlled=false;
-                self.preview_task=None;self.program_task=None;self.summary_task=None;self.preview_updates.clear();
+                self.preview_task=None;self.program_task=None;self.summary_task=None;self.program_control=None;self.preview_updates.clear();
                 self.programs=json!({});self.directories=json!({});self.titles=json!({});self.working=json!([]);
                 self.title_owners=json!({});self.title_events.clear();self.process_events.clear();
                 self.sessions=self.control.as_mut().context("not connected")?.call("session.list",json!({})).await?["sessions"].clone();
@@ -1592,38 +1620,99 @@ fn program_directory(process: &Value) -> String {
         .take(1024)
         .collect()
 }
-fn program_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> ProgramTask {
+async fn connect_program(endpoint: &Endpoint) -> Result<Control> {
+    let mut c = Control::connect(endpoint.clone(), None, Trace::default()).await?;
+    c.call("client.set_label", json!({"label":"rex-android-programs"})).await?;
+    Ok(c)
+}
+
+async fn query_programs(control: &mut Control, session: &str, ids: &[String]) -> Result<Value> {
+    let mut programs = serde_json::Map::new();
+    let mut directories = serde_json::Map::new();
+    let mut titles = serde_json::Map::new();
+    let mut working = Vec::new();
+    let mut owners = serde_json::Map::new();
+    for id in ids.iter().take(64) {
+        match control.terminal(session, id, "process", json!({})).await {
+            Ok(process) => {
+                let status = match control.terminal(session, id, "program_status", json!({})).await {
+                    Ok(s) => s,
+                    Err(e) if e.downcast_ref::<rex_core::control::RpcError>().is_none() => return Err(e),
+                    Err(_) => Value::Null,
+                };
+                let terminal = match control.terminal(session, id, "title", json!({})).await {
+                    Ok(t) => t,
+                    Err(e) if e.downcast_ref::<rex_core::control::RpcError>().is_none() => return Err(e),
+                    Err(_) => Value::Null,
+                };
+                owners.insert(
+                    id.clone(),
+                    json!({"pid":process["foreground"]["pid"],"name":process["foreground"]["name"]}),
+                );
+                if program_working(&process, &status) {
+                    working.push(id.clone());
+                }
+                titles.insert(id.clone(), json!(program_title(&process, &status, &terminal)));
+                directories.insert(id.clone(), json!(program_directory(&process)));
+                programs.insert(id.clone(), program_candidates(&process, &status));
+            }
+            Err(e) if e.downcast_ref::<rex_core::control::RpcError>().is_none() => return Err(e),
+            Err(_) => {}
+        }
+    }
+    Ok(json!({
+        "programs": programs,
+        "directories": directories,
+        "titles": titles,
+        "working": working,
+        "owners": owners,
+    }))
+}
+
+fn program_task(
+    endpoint: Endpoint,
+    session: String,
+    ids: Vec<String>,
+    connection: Option<ProgramConnection>,
+) -> ProgramTask {
     Box::pin(async move {
-        tokio::time::timeout(Duration::from_secs(8), async {
-            let mut control = Control::connect(endpoint, None, Trace::default()).await?;
-            control
-                .call("client.set_label", json!({"label":"rex-android-programs"}))
-                .await?;
-            control.attach(&session).await?;
-            let mut programs = serde_json::Map::new();
-            let mut directories = serde_json::Map::new();
-            let mut titles = serde_json::Map::new();
-            let mut working = Vec::new();
-            let mut owners = serde_json::Map::new();
-            for id in ids.into_iter().take(64) {
-                if let Ok(process) = control.terminal(&session, &id, "process", json!({})).await {
-                    let status = control
-                        .terminal(&session, &id, "program_status", json!({}))
-                        .await
-                        .unwrap_or(Value::Null);
-                    let terminal=control.terminal(&session,&id,"title",json!({})).await.unwrap_or(Value::Null);
-                    owners.insert(id.clone(),json!({"pid":process["foreground"]["pid"],"name":process["foreground"]["name"]}));
-                    if program_working(&process,&status) {working.push(id.clone());}
-                    titles.insert(id.clone(),json!(program_title(&process,&status,&terminal)));
-                    directories.insert(id.clone(), json!(program_directory(&process)));
-                    programs.insert(id, program_candidates(&process, &status));
+        let reused = connection.is_some();
+        let (mut control, mut conn_session) = match connection {
+            Some((c, s)) => (c, s),
+            None => match connect_program(&endpoint).await {
+                Ok(c) => (c, String::new()),
+                Err(e) => return (Err(e), None),
+            },
+        };
+        if conn_session != session {
+            if control.attach(&session).await.is_err() {
+                match connect_program(&endpoint).await {
+                    Ok(mut c) => {
+                        if let Err(e) = c.attach(&session).await {
+                            return (Err(e), None);
+                        }
+                        control = c;
+                    }
+                    Err(e) => return (Err(e), None),
                 }
             }
-            let _ = control.close().await;
-            Ok::<_, anyhow::Error>(json!({"programs":programs,"directories":directories,"titles":titles,"working":working,"owners":owners}))
-        })
-        .await
-        .context("program metadata timed out")?
+            conn_session = session.clone();
+        }
+        let mut res = tokio::time::timeout(Duration::from_secs(6), query_programs(&mut control, &session, &ids)).await;
+        if (res.as_ref().is_err() || res.as_ref().unwrap().is_err()) && reused {
+            if let Ok(mut c) = connect_program(&endpoint).await {
+                if c.attach(&session).await.is_ok() {
+                    control = c;
+                    conn_session = session.clone();
+                    res = tokio::time::timeout(Duration::from_secs(6), query_programs(&mut control, &session, &ids)).await;
+                }
+            }
+        }
+        match res {
+            Ok(Ok(val)) => (Ok(val), Some((control, conn_session))),
+            Ok(Err(e)) => (Err(e), None),
+            Err(_) => (Err(anyhow::anyhow!("program metadata timed out")), None),
+        }
     })
 }
 fn summary_task(endpoint: Endpoint, sessions: Value, own: String) -> SummaryTask {

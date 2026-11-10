@@ -8,8 +8,9 @@ data class ProgramIdentity(
     val label: String,
     val executable: String = "",
     val pending: Boolean = false,
-    val candidates: List<String> = emptyList(),
 ) {
+    var candidates: List<String> = emptyList()
+        internal set
     val title: String get() = when(kind) {
         ProgramKind.CLAUDE -> "claude"; ProgramKind.CODEX -> "codex"; ProgramKind.ANTIGRAVITY -> "antigravity"
         ProgramKind.NEOVIM -> "nvim"; ProgramKind.VIM -> "vim"; ProgramKind.GIT -> "git"; ProgramKind.PYTHON -> "python"
@@ -42,7 +43,7 @@ data class ProgramIdentity(
         val Terminal = ProgramIdentity(ProgramKind.TERMINAL, "Terminal")
         val Loading = ProgramIdentity(ProgramKind.TERMINAL,"Loading…",pending=true)
         fun resolve(candidates: List<String>): ProgramIdentity {
-            fun create(identity: ProgramIdentity) = identity.copy(candidates = candidates)
+            fun create(identity: ProgramIdentity) = identity.apply { this.candidates = candidates }
             val isBrew = candidates.any { it.replace('\\', '/').lowercase(Locale.ROOT).let { p ->
                 p == "brew" || p.endsWith("/brew") || p.contains("/homebrew/library/homebrew/") ||
                     p.substringAfterLast('/') in listOf("homebrew", "hombrew", "brew.rb", "brew.sh")
