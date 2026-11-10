@@ -6,7 +6,9 @@ fn main() {
     }
     let prefix = std::env::var_os("GHOSTTY_PREFIX")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.build/ghostty-host"));
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.build/ghostty-host")
+        });
     let prefix = std::fs::canonicalize(prefix).expect(
         "build libghostty-vt first with python3 scripts/build_ghostty.py (or set GHOSTTY_PREFIX)",
     );

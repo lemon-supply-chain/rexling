@@ -6,7 +6,7 @@ use engine::Session;
 use jni::{
     JNIEnv,
     objects::{JClass, JString},
-    sys::{jlong, jstring, jbyteArray},
+    sys::{jbyteArray, jlong, jstring},
 };
 use std::{
     collections::HashMap,
@@ -117,39 +117,91 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_destroy(
 /// Wait without holding the handle registry lock. Destroy wakes pending readers.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_awaitUpdate(
-    _env: JNIEnv, _class: JClass, handle: jlong, after: jlong, timeout_ms: jlong,
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    after: jlong,
+    timeout_ms: jlong,
 ) -> jlong {
     std::panic::catch_unwind(|| {
-        let notifier=sessions().lock().ok().and_then(|s|s.get(&(handle as u64)).map(|s|s.updates.clone()));
-        notifier.map_or(-1,|n|n.wait(after.max(0) as u64,timeout_ms.clamp(1,1000) as u64))
-    }).unwrap_or(-1)
+        let notifier = sessions()
+            .lock()
+            .ok()
+            .and_then(|s| s.get(&(handle as u64)).map(|s| s.updates.clone()));
+        notifier.map_or(-1, |n| {
+            n.wait(after.max(0) as u64, timeout_ms.clamp(1, 1000) as u64)
+        })
+    })
+    .unwrap_or(-1)
 }
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_readUpdate(
-    mut env: JNIEnv, _class: JClass, handle: jlong, after: jlong,
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    after: jlong,
 ) -> jbyteArray {
-    let result=std::panic::catch_unwind(|| -> anyhow::Result<Vec<u8>> {
-        let shared=sessions().lock().map_err(|_|anyhow::anyhow!("registry unavailable"))?
-            .get(&(handle as u64)).map(|s|s.shared.clone()).ok_or_else(||anyhow::anyhow!("closed"))?;
-        let mut state=shared.lock().map_err(|_|anyhow::anyhow!("state unavailable"))?;
-        Ok(updates::encode(&mut state,after.max(0) as u64))
+    let result = std::panic::catch_unwind(|| -> anyhow::Result<Vec<u8>> {
+        let shared = sessions()
+            .lock()
+            .map_err(|_| anyhow::anyhow!("registry unavailable"))?
+            .get(&(handle as u64))
+            .map(|s| s.shared.clone())
+            .ok_or_else(|| anyhow::anyhow!("closed"))?;
+        let mut state = shared
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state unavailable"))?;
+        Ok(updates::encode(&mut state, after.max(0) as u64))
     });
-    match result {Ok(Ok(bytes))=>env.byte_array_from_slice(&bytes).map(|a|a.into_raw()).unwrap_or(std::ptr::null_mut()),
-        _=>{let _=env.throw_new("java/lang/IllegalStateException","Native update failed");std::ptr::null_mut()}}
+    match result {
+        Ok(Ok(bytes)) => env
+            .byte_array_from_slice(&bytes)
+            .map(|a| a.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        _ => {
+            let _ = env.throw_new("java/lang/IllegalStateException", "Native update failed");
+            std::ptr::null_mut()
+        }
+    }
 }
 
 mod input_queue;
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadCreate(mut env:JNIEnv,_class:JClass,request:JString)->jlong {
-    let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||->anyhow::Result<u64>{
-        let request:String=env.get_string(&request)?.into();uploads::create(serde_json::from_str(&request)?)
-    }));
-    match result {Ok(Ok(id))=>id as jlong,_=>{let _=env.throw_new("java/lang/IllegalStateException","Could not start image upload");0}}
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadCreate(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jlong {
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<u64> {
+            let request: String = env.get_string(&request)?.into();
+            uploads::create(serde_json::from_str(&request)?)
+        }));
+    match result {
+        Ok(Ok(id)) => id as jlong,
+        _ => {
+            let _ = env.throw_new(
+                "java/lang/IllegalStateException",
+                "Could not start image upload",
+            );
+            0
+        }
+    }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadPoll(mut env:JNIEnv,_class:JClass,handle:jlong)->jstring {
-    string(&mut env,uploads::poll(handle as u64).to_string())
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadPoll(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    string(&mut env, uploads::poll(handle as u64).to_string())
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadDestroy(_env:JNIEnv,_class:JClass,handle:jlong) {uploads::destroy(handle as u64);}
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadDestroy(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    uploads::destroy(handle as u64);
+}

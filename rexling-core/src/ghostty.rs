@@ -10,8 +10,19 @@ use std::{
 };
 
 type ApcFn = unsafe extern "C" fn(*mut c_void, *const u8, usize);
-type CellFn =
-    unsafe extern "C" fn(*mut c_void, u16, u16, *const u32, usize, *const u8, *const u8, u32, u8, *const u8, usize);
+type CellFn = unsafe extern "C" fn(
+    *mut c_void,
+    u16,
+    u16,
+    *const u32,
+    usize,
+    *const u8,
+    *const u8,
+    u32,
+    u8,
+    *const u8,
+    usize,
+);
 #[repr(C)]
 #[derive(Default)]
 struct RawFrame {
@@ -47,8 +58,27 @@ unsafe extern "C" {
     fn rp_bytes_free(bytes: *mut u8, len: usize);
     fn rp_scroll(term: *mut c_void, lines: i32, bottom: i32);
     fn rp_input_flags(term: *mut c_void, flags: *mut u8) -> i32;
-    fn rp_wheel(term: *mut c_void, down: i32, col: i32, row: i32, cw: u32, ch: u32, out: *mut u8, capacity: usize, len: *mut usize) -> i32;
-    fn rp_click(term: *mut c_void, col: i32, row: i32, cw: u32, ch: u32, out: *mut u8, capacity: usize, len: *mut usize) -> i32;
+    fn rp_wheel(
+        term: *mut c_void,
+        down: i32,
+        col: i32,
+        row: i32,
+        cw: u32,
+        ch: u32,
+        out: *mut u8,
+        capacity: usize,
+        len: *mut usize,
+    ) -> i32;
+    fn rp_click(
+        term: *mut c_void,
+        col: i32,
+        row: i32,
+        cw: u32,
+        ch: u32,
+        out: *mut u8,
+        capacity: usize,
+        len: *mut usize,
+    ) -> i32;
     fn rp_frame(
         term: *mut c_void,
         frame: *mut RawFrame,
@@ -259,19 +289,59 @@ impl Terminal {
         self.buffer(true)
     }
     pub fn input_flags(&mut self) -> Result<u8> {
-        let mut flags=0;check(unsafe {rp_input_flags(self.handle.as_ptr(),&mut flags)},"input modes")?;Ok(flags)
+        let mut flags = 0;
+        check(
+            unsafe { rp_input_flags(self.handle.as_ptr(), &mut flags) },
+            "input modes",
+        )?;
+        Ok(flags)
     }
-    pub fn wheel(&mut self,down: bool,col: i32,row: i32,cw: u32,ch: u32) -> Result<Vec<u8>> {
-        let mut bytes=[0u8;64];let mut len=0;
-        check(unsafe {rp_wheel(self.handle.as_ptr(),i32::from(down),col,row,cw,ch,bytes.as_mut_ptr(),bytes.len(),&mut len)},"wheel encoding")?;
-        ensure!(len<=bytes.len(),"mouse encoder exceeded buffer");Ok(bytes[..len].to_vec())
+    pub fn wheel(&mut self, down: bool, col: i32, row: i32, cw: u32, ch: u32) -> Result<Vec<u8>> {
+        let mut bytes = [0u8; 64];
+        let mut len = 0;
+        check(
+            unsafe {
+                rp_wheel(
+                    self.handle.as_ptr(),
+                    i32::from(down),
+                    col,
+                    row,
+                    cw,
+                    ch,
+                    bytes.as_mut_ptr(),
+                    bytes.len(),
+                    &mut len,
+                )
+            },
+            "wheel encoding",
+        )?;
+        ensure!(len <= bytes.len(), "mouse encoder exceeded buffer");
+        Ok(bytes[..len].to_vec())
     }
     /// Encode a whole tap atomically using the application's negotiated mouse mode.
-    pub fn click(&mut self,col: i32,row: i32,cw: u32,ch: u32) -> Result<Vec<u8>> {
-        if self.input_flags()?&1==0 {return Ok(Vec::new());}
-        let mut bytes=[0u8;128];let mut len=0;
-        check(unsafe {rp_click(self.handle.as_ptr(),col,row,cw,ch,bytes.as_mut_ptr(),bytes.len(),&mut len)},"click encoding")?;
-        ensure!(len<=bytes.len(),"mouse encoder exceeded buffer");Ok(bytes[..len].to_vec())
+    pub fn click(&mut self, col: i32, row: i32, cw: u32, ch: u32) -> Result<Vec<u8>> {
+        if self.input_flags()? & 1 == 0 {
+            return Ok(Vec::new());
+        }
+        let mut bytes = [0u8; 128];
+        let mut len = 0;
+        check(
+            unsafe {
+                rp_click(
+                    self.handle.as_ptr(),
+                    col,
+                    row,
+                    cw,
+                    ch,
+                    bytes.as_mut_ptr(),
+                    bytes.len(),
+                    &mut len,
+                )
+            },
+            "click encoding",
+        )?;
+        ensure!(len <= bytes.len(), "mouse encoder exceeded buffer");
+        Ok(bytes[..len].to_vec())
     }
     pub fn scroll_viewport(&mut self, lines: i32) {
         unsafe { rp_scroll(self.handle.as_ptr(), lines, 0) };
@@ -315,7 +385,14 @@ impl Terminal {
                     background,
                     attributes,
                     width,
-                    hyperlink: if uri_len==0 {None} else {Some(String::from_utf8_lossy(std::slice::from_raw_parts(uri,uri_len)).into_owned())},
+                    hyperlink: if uri_len == 0 {
+                        None
+                    } else {
+                        Some(
+                            String::from_utf8_lossy(std::slice::from_raw_parts(uri, uri_len))
+                                .into_owned(),
+                        )
+                    },
                 });
             }
         }
@@ -601,60 +678,114 @@ mod tests {
         assert_ne!(bg.attributes & 1024, 0);
         assert_eq!((bg.attributes >> 19) & 255, 2);
     }
-    #[test] fn clicks_obey_mouse_modes_and_pair_press_with_release() {
-        let mut terminal=Terminal::new(80,24).unwrap();
-        assert!(terminal.click(4,5,10,20).unwrap().is_empty());
+    #[test]
+    fn clicks_obey_mouse_modes_and_pair_press_with_release() {
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        assert!(terminal.click(4, 5, 10, 20).unwrap().is_empty());
         terminal.write(b"\x1b[?1000h\x1b[?1006h").unwrap();
-        assert_eq!(terminal.click(4,5,10,20).unwrap(),b"\x1b[<0;5;6M\x1b[<0;5;6m");
-        assert_eq!(terminal.click(-20,999,0,0).unwrap(),b"\x1b[<0;1;24M\x1b[<0;1;24m");
-        let snapshot=terminal.encode().unwrap();let (mut restored,_)=Terminal::decode(&snapshot).unwrap();
-        assert_eq!(restored.click(79,23,10,20).unwrap(),b"\x1b[<0;80;24M\x1b[<0;80;24m");
+        assert_eq!(
+            terminal.click(4, 5, 10, 20).unwrap(),
+            b"\x1b[<0;5;6M\x1b[<0;5;6m"
+        );
+        assert_eq!(
+            terminal.click(-20, 999, 0, 0).unwrap(),
+            b"\x1b[<0;1;24M\x1b[<0;1;24m"
+        );
+        let snapshot = terminal.encode().unwrap();
+        let (mut restored, _) = Terminal::decode(&snapshot).unwrap();
+        assert_eq!(
+            restored.click(79, 23, 10, 20).unwrap(),
+            b"\x1b[<0;80;24M\x1b[<0;80;24m"
+        );
         restored.write(b"\x1b[?1006l").unwrap();
-        assert_eq!(restored.click(4,5,10,20).unwrap(),b"\x1b[M %&\x1b[M#%&");
-        restored.write(b"\x1b[?1000l").unwrap();assert!(restored.click(4,5,10,20).unwrap().is_empty());
+        assert_eq!(restored.click(4, 5, 10, 20).unwrap(), b"\x1b[M %&\x1b[M#%&");
+        restored.write(b"\x1b[?1000l").unwrap();
+        assert!(restored.click(4, 5, 10, 20).unwrap().is_empty());
     }
 
-    #[test] fn mouse_modes_survive_snapshots_and_encode_wheel_direction() {
-        let mut terminal=Terminal::new(80,24).unwrap();
-        terminal.write(b"\x1b[?1049h\x1b[?1007l\x1b[?1000h\x1b[?1006h").unwrap();
-        assert_eq!(terminal.input_flags().unwrap()&7,3);
-        assert_eq!(terminal.wheel(false,4,5,10,20).unwrap(),b"\x1b[<64;5;6M");
-        assert_eq!(terminal.wheel(true,4,5,10,20).unwrap(),b"\x1b[<65;5;6M");
-        let snapshot=terminal.encode().unwrap();let (mut restored,_)=Terminal::decode(&snapshot).unwrap();
-        assert_eq!(restored.frame().unwrap().input_flags&7,3);
-        restored.write(b"\x1b[?1000l\x1b[?1007h").unwrap();assert_eq!(restored.input_flags().unwrap()&7,6);
+    #[test]
+    fn mouse_modes_survive_snapshots_and_encode_wheel_direction() {
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        terminal
+            .write(b"\x1b[?1049h\x1b[?1007l\x1b[?1000h\x1b[?1006h")
+            .unwrap();
+        assert_eq!(terminal.input_flags().unwrap() & 7, 3);
+        assert_eq!(
+            terminal.wheel(false, 4, 5, 10, 20).unwrap(),
+            b"\x1b[<64;5;6M"
+        );
+        assert_eq!(
+            terminal.wheel(true, 4, 5, 10, 20).unwrap(),
+            b"\x1b[<65;5;6M"
+        );
+        let snapshot = terminal.encode().unwrap();
+        let (mut restored, _) = Terminal::decode(&snapshot).unwrap();
+        assert_eq!(restored.frame().unwrap().input_flags & 7, 3);
+        restored.write(b"\x1b[?1000l\x1b[?1007h").unwrap();
+        assert_eq!(restored.input_flags().unwrap() & 7, 6);
     }
 
     #[test]
     fn osc8_destinations_survive_wrapping_snapshot_and_metadata_only_replacement() {
-        let mut terminal=Terminal::new(8,5).unwrap();
-        terminal.write(b"\x1b]8;id=docs;https://example.com/one\x1b\\Open docs now\x1b]8;;\x1b\\!").unwrap();
-        let first=terminal.frame().unwrap();
-        let linked: Vec<_>=first.cells.iter().filter(|c|c.hyperlink.is_some()).collect();
-        assert!(linked.len()>=12);assert!(linked.iter().any(|c|c.y>0));
-        assert!(linked.iter().all(|c|c.hyperlink.as_deref()==Some("https://example.com/one")));
-        assert!(first.cells.iter().any(|c|c.text=="!" && c.hyperlink.is_none()));
-        let snapshot=terminal.encode().unwrap();let (mut restored,_)=Terminal::decode(&snapshot).unwrap();
-        assert_eq!(first.cells,restored.frame().unwrap().cells);
-        restored.write(b"\x1b[H\x1b]8;;https://example.com/two\x07Open\x1b]8;;\x07").unwrap();
-        let next=restored.frame().unwrap();
-        assert_eq!(next.cells[0].text,first.cells[0].text);
-        assert_eq!(next.cells[0].hyperlink.as_deref(),Some("https://example.com/two"));
-        assert_ne!(next.cells[0],first.cells[0]);
+        let mut terminal = Terminal::new(8, 5).unwrap();
+        terminal
+            .write(b"\x1b]8;id=docs;https://example.com/one\x1b\\Open docs now\x1b]8;;\x1b\\!")
+            .unwrap();
+        let first = terminal.frame().unwrap();
+        let linked: Vec<_> = first
+            .cells
+            .iter()
+            .filter(|c| c.hyperlink.is_some())
+            .collect();
+        assert!(linked.len() >= 12);
+        assert!(linked.iter().any(|c| c.y > 0));
+        assert!(
+            linked
+                .iter()
+                .all(|c| c.hyperlink.as_deref() == Some("https://example.com/one"))
+        );
+        assert!(
+            first
+                .cells
+                .iter()
+                .any(|c| c.text == "!" && c.hyperlink.is_none())
+        );
+        let snapshot = terminal.encode().unwrap();
+        let (mut restored, _) = Terminal::decode(&snapshot).unwrap();
+        assert_eq!(first.cells, restored.frame().unwrap().cells);
+        restored
+            .write(b"\x1b[H\x1b]8;;https://example.com/two\x07Open\x1b]8;;\x07")
+            .unwrap();
+        let next = restored.frame().unwrap();
+        assert_eq!(next.cells[0].text, first.cells[0].text);
+        assert_eq!(
+            next.cells[0].hyperlink.as_deref(),
+            Some("https://example.com/two")
+        );
+        assert_ne!(next.cells[0], first.cells[0]);
     }
 
     #[test]
     fn soft_wrap_flags_survive_snapshots_and_distinguish_hard_newlines() {
-        let mut terminal=Terminal::new(10,5).unwrap();
+        let mut terminal = Terminal::new(10, 5).unwrap();
         terminal.write(b"https://example.com/abc\r\nNEXT").unwrap();
-        let frame=terminal.frame().unwrap();
-        let flags=|row:u16|frame.cells.iter().find(|c|c.x==0 && c.y==row).unwrap().attributes;
-        assert_ne!(flags(0)&(1<<29),0);assert_ne!(flags(0)&(1<<27),0);
-        assert_ne!(flags(1)&(1<<28),0);assert_ne!(flags(1)&(1<<27),0);
-        assert_ne!(flags(2)&(1<<28),0);assert_eq!(flags(2)&(1<<27),0);
-        assert_eq!(flags(3)&(1<<28),0);
-        let (mut restored,_)=Terminal::decode(&terminal.encode().unwrap()).unwrap();
-        assert_eq!(frame.cells,restored.frame().unwrap().cells);
+        let frame = terminal.frame().unwrap();
+        let flags = |row: u16| {
+            frame
+                .cells
+                .iter()
+                .find(|c| c.x == 0 && c.y == row)
+                .unwrap()
+                .attributes
+        };
+        assert_ne!(flags(0) & (1 << 29), 0);
+        assert_ne!(flags(0) & (1 << 27), 0);
+        assert_ne!(flags(1) & (1 << 28), 0);
+        assert_ne!(flags(1) & (1 << 27), 0);
+        assert_ne!(flags(2) & (1 << 28), 0);
+        assert_eq!(flags(2) & (1 << 27), 0);
+        assert_eq!(flags(3) & (1 << 28), 0);
+        let (mut restored, _) = Terminal::decode(&terminal.encode().unwrap()).unwrap();
+        assert_eq!(frame.cells, restored.frame().unwrap().cells);
     }
-
 }

@@ -121,7 +121,12 @@ impl Control {
     pub async fn connect_upload(endpoint: Endpoint) -> Result<Self> {
         Self::connect_revision(endpoint, None, Trace::default(), 11).await
     }
-    async fn connect_revision(endpoint: Endpoint, token: Option<&str>, trace: Trace, revision: u64) -> Result<Self> {
+    async fn connect_revision(
+        endpoint: Endpoint,
+        token: Option<&str>,
+        trace: Trace,
+        revision: u64,
+    ) -> Result<Self> {
         let mut ws = endpoint.open("/api/control", CONTROL).await?;
         let platform = match std::env::consts::OS {
             "macos" => "macos",
@@ -152,7 +157,9 @@ impl Control {
             "invalid control welcome"
         );
         ensure!(
-            welcome["api_revision"].as_u64().is_some_and(|n| (7..=revision).contains(&n)),
+            welcome["api_revision"]
+                .as_u64()
+                .is_some_and(|n| (7..=revision).contains(&n)),
             "unsupported negotiated API revision"
         );
         ensure!(
