@@ -24,6 +24,36 @@ type CellFn = unsafe extern "C" fn(
     usize,
 );
 #[repr(C)]
+struct RawPlacement {
+    image_id: u32,
+    col: i32,
+    row: i32,
+    cols: u32,
+    rows: u32,
+    offset_x: u32,
+    offset_y: u32,
+    width: u32,
+    height: u32,
+    src_x: u32,
+    src_y: u32,
+    src_width: u32,
+    src_height: u32,
+    z: i32,
+}
+type PlacementFn = unsafe extern "C" fn(*mut c_void, *const RawPlacement);
+
+#[repr(C)]
+struct RawImageData {
+    image_id: u32,
+    generation: u64,
+    width: u32,
+    height: u32,
+    format: u32,
+    pixels: *const u8,
+    pixel_len: usize,
+}
+type ImageFn = unsafe extern "C" fn(*mut c_void, *const RawImageData);
+#[repr(C)]
 #[derive(Default)]
 struct RawFrame {
     columns: u16,
@@ -83,6 +113,8 @@ unsafe extern "C" {
         term: *mut c_void,
         frame: *mut RawFrame,
         callback: CellFn,
+        placement_callback: PlacementFn,
+        image_callback: ImageFn,
         userdata: *mut c_void,
     ) -> i32;
 }
@@ -91,6 +123,32 @@ fn check(code: i32, action: &str) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImagePlacement {
+    pub image_id: u32,
+    pub col: i32,
+    pub row: i32,
+    pub cols: u32,
+    pub rows: u32,
+    pub offset_x: u32,
+    pub offset_y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub src_x: u32,
+    pub src_y: u32,
+    pub src_width: u32,
+    pub src_height: u32,
+    pub z: i32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImagePayload {
+    pub image_id: u32,
+    pub generation: u64,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cell {
     pub x: u16,
@@ -110,6 +168,8 @@ pub struct Frame {
     pub foreground: [u8; 3],
     pub background: [u8; 3],
     pub cells: Vec<Cell>,
+    pub images: Vec<ImagePayload>,
+    pub placements: Vec<ImagePlacement>,
     pub scroll_total: u64,
     pub scroll_offset: u64,
     pub scroll_visible: u64,
@@ -350,6 +410,11 @@ impl Terminal {
         unsafe { rp_scroll(self.handle.as_ptr(), 0, 1) };
     }
     pub fn frame(&mut self) -> Result<Frame> {
+        struct FrameCollector {
+            cells: Vec<Cell>,
+            images: Vec<ImagePayload>,
+            placements: Vec<ImagePlacement>,
+        }
         unsafe extern "C" fn cell(
             userdata: *mut c_void,
             x: u16,
@@ -375,9 +440,10 @@ impl Terminal {
             let mut foreground = [0; 3];
             let mut background = [0; 3];
             unsafe {
+                let collector = &mut *userdata.cast::<FrameCollector>();
                 foreground.copy_from_slice(std::slice::from_raw_parts(fg, 3));
                 background.copy_from_slice(std::slice::from_raw_parts(bg, 3));
-                (&mut *userdata.cast::<Vec<Cell>>()).push(Cell {
+                collector.cells.push(Cell {
                     x,
                     y,
                     text,
@@ -396,15 +462,98 @@ impl Terminal {
                 });
             }
         }
+        unsafe extern "C" fn on_placement(userdata: *mut c_void, raw: *const RawPlacement) {
+            let (collector, raw) = unsafe { (&mut *userdata.cast::<FrameCollector>(), &*raw) };
+            collector.placements.push(ImagePlacement {
+                image_id: raw.image_id,
+                col: raw.col,
+                row: raw.row,
+                cols: raw.cols,
+                rows: raw.rows,
+                offset_x: raw.offset_x,
+                offset_y: raw.offset_y,
+                width: raw.width,
+                height: raw.height,
+                src_x: raw.src_x,
+                src_y: raw.src_y,
+                src_width: raw.src_width,
+                src_height: raw.src_height,
+                z: raw.z,
+            });
+        }
+        unsafe extern "C" fn on_image(userdata: *mut c_void, raw: *const RawImageData) {
+            let (collector, raw) = unsafe { (&mut *userdata.cast::<FrameCollector>(), &*raw) };
+            if raw.width == 0 || raw.height == 0 || raw.width > 4096 || raw.height > 4096 {
+                return;
+            }
+            let expected_pixels = (raw.width as usize) * (raw.height as usize);
+            if raw.pixel_len == 0 || raw.pixels.is_null() {
+                return;
+            }
+            let slice = unsafe { std::slice::from_raw_parts(raw.pixels, raw.pixel_len) };
+            let rgba = match raw.format {
+                1 => {
+                    if slice.len() == expected_pixels * 4 {
+                        slice.to_vec()
+                    } else {
+                        return;
+                    }
+                }
+                0 => {
+                    if slice.len() != expected_pixels * 3 {
+                        return;
+                    }
+                    let mut buf = Vec::with_capacity(expected_pixels * 4);
+                    for p in slice.chunks_exact(3) {
+                        buf.extend_from_slice(&[p[0], p[1], p[2], 255]);
+                    }
+                    buf
+                }
+                4 => {
+                    if slice.len() != expected_pixels {
+                        return;
+                    }
+                    let mut buf = Vec::with_capacity(expected_pixels * 4);
+                    for &g in slice {
+                        buf.extend_from_slice(&[g, g, g, 255]);
+                    }
+                    buf
+                }
+                3 => {
+                    if slice.len() != expected_pixels * 2 {
+                        return;
+                    }
+                    let mut buf = Vec::with_capacity(expected_pixels * 4);
+                    for p in slice.chunks_exact(2) {
+                        buf.extend_from_slice(&[p[0], p[0], p[0], p[1]]);
+                    }
+                    buf
+                }
+                _ => return,
+            };
+            collector.images.push(ImagePayload {
+                image_id: raw.image_id,
+                generation: raw.generation,
+                width: raw.width,
+                height: raw.height,
+                rgba,
+            });
+        }
         let mut raw = RawFrame::default();
-        let mut cells = Vec::<Cell>::new();
+        let mut collector = FrameCollector {
+            cells: Vec::new(),
+            images: Vec::new(),
+            placements: Vec::new(),
+        };
         check(
             unsafe {
                 rp_frame(
                     self.handle.as_ptr(),
                     &mut raw,
                     cell,
-                    (&mut cells as *mut Vec<Cell>).cast(),
+                    on_placement,
+                    on_image,
+                    (&mut collector as *mut FrameCollector).cast(),
                 )
             },
             "render state",
@@ -419,7 +568,9 @@ impl Terminal {
             scroll_offset: raw.scroll_offset,
             scroll_visible: raw.scroll_visible,
             input_flags: raw.input_flags,
-            cells,
+            cells: collector.cells,
+            images: collector.images,
+            placements: collector.placements,
         })
     }
     fn theme(&mut self, event: &Value) -> Result<()> {
@@ -787,5 +938,23 @@ mod tests {
         assert_eq!(flags(3) & (1 << 28), 0);
         let (mut restored, _) = Terminal::decode(&terminal.encode().unwrap()).unwrap();
         assert_eq!(frame.cells, restored.frame().unwrap().cells);
+    }
+
+    #[test]
+    fn kitty_graphics_png_decodes_and_places_images() {
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        terminal.resize(80, 24, 8, 16).unwrap();
+        let kitty_cmd = b"\x1b_Ga=T,f=100,i=42,q=2;iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==\x1b\\";
+        terminal.write(kitty_cmd).unwrap();
+        let frame = terminal.frame().unwrap();
+        assert_eq!(frame.images.len(), 1);
+        let img = &frame.images[0];
+        assert_eq!(img.image_id, 42);
+        assert_eq!(img.width, 1);
+        assert_eq!(img.height, 1);
+        assert_eq!(img.rgba.as_slice(), &[255, 0, 0, 255][..]);
+        assert_eq!(frame.placements.len(), 1);
+        let pl = &frame.placements[0];
+        assert_eq!(pl.image_id, 42);
     }
 }

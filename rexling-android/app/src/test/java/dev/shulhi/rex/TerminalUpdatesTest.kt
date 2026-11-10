@@ -7,7 +7,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalUpdatesTest {
-    private fun packet(revision: Long,flag: Int,changed: Map<Int,String>,metadata: String="",version: Int=1,links: Map<Int,List<Triple<Int,Int,String>>> = emptyMap()): ByteArray {
+    private fun packet(revision: Long,flag: Int,changed: Map<Int,String>,metadata: String="",version: Int=1,links: Map<Int,List<Triple<Int,Int,String>>> = emptyMap(),payloads: List<TerminalImagePayload> = emptyList(),placements: List<TerminalImagePlacement> = emptyList()): ByteArray {
         val out=ByteArrayOutputStream()
         fun number(value: Long,size: Int) {repeat(size){out.write((value ushr (8*it)).toInt() and 255)}}
         fun text(value: String) {val bytes=value.toByteArray();number(bytes.size.toLong(),4);out.write(bytes)}
@@ -18,6 +18,25 @@ class TerminalUpdatesTest {
             changed.forEach {(row,value)->
                 number(row.toLong(),2);number(1,2);number(0,2);number(1,1);number(0,4);number(-1,4);number(0xff000000,4);text(value)
                 if(version>=3) {val ranges=links[row].orEmpty();number(ranges.size.toLong(),2);for((start,end,url) in ranges) {number(start.toLong(),2);number(end.toLong(),2);text(url)}}
+            }
+            if(version>=4) {
+                number(payloads.size.toLong(),2)
+                for(p in payloads) {
+                    number(p.imageId.toLong(),4);number(p.generation,8)
+                    number(p.width.toLong(),4);number(p.height.toLong(),4)
+                    number(p.pixels.size.toLong(),4);out.write(p.pixels)
+                }
+                number(placements.size.toLong(),2)
+                for(pl in placements) {
+                    number(pl.imageId.toLong(),4)
+                    number(pl.col.toLong(),4);number(pl.row.toLong(),4)
+                    number(pl.cols.toLong(),4);number(pl.rows.toLong(),4)
+                    number(pl.offsetX.toLong(),4);number(pl.offsetY.toLong(),4)
+                    number(pl.width.toLong(),4);number(pl.height.toLong(),4)
+                    number(pl.srcX.toLong(),4);number(pl.srcY.toLong(),4)
+                    number(pl.srcWidth.toLong(),4);number(pl.srcHeight.toLong(),4)
+                    number(pl.z.toLong(),4)
+                }
             }
         }
         return out.toByteArray()
@@ -78,6 +97,30 @@ class TerminalUpdatesTest {
         val next=decoder.decode(packet(2,1,emptyMap(),"""{"titles":{"b":"New title"}}"""))
         assertSame(first.activity,next.activity)
         assertTrue(decoder.decode(packet(3,1,emptyMap(),"""{"activity":null}""")).activity.isEmpty())
+    }
+
+    @Test fun versionFourDecodesKittyImagesAndPixels() {
+        val decoder=TerminalUpdates()
+        val payload = TerminalImagePayload(42, 1L, 1, 1, byteArrayOf(255.toByte(), 0, 0, 255.toByte()))
+        val placement = TerminalImagePlacement(42, 0, 0, 10, 5, 0, 0, 80, 80, 0, 0, 1, 1, 0)
+        val first = decoder.decode(packet(1, 3, mapOf(0 to "x", 1 to "y"), version = 4, payloads = listOf(payload), placements = listOf(placement)))
+        assertEquals(1, first.screen!!.imagePayloads.size)
+        assertEquals(1, first.screen.imagePlacements.size)
+        val decPayload = first.screen.imagePayloads[0]
+        assertEquals(42, decPayload.imageId)
+        assertEquals(1L, decPayload.generation)
+        assertArrayEquals(byteArrayOf(255.toByte(), 0, 0, 255.toByte()), decPayload.pixels)
+        val decPlacement = first.screen.imagePlacements[0]
+        assertEquals(42, decPlacement.imageId)
+        assertEquals(10, decPlacement.cols)
+        assertEquals(5, decPlacement.rows)
+
+        // Delta frame with no new payloads (cached), only placement moving:
+        val cachedPlacement = placement.copy(col = 1)
+        val second = decoder.decode(packet(2, 2, emptyMap(), version = 4, payloads = emptyList(), placements = listOf(cachedPlacement)))
+        assertEquals(0, second.screen!!.imagePayloads.size)
+        assertEquals(1, second.screen.imagePlacements.size)
+        assertEquals(1, second.screen.imagePlacements[0].col)
     }
 
 }

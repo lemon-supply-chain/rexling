@@ -102,6 +102,7 @@ internal class RexConnection(application: Application, private val scope: Corout
                 active.selectedBlock==block && (kind==ProgramKind.CODEX || kind==ProgramKind.CLAUDE || kind==ProgramKind.ANTIGRAVITY)) view.keyboard()
         }
         boundTarget=frameTarget(current);boundView=java.lang.ref.WeakReference(view)
+        view.onCellDimensions = { cols, rows, cw, ch -> resize(cols, rows, cw, ch) }
         val latest=mutableTerminal.value.takeIf {displayedTarget==boundTarget} ?: return false
         view.presentFrame(latest,displayedToken)
         return true
@@ -466,7 +467,7 @@ internal class RexConnection(application: Application, private val scope: Corout
     fun scrollToBottom() {if(!navigationRequest.pending && state.value.screen!=null) command("scroll","block" to state.value.selectedBlock,"bottom" to true)}
     fun key(name: String) = type(TerminalInput.key(name))
     fun paste(text: String) { if (visible && state.value.controlled && !navigationRequest.pending) command("paste", "text" to text,"session" to state.value.selectedSession,"block" to state.value.selectedBlock,"navigationId" to state.value.navigationId,"connectionEpoch" to state.value.connectionEpoch) }
-    fun resize(columns: Int, rows: Int) {
+    fun resize(columns: Int, rows: Int, cellWidthPx: Int = 0, cellHeightPx: Int = 0) {
         val size = columns.coerceIn(1, 512) to rows.coerceIn(1, 256)
         lastSize = size
         resizeJob?.cancel()
@@ -475,8 +476,18 @@ internal class RexConnection(application: Application, private val scope: Corout
         if (!visible || !foreground || !current.controlled || navigationRequest.pending) return
         resizeJob = scope.launch {
             delay(150)
-            command("resize", "session" to current.selectedSession,"block" to current.selectedBlock,"navigationId" to current.navigationId,
-                "columns" to size.first, "rows" to size.second)
+            val params = mutableListOf<Pair<String, Any>>(
+                "session" to current.selectedSession,
+                "block" to current.selectedBlock,
+                "navigationId" to current.navigationId,
+                "columns" to size.first,
+                "rows" to size.second
+            )
+            if (cellWidthPx > 0 && cellHeightPx > 0) {
+                params.add("cell_width_px" to cellWidthPx)
+                params.add("cell_height_px" to cellHeightPx)
+            }
+            command("resize", *params.toTypedArray())
         }
     }
     fun applySize() = resize(lastSize.first.coerceAtLeast(1), lastSize.second.coerceAtLeast(1))

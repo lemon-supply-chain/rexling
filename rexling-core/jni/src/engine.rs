@@ -1984,7 +1984,14 @@ impl Actor {
                     _=>{
                         let cols=value["columns"].as_u64().context("columns required")?.clamp(1,512);
                         let rows=value["rows"].as_u64().context("rows required")?.clamp(1,256);
-                        c.terminal(&self.selected_session,&self.selected_block,"resize",json!({"columns":cols,"rows":rows})).await
+                        let mut payload = json!({"columns":cols,"rows":rows});
+                        if let Some(cw) = value.get("cell_width_px").and_then(|v| v.as_u64()) {
+                            payload["cell_width_px"] = json!(cw);
+                        }
+                        if let Some(ch) = value.get("cell_height_px").and_then(|v| v.as_u64()) {
+                            payload["cell_height_px"] = json!(ch);
+                        }
+                        c.terminal(&self.selected_session,&self.selected_block,"resize",payload).await
                     }
                 };
                 if let Err(e) = result {

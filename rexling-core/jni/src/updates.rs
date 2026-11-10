@@ -43,6 +43,7 @@ pub struct WireBase {
     activity: Arc<serde_json::Value>,
     key: String,
     frame: Option<Arc<Frame>>,
+    known_images: std::collections::HashMap<u32, u64>,
 }
 fn u16le(out: &mut Vec<u8>, v: u16) {
     out.extend(v.to_le_bytes());
@@ -76,7 +77,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     }
     let base = &state.wire;
     let reset = after != base.revision || base.key != state.key;
-    let mut out = b"RXT3".to_vec();
+    let mut out = b"RXT4".to_vec();
     u64le(&mut out, state.revision);
     let previews = std::mem::take(&mut state.pending_previews);
     let activity_changed = reset || !Arc::ptr_eq(&base.activity, &state.activity);
@@ -170,6 +171,51 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                     text(&mut out, uri);
                 }
             }
+            let mut new_payloads = Vec::new();
+            for img in &frame.images {
+                let known =
+                    !reset && base.known_images.get(&img.image_id).copied() == Some(img.generation);
+                if !known {
+                    new_payloads.push(img);
+                }
+            }
+            u16le(&mut out, new_payloads.len() as u16);
+            for img in new_payloads {
+                u32le(&mut out, img.image_id);
+                u64le(&mut out, img.generation);
+                u32le(&mut out, img.width);
+                u32le(&mut out, img.height);
+                u32le(&mut out, img.rgba.len() as u32);
+                out.extend_from_slice(&img.rgba);
+            }
+
+            u16le(&mut out, frame.placements.len() as u16);
+            for pl in &frame.placements {
+                u32le(&mut out, pl.image_id);
+                out.extend(pl.col.to_le_bytes());
+                out.extend(pl.row.to_le_bytes());
+                u32le(&mut out, pl.cols);
+                u32le(&mut out, pl.rows);
+                u32le(&mut out, pl.offset_x);
+                u32le(&mut out, pl.offset_y);
+                u32le(&mut out, pl.width);
+                u32le(&mut out, pl.height);
+                u32le(&mut out, pl.src_x);
+                u32le(&mut out, pl.src_y);
+                u32le(&mut out, pl.src_width);
+                u32le(&mut out, pl.src_height);
+                out.extend(pl.z.to_le_bytes());
+            }
+        }
+    }
+    let mut known_images = if reset {
+        std::collections::HashMap::new()
+    } else {
+        base.known_images.clone()
+    };
+    if let Some(frame) = &state.frame {
+        for img in &frame.images {
+            known_images.insert(img.image_id, img.generation);
         }
     }
     state.wire = WireBase {
@@ -178,6 +224,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
         activity: state.activity.clone(),
         key: state.key.clone(),
         frame: state.frame.clone(),
+        known_images,
     };
     out
 }
@@ -224,6 +271,8 @@ mod wire_tests {
                     })
                 })
                 .collect(),
+            images: Vec::new(),
+            placements: Vec::new(),
             scroll_total: 50,
             scroll_offset: 0,
             scroll_visible: 50,
@@ -295,7 +344,7 @@ mod wire_tests {
             activity: Arc::default(),
         };
         let full = encode(&mut state, 0);
-        assert_eq!(&full[..4], b"RXT3");
+        assert_eq!(&full[..4], b"RXT4");
         assert_eq!(
             full.windows(b"https://example.com/one".len())
                 .filter(|w| *w == b"https://example.com/one")
@@ -311,7 +360,12 @@ mod wire_tests {
         let delta = encode(&mut state, 1);
         assert_eq!(delta[16], 2);
         assert!(delta.len() < full.len() / 20);
-        assert!(delta.ends_with(b"https://example.com/two"));
+        assert!(
+            delta
+                .windows(b"https://example.com/two".len())
+                .any(|w| w == b"https://example.com/two")
+        );
+        assert!(delta.ends_with(&[0, 0]));
         state.frame = Some(Arc::new(frame()));
         state.revision = 3;
         let removed = encode(&mut state, 2);
@@ -343,5 +397,74 @@ mod wire_tests {
         assert!(metadata(&encode(&mut state, 2))["activity"].is_null());
         state.revision = 4;
         assert!(metadata(&encode(&mut state, 1))["activity"].is_null());
+    }
+
+    #[test]
+    fn images_are_serialized_and_cached_on_subsequent_deltas() {
+        let mut first = frame();
+        first.images.push(rex_core::ghostty::ImagePayload {
+            image_id: 10,
+            generation: 1,
+            width: 100,
+            height: 100,
+            rgba: vec![255; 40000],
+        });
+        first.placements.push(rex_core::ghostty::ImagePlacement {
+            image_id: 10,
+            col: 5,
+            row: 6,
+            cols: 20,
+            rows: 10,
+            offset_x: 0,
+            offset_y: 0,
+            width: 160,
+            height: 160,
+            src_x: 0,
+            src_y: 0,
+            src_width: 100,
+            src_height: 100,
+            z: 0,
+        });
+        let mut state = Shared {
+            revision: 1,
+            json: "{}".into(),
+            pending_previews: BTreeMap::new(),
+            frame: Some(Arc::new(first)),
+            key: "a".into(),
+            wire: WireBase::default(),
+            activity: Arc::default(),
+        };
+        let full = encode(&mut state, 0);
+        assert!(full.len() > 40000);
+        assert_eq!(&full[..4], b"RXT4");
+
+        let mut next = frame();
+        next.images.push(rex_core::ghostty::ImagePayload {
+            image_id: 10,
+            generation: 1,
+            width: 100,
+            height: 100,
+            rgba: vec![255; 40000],
+        });
+        next.placements.push(rex_core::ghostty::ImagePlacement {
+            image_id: 10,
+            col: 6,
+            row: 6,
+            cols: 20,
+            rows: 10,
+            offset_x: 0,
+            offset_y: 0,
+            width: 160,
+            height: 160,
+            src_x: 0,
+            src_y: 0,
+            src_width: 100,
+            src_height: 100,
+            z: 0,
+        });
+        state.frame = Some(Arc::new(next));
+        state.revision = 2;
+        let delta = encode(&mut state, 1);
+        assert!(delta.len() < 200);
     }
 }

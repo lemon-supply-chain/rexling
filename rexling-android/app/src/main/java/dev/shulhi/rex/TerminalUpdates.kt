@@ -11,7 +11,7 @@ internal class TerminalUpdates {
         require(bytes.size in 17..134217728) {"Invalid terminal packet size"}
         val data=ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val version=data.int
-        require(version==0x31545852 || version==0x32545852 || version==0x33545852) {"Unsupported terminal packet"}
+        require(version==0x31545852 || version==0x32545852 || version==0x33545852 || version==0x34545852) {"Unsupported terminal packet"}
         val nextRevision=data.long;require(nextRevision>revision)
         fun text(): String {val n=data.int;require(n>=0 && n<=data.remaining());val raw=ByteArray(n);data.get(raw);return raw.toString(Charsets.UTF_8)}
         val metadata=text()
@@ -24,7 +24,7 @@ internal class TerminalUpdates {
                 require(columns>0 && rows>0 && columns.toLong()*rows<=2_000_000)
                 val x=data.int;val y=data.int;val fg=data.int;val bg=data.int
                 val scroll=TerminalScroll(data.long,data.long,data.long)
-                val inputFlags=if(version==0x32545852 || version==0x33545852) data.get().toInt() and 0xff else 0
+                val inputFlags=if(version>=0x32545852) data.get().toInt() and 0xff else 0
                 val previous=state.screen
                 if(flag==2) require(previous!=null && previous.columns==columns && previous.rows==rows) {"Missing terminal delta base"}
                 val lines=if(flag==2) previous!!.lines.toMutableList() else MutableList<List<TerminalCell>>(rows){emptyList()}
@@ -39,7 +39,7 @@ internal class TerminalUpdates {
                         require(col<columns && width<=2)
                         TerminalCell(col,row,text(),foreground,background,attrs,width)
                     }
-                    lines[row]=if(version==0x33545852) {
+                    lines[row]=if(version>=0x33545852) {
                         val n=data.short.toInt() and 0xffff;require(n<=columns)
                         var end=0
                         val links=List(n) {
@@ -57,7 +57,29 @@ internal class TerminalUpdates {
                     } else cells
                 }
                 if(flag==3) require(changed==rows)
-                TerminalScreen(columns,rows,x.takeIf {it>=0},y.takeIf {it>=0},fg,bg,lines.flatten(),scroll,lines,inputFlags)
+                val payloads=if(version==0x34545852) {
+                    val count=data.short.toInt() and 0xffff
+                    List(count) {
+                        val imageId=data.int;val generation=data.long
+                        val width=data.int;val height=data.int
+                        val pixelLen=data.int
+                        val pixelBytes=ByteArray(pixelLen)
+                        data.get(pixelBytes)
+                        TerminalImagePayload(imageId,generation,width,height,pixelBytes)
+                    }
+                } else emptyList()
+                val placements=if(version==0x34545852) {
+                    val count=data.short.toInt() and 0xffff
+                    List(count) {
+                        val imageId=data.int
+                        val col=data.int;val row=data.int;val cols=data.int;val rows=data.int
+                        val offsetX=data.int;val offsetY=data.int;val width=data.int;val height=data.int
+                        val srcX=data.int;val srcY=data.int;val srcWidth=data.int;val srcHeight=data.int
+                        val z=data.int
+                        TerminalImagePlacement(imageId,col,row,cols,rows,offsetX,offsetY,width,height,srcX,srcY,srcWidth,srcHeight,z)
+                    }
+                } else emptyList()
+                TerminalScreen(columns,rows,x.takeIf {it>=0},y.takeIf {it>=0},fg,bg,lines.flatten(),scroll,lines,inputFlags,payloads,placements)
             }
             else->error("Invalid terminal frame flag $flag")
         }

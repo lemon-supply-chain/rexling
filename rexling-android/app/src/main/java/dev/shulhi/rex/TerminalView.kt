@@ -7,8 +7,12 @@ import android.widget.Toast
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
+import java.nio.ByteBuffer
 import android.text.InputType
 import android.view.ActionMode
 import android.view.Menu
@@ -77,6 +81,7 @@ class TerminalView(context: Context) : View(context) {
     var onPaneSwipe: (Int) -> Unit = {}
     var onDimensions: (Int, Int) -> Unit = { _, _ -> }
         set(value) {val changed=field!=value;field=value;if(changed && width>0 && height>0) reportDimensions(force=true)}
+    var onCellDimensions: ((Int, Int, Int, Int) -> Unit)? = null
     private var currentScreen: TerminalScreen?=null
     var screen: TerminalScreen?
         get()=currentScreen
@@ -109,6 +114,12 @@ class TerminalView(context: Context) : View(context) {
     private val advances=object: LinkedHashMap<Pair<Int,String>,Float>(256,.75f,true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Int,String>,Float>?)=size>4096
     }
+    private val imageBitmaps = object : LinkedHashMap<Int, Bitmap>(16, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Bitmap>?) = size > 64
+    }
+    private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val imageSrcRect = Rect()
+    private val imageDstRect = RectF()
     internal var recordedRowCount=0;private set
     private fun clearRows() {recorded.forEach {it?.recording?.release()};recorded=arrayOfNulls(0);rowGeometry=""}
     private fun advance(text: String,style: Int): Float=advances.getOrPut(style to text){paint.measureText(text)}
@@ -160,7 +171,10 @@ class TerminalView(context: Context) : View(context) {
     private fun reportDimensions(force: Boolean=false) {
         // Resize uses the requested font grid, never the temporary read-only fit.
         val next = max(1, floor(contentWidth / desiredCellWidth).toInt()) to max(1, floor(contentHeight / desiredCellHeight).toInt())
-        if (width > 0 && height > 0 && (force || next != dimensions)) { dimensions = next; onDimensions(next.first, next.second) }
+        if (width > 0 && height > 0 && (force || next != dimensions)) {
+            dimensions = next; onDimensions(next.first, next.second)
+            onCellDimensions?.invoke(next.first, next.second, desiredCellWidth.roundToInt().coerceAtLeast(1), desiredCellHeight.roundToInt().coerceAtLeast(1))
+        }
     }
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {clearSelection();configureRendering();reportDimensions()}
     override fun onDraw(canvas: Canvas) {
@@ -177,6 +191,34 @@ class TerminalView(context: Context) : View(context) {
         if(geometry!=rowGeometry) {clearRows();recorded=arrayOfNulls(visibleRows);rowGeometry=geometry}
         android.os.Trace.beginSection("Rexlink.linkIndex")
         val rowLinks=try {linkIndex.update(frame)} finally {android.os.Trace.endSection()}
+        if (frame.imagePayloads.isNotEmpty()) {
+            for (p in frame.imagePayloads) {
+                if (p.pixels.isNotEmpty() && p.width > 0 && p.height > 0) {
+                    val existing = imageBitmaps[p.imageId]
+                    val bitmap = if (existing != null && existing.width == p.width && existing.height == p.height) {
+                        existing
+                    } else {
+                        existing?.recycle()
+                        Bitmap.createBitmap(p.width, p.height, Bitmap.Config.ARGB_8888).also {
+                            imageBitmaps[p.imageId] = it
+                        }
+                    }
+                    bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(p.pixels))
+                }
+            }
+        }
+        if (imageBitmaps.size > 32) {
+            val active = frame.imagePlacements.mapTo(HashSet()) { it.imageId }
+            val iter = imageBitmaps.entries.iterator()
+            while (iter.hasNext()) {
+                val entry = iter.next()
+                if (entry.key !in active) {
+                    entry.value.recycle()
+                    iter.remove()
+                }
+            }
+        }
+        drawImages(canvas, frame.imagePlacements, underText = true)
         canvas.save();canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
         for(y in 0 until visibleRows) {
             val cells=frame.lines[y]
@@ -199,6 +241,7 @@ class TerminalView(context: Context) : View(context) {
             row.recording.draw(canvas);canvas.restore()
         }
         canvas.restore()
+        drawImages(canvas, frame.imagePlacements, underText = false)
         canvas.save()
         canvas.clipRect(insetHorizontal,insetTop,width-insetHorizontal,height-insetBottom)
         canvas.translate(insetHorizontal,insetTop)
@@ -284,6 +327,29 @@ class TerminalView(context: Context) : View(context) {
             paint.alpha=255
         }
         canvas.restore()
+    }
+    private fun drawImages(canvas: Canvas, placements: List<TerminalImagePlacement>, underText: Boolean) {
+        if (placements.isEmpty()) return
+        val saved = canvas.save()
+        canvas.clipRect(insetHorizontal, insetTop, width - insetHorizontal, height - insetBottom)
+        for (img in placements) {
+            if ((img.z < 0) != underText) continue
+            val bitmap = imageBitmaps[img.imageId] ?: continue
+            val left = insetHorizontal + img.col * cellWidth + img.offsetX
+            val top = insetTop + img.row * cellHeight + img.offsetY
+            val drawW = if (img.cols > 0) img.cols * cellWidth else img.width.toFloat()
+            val drawH = if (img.rows > 0) img.rows * cellHeight else img.height.toFloat()
+            if (drawW <= 0f || drawH <= 0f) continue
+
+            if (img.srcWidth > 0 && img.srcHeight > 0) {
+                imageSrcRect.set(img.srcX, img.srcY, img.srcX + img.srcWidth, img.srcY + img.srcHeight)
+            } else {
+                imageSrcRect.set(0, 0, bitmap.width, bitmap.height)
+            }
+            imageDstRect.set(left, top, left + drawW, top + drawH)
+            canvas.drawBitmap(bitmap, imageSrcRect, imageDstRect, imagePaint)
+        }
+        canvas.restoreToCount(saved)
     }
     private fun scrollByPixels(pixels: Float) {
         scrollPixels+=pixels

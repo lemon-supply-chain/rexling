@@ -1,11 +1,45 @@
 // Public libghostty-vt C ABI only. The Rust-facing ABI is deliberately small.
 #include <ghostty/vt.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_NO_STDIO
+#define STBI_NO_FAILURE_STRINGS
+#include "stb_image.h"
 
 typedef void (*ApcFn)(void *, const uint8_t *, size_t);
 typedef void (*CellFn)(void *, uint16_t, uint16_t, const uint32_t *, size_t,
                        const uint8_t *, const uint8_t *, uint32_t, uint8_t, const uint8_t *, size_t);
+typedef struct {
+  uint32_t image_id;
+  int32_t col;
+  int32_t row;
+  uint32_t cols;
+  uint32_t rows;
+  uint32_t offset_x;
+  uint32_t offset_y;
+  uint32_t width;
+  uint32_t height;
+  uint32_t src_x;
+  uint32_t src_y;
+  uint32_t src_width;
+  uint32_t src_height;
+  int32_t z;
+} RpPlacement;
+typedef struct {
+  uint32_t image_id;
+  uint64_t generation;
+  uint32_t width;
+  uint32_t height;
+  uint32_t format;
+  const uint8_t *pixels;
+  size_t pixel_len;
+} RpImageData;
+typedef void (*PlacementFn)(void *, const RpPlacement *);
+typedef void (*ImageFn)(void *, const RpImageData *);
 typedef struct {
   uint16_t columns, rows, cursor_x, cursor_y;
   uint8_t cursor_visible, foreground[3], background[3];
@@ -17,12 +51,35 @@ typedef struct {
   GhosttyRenderState render;
   GhosttyRenderStateRowIterator rows;
   GhosttyRenderStateRowCells cells;
+  GhosttyRenderStateImageIterator images;
   ApcFn callback;
   void *userdata;
 } RpTerminal;
 
+static bool rp_decode_png(void *userdata, const GhosttyAllocator *allocator,
+                          const uint8_t *data, size_t data_len, GhosttySysImage *out) {
+  (void)userdata;
+  int w = 0, h = 0, channels = 0;
+  stbi_uc *decoded = stbi_load_from_memory(data, (int)data_len, &w, &h, &channels, 4);
+  if (!decoded) return false;
+  size_t pixel_len = (size_t)w * (size_t)h * 4;
+  uint8_t *pixels = ghostty_alloc(allocator, pixel_len);
+  if (!pixels) {
+    stbi_image_free(decoded);
+    return false;
+  }
+  memcpy(pixels, decoded, pixel_len);
+  stbi_image_free(decoded);
+  out->width = (uint32_t)w;
+  out->height = (uint32_t)h;
+  out->data = pixels;
+  out->data_len = pixel_len;
+  return true;
+}
+
 void rp_free(RpTerminal *t) {
   if (!t) return;
+  ghostty_render_state_image_iterator_free(t->images);
   ghostty_render_state_row_cells_free(t->cells);
   ghostty_render_state_row_iterator_free(t->rows);
   ghostty_render_state_free(t->render);
@@ -61,9 +118,13 @@ static int configure(RpTerminal *t) {
     } else if(present!=0) r=present;
   }
   // No WRITE_PTY callback: the server's canonical terminal answers queries.
+  uint64_t kitty_limit = 64 * 1024 * 1024;
+  if (r == 0) r = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &kitty_limit);
+  if (r == 0) ghostty_sys_set(GHOSTTY_SYS_OPT_DECODE_PNG, (const void *)rp_decode_png);
   if (r == 0) r = ghostty_render_state_new(NULL, &t->render);
   if (r == 0) r = ghostty_render_state_row_iterator_new(NULL, &t->rows);
   if (r == 0) r = ghostty_render_state_row_cells_new(NULL, &t->cells);
+  if (r == 0) r = ghostty_render_state_image_iterator_new(NULL, &t->images);
   return r;
 }
 int rp_new(uint16_t cols, uint16_t rows, RpTerminal **out) {
@@ -71,6 +132,7 @@ int rp_new(uint16_t cols, uint16_t rows, RpTerminal **out) {
   RpTerminal *t = calloc(1, sizeof(*t));
   if (!t) return GHOSTTY_OUT_OF_MEMORY;
   int r = ghostty_terminal_new(NULL, &t->terminal, cols, rows);
+  if (r == 0) r = ghostty_terminal_resize(t->terminal, cols, rows, 8, 16);
   if (r == 0) r = configure(t);
   if (r != 0) { rp_free(t); return r; }
   *out = t;
@@ -82,6 +144,10 @@ int rp_decode(const uint8_t *bytes, size_t len, RpTerminal **out, size_t *offset
   if (!t) return GHOSTTY_OUT_OF_MEMORY;
   GhosttySnapshotDecoder decoder = NULL;
   int r = ghostty_snapshot_decoder_new_buf(NULL, &decoder, bytes, len);
+  if (r == 0) {
+    uint64_t kitty_limit = 64 * 1024 * 1024;
+    ghostty_snapshot_decoder_set(decoder, GHOSTTY_SNAPSHOT_DECODER_OPT_KITTY_IMAGE_STORAGE_LIMIT, &kitty_limit);
+  }
   if (r == 0) r = ghostty_snapshot_decoder_decode(decoder, &t->terminal);
   if (r == 0) r = ghostty_snapshot_decoder_get(decoder,
       GHOSTTY_SNAPSHOT_DECODER_DATA_SOURCE_OFFSET, offset);
@@ -105,6 +171,8 @@ int rp_write(RpTerminal *t, const uint8_t *bytes, size_t len, size_t *consumed,
   return r;
 }
 int rp_resize(RpTerminal *t, uint16_t cols, uint16_t rows, uint32_t cw, uint32_t ch) {
+  if (cw == 0) cw = 8;
+  if (ch == 0) ch = 16;
   return ghostty_terminal_resize(t->terminal, cols, rows, cw, ch);
 }
 int rp_color(RpTerminal *t, int which, const uint8_t *rgb) {
@@ -194,7 +262,7 @@ int rp_wheel(RpTerminal *t,int down,int col,int row,uint32_t cw,uint32_t ch,char
 int rp_click(RpTerminal *t,int col,int row,uint32_t cw,uint32_t ch,char *out,size_t capacity,size_t *len) {
   return rp_mouse(t,GHOSTTY_MOUSE_BUTTON_LEFT,1,col,row,cw,ch,out,capacity,len);
 }
-int rp_frame(RpTerminal *t, RpFrame *frame, CellFn callback, void *userdata) {
+int rp_frame(RpTerminal *t, RpFrame *frame, CellFn callback, PlacementFn placement_cb, ImageFn image_cb, void *userdata) {
   int r = ghostty_render_state_update(t->render, t->terminal);
   if (r != 0) return r;
   GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
@@ -284,6 +352,81 @@ int rp_frame(RpTerminal *t, RpFrame *frame, CellFn callback, void *userdata) {
       callback(userdata,x++,y,graphemes,count,(const uint8_t *)&fg,(const uint8_t *)&bg,flags,width,uri,uri_len);
     }
     y++;
+  }
+  if (placement_cb) {
+    GhosttyKittyGraphics graphics = NULL;
+    ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS, &graphics);
+    if (graphics && ghostty_render_state_get(t->render, GHOSTTY_RENDER_STATE_DATA_IMAGE_ITERATOR, &t->images) == 0 && t->images) {
+      uint32_t seen_images[256];
+      size_t seen_count = 0;
+      while (ghostty_render_state_image_iterator_next(t->images)) {
+        GhosttyImageProtocol protocol = 0;
+        if (ghostty_render_state_image_get(t->images, GHOSTTY_RENDER_STATE_IMAGE_DATA_PROTOCOL, &protocol) != 0 ||
+            protocol != GHOSTTY_IMAGE_PROTOCOL_KITTY) continue;
+        RpPlacement pl = {0};
+        uint64_t generation = 0;
+        GhosttyRenderStateImageData keys[] = {
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_IMAGE_ID,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_IMAGE_GENERATION,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_Z,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_COL,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_ROW,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_GRID_COLS,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_GRID_ROWS,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_X,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_Y,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_WIDTH,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_HEIGHT,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_X,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_Y,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_WIDTH,
+          GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_HEIGHT,
+        };
+        void *values[] = {
+          &pl.image_id, &generation, &pl.z, &pl.col, &pl.row,
+          &pl.cols, &pl.rows, &pl.offset_x, &pl.offset_y,
+          &pl.width, &pl.height, &pl.src_x, &pl.src_y, &pl.src_width, &pl.src_height,
+        };
+        if (ghostty_render_state_image_get_multi(t->images, 15, keys, values, NULL) != 0) continue;
+
+        if (image_cb) {
+          bool already_seen = false;
+          for (size_t i = 0; i < seen_count; i++) {
+            if (seen_images[i] == pl.image_id) {
+              already_seen = true;
+              break;
+            }
+          }
+          if (!already_seen) {
+            if (seen_count < sizeof(seen_images) / sizeof(seen_images[0])) {
+              seen_images[seen_count++] = pl.image_id;
+            }
+            GhosttyKittyGraphicsImage kitty_img = ghostty_kitty_graphics_image(graphics, pl.image_id);
+            if (kitty_img) {
+              RpImageData data = {0};
+              data.image_id = pl.image_id;
+              data.generation = generation;
+              GhosttyKittyImageFormat fmt = 0;
+              ghostty_kitty_graphics_image_get_multi(kitty_img, 5,
+                (GhosttyKittyGraphicsImageData[]){
+                  GHOSTTY_KITTY_IMAGE_DATA_WIDTH,
+                  GHOSTTY_KITTY_IMAGE_DATA_HEIGHT,
+                  GHOSTTY_KITTY_IMAGE_DATA_FORMAT,
+                  GHOSTTY_KITTY_IMAGE_DATA_DATA_PTR,
+                  GHOSTTY_KITTY_IMAGE_DATA_DATA_LEN,
+                },
+                (void*[]){ &data.width, &data.height, &fmt, &data.pixels, &data.pixel_len },
+                NULL);
+              data.format = (uint32_t)fmt;
+              if (data.pixels && data.pixel_len > 0) {
+                image_cb(userdata, &data);
+              }
+            }
+          }
+        }
+        placement_cb(userdata, &pl);
+      }
+    }
   }
 done:
   free(graphemes);free(uri);
