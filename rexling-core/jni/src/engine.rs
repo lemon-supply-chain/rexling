@@ -650,7 +650,17 @@ impl Actor {
         self.publish();
         Ok(())
     }
-    fn apply_program_details(&mut self, details: Value) {
+    fn apply_program_details(&mut self, mut details: Value) {
+        for (id, owner) in &self.process_events {
+            if !same_process(&details["owners"][id], owner) {
+                if let Some(curr) = self.programs.get(id).cloned() {
+                    details["programs"][id] = curr;
+                }
+                if let Some(curr) = self.directories.get(id).cloned() {
+                    details["directories"][id] = curr;
+                }
+            }
+        }
         self.programs=details["programs"].clone();self.directories=details["directories"].clone();
         self.titles=details["titles"].clone();self.working=details["working"].clone();
         self.title_owners=details["owners"].clone();
@@ -672,6 +682,14 @@ impl Actor {
                 self.title_owners[id]=owner.clone();self.process_events.insert(id.into(),owner);
                 if self.title_events.get(id).is_some_and(|event|!same_process(&self.title_owners[id],&event["owner"])) {
                     self.title_events.remove(id);self.titles[id]=json!("");
+                }
+                let candidates = program_candidates(payload, &json!({}));
+                if candidates.as_array().is_some_and(|a| !a.is_empty()) {
+                    self.programs[id] = candidates;
+                }
+                let dir = program_directory(payload);
+                if !dir.is_empty() {
+                    self.directories[id] = json!(dir);
                 }
                 self.program_refresh=tokio::time::Instant::now();
             }
@@ -1895,7 +1913,9 @@ mod tests {
         actor.program_event("a","title_changed",&json!({"owner":owner,"title":""}));
         actor.apply_program_details(details.clone());assert_eq!(actor.titles["a"],"");
         actor.program_event("a","process_changed",&json!({"foreground":{"pid":13,"name":"fish"}}));
+        assert_eq!(actor.programs["a"], json!(["fish"]));
         actor.apply_program_details(details);assert_eq!(actor.titles["a"],"");
+        assert_eq!(actor.programs["a"], json!(["fish"]));
     }
     #[test]
     fn working_indicator_requires_a_live_foreground_owner_and_working_report() {
