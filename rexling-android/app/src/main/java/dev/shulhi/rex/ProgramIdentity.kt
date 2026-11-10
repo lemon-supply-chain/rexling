@@ -43,7 +43,9 @@ data class ProgramIdentity(
             value.lowercase(Locale.ROOT) in setOf("shell", "terminal", "window") || defaultTitle.matches(value)
         val Terminal = ProgramIdentity(ProgramKind.TERMINAL, "Terminal")
         val Loading = ProgramIdentity(ProgramKind.TERMINAL,"Loading…",pending=true)
-        fun resolve(candidates: List<String>): ProgramIdentity {
+        fun resolve(candidates: List<String>): ProgramIdentity = resolve(candidates, ProgramVocabulary.Default)
+
+        internal fun resolve(candidates: List<String>, vocabulary: ProgramVocabulary): ProgramIdentity {
             fun create(identity: ProgramIdentity) = identity.copy(candidates = candidates)
             var runtime: ProgramIdentity? = null
             for (candidate in candidates) {
@@ -66,7 +68,7 @@ data class ProgramIdentity(
                     else -> null
                 }
                 if (kind == null) {
-                    if (name !in shellNames && name !in setOf("shell", "terminal", "placeholder", "minimal") && ProgramCatalog.tile(name) != null) {
+                    if (name !in shellNames && name !in setOf("shell", "terminal", "placeholder", "minimal") && vocabulary.mapping(name) != null) {
                         val resolved = ProgramIdentity(ProgramKind.TERMINAL, name, name)
                         if (name in listOf("ruby", "perl")) {
                             if (runtime == null) runtime = resolved

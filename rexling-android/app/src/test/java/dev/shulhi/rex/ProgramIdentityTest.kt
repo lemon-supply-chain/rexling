@@ -56,7 +56,7 @@ class ProgramIdentityTest {
         assertEquals("fish",ProgramIdentity.resolve(listOf("-fish")).label)
         for (candidate in listOf("brew", "homebrew", "hombrew", "brew.rb", "/opt/homebrew/bin/brew", "/opt/homebrew/Library/Homebrew/brew.rb")) {
             val program = ProgramIdentity.resolve(listOf(candidate, "ruby"))
-            assertEquals("brew", ProgramCatalog.tile(program.executable))
+            assertEquals("brew", ProgramVocabulary.Default.mapping(program.executable))
             assertFalse(program.isShell)
         }
     }
@@ -158,14 +158,14 @@ class ProgramIdentityTest {
         for((executable,tile) in programs) {
             val resolved=ProgramIdentity.resolve(if(executable=="nu") listOf("/opt/bin/$executable") else listOf("/bin/fish","/opt/bin/$executable"))
             assertEquals(executable,resolved.executable)
-            assertEquals(tile,ProgramCatalog.tile(resolved.executable))
-            assertEquals(tile,ProgramCatalog.tile("C:\\tools\\$executable.exe"))
+            assertEquals(tile,ProgramVocabulary.Default.mapping(resolved.executable))
+            assertEquals(tile,ProgramVocabulary.Default.mapping("C:\\tools\\$executable.exe"))
         }
-        assertNull(ProgramCatalog.tile("my-docker-helper"))
-        assertNull(ProgramCatalog.tile("/projects/yazi/custom-task"))
+        assertNull(ProgramVocabulary.Default.mapping("my-docker-helper"))
+        assertNull(ProgramVocabulary.Default.mapping("/projects/yazi/custom-task"))
         val state=AppState.parse("""{"programs":{"a":["fish"]},"titles":{"a":"docker"}}""")
         assertEquals("fish",state.programs.getValue("a").executable)
-        assertEquals("fish",ProgramCatalog.tile(state.programs.getValue("a").executable))
+        assertEquals("fish",ProgramVocabulary.Default.mapping(state.programs.getValue("a").executable))
     }
     @Test fun specificProgramsWinOverInterpreterAndShellWrappers() {
         for((runtime,program) in listOf("node" to "gemini","node" to "codex","python3" to "jupyter","bash" to "yazi")) {

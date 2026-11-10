@@ -31,8 +31,8 @@ class ProgramTileRenderingTest {
     private val names=listOf("codex","claude_code","neovim","vim","git","python","node","shell","htop","btop","cloudflare")
     @Test fun expandedCatalogRendersEveryTileAtPhoneSizes() {
         val icons=org.json.JSONObject(context.assets.open("program_tiles.json").bufferedReader().use {it.readText()}).getJSONObject("icons")
-        assertEquals(ProgramCatalog.tiles,icons.keys().asSequence().toSet())
-        val sorted=ProgramCatalog.tiles.sorted();val cols=8;val tileWidth=100;val tileHeight=90
+        assertEquals(ProgramCatalog.iconKeys(context.assets),icons.keys().asSequence().toSet())
+        val sorted=ProgramCatalog.iconKeys(context.assets).sorted();val cols=8;val tileWidth=100;val tileHeight=90
         val atlas=Bitmap.createBitmap(cols*tileWidth,((sorted.size+cols-1)/cols)*tileHeight,Bitmap.Config.ARGB_8888)
         val canvas=Canvas(atlas);canvas.drawColor(Color.rgb(225,229,237))
         val labels=Paint(Paint.ANTI_ALIAS_FLAG).apply {textSize=11f;color=Color.BLACK}
@@ -113,7 +113,7 @@ class ProgramTileRenderingTest {
         assertEquals("pnpm",tile("pnpm"))
         assertEquals("top",tile("top"))
         assertEquals("rust",tile("cargo"))
-        assertEquals("shell",tile("fish"))
+        assertEquals("fish",tile("fish"))
         assertEquals("terminal",glyph("fish"))
         assertEquals("tmux",glyph("tmux"))
         assertEquals("ssh",glyph("ssh"))
