@@ -3,9 +3,13 @@ package dev.shulhi.rex
 import java.util.Locale
 
 enum class ProgramKind { TERMINAL, CLAUDE, CODEX, NEOVIM, VIM, GIT, PYTHON, NODE, SSH, TMUX, MONITOR, CLOUDFLARE, REX, ANTIGRAVITY }
-data class ProgramIdentity(val kind: ProgramKind, val label: String, val executable: String="",val pending: Boolean=false) {
-    var candidates: List<String> = emptyList()
-        internal set
+data class ProgramIdentity(
+    val kind: ProgramKind,
+    val label: String,
+    val executable: String = "",
+    val pending: Boolean = false,
+    val candidates: List<String> = emptyList(),
+) {
     val title: String get() = when(kind) {
         ProgramKind.CLAUDE -> "claude"; ProgramKind.CODEX -> "codex"; ProgramKind.ANTIGRAVITY -> "antigravity"
         ProgramKind.NEOVIM -> "nvim"; ProgramKind.VIM -> "vim"; ProgramKind.GIT -> "git"; ProgramKind.PYTHON -> "python"
@@ -30,12 +34,15 @@ data class ProgramIdentity(val kind: ProgramKind, val label: String, val executa
     companion object {
         internal val shellNames = setOf("fish", "zsh", "bash", "sh", "dash", "ash", "ksh", "mksh", "tcsh", "csh", "nu", "nushell", "pwsh", "powershell", "cmd")
         private val defaultTitle = Regex("(?:(?:Window|Tab|Block)[ _:-]+[0-9a-f]+(?:-[0-9a-f]+)*|Terminal \\d+|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", RegexOption.IGNORE_CASE)
+        private val codexRegex = Regex("codex-(aarch64|x86_64)-.*")
+        private val pythonRegex = Regex("python[23](\\.\\d+)?")
+        private val rexRegex = Regex("rex-(aarch64|x86_64)-.*")
         private fun genericTitle(value: String): Boolean = value.isBlank() ||
             value.lowercase(Locale.ROOT) in setOf("shell", "terminal", "window") || defaultTitle.matches(value)
         val Terminal = ProgramIdentity(ProgramKind.TERMINAL, "Terminal")
         val Loading = ProgramIdentity(ProgramKind.TERMINAL,"Loading…",pending=true)
         fun resolve(candidates: List<String>): ProgramIdentity {
-            fun create(identity: ProgramIdentity) = identity.apply { this.candidates = candidates }
+            fun create(identity: ProgramIdentity) = identity.copy(candidates = candidates)
             val isBrew = candidates.any { it.replace('\\', '/').lowercase(Locale.ROOT).let { p ->
                 p == "brew" || p.endsWith("/brew") || p.contains("/homebrew/library/homebrew/") ||
                     p.substringAfterLast('/') in listOf("homebrew", "hombrew", "brew.rb", "brew.sh")
@@ -46,18 +53,18 @@ data class ProgramIdentity(val kind: ProgramKind, val label: String, val executa
                 val name = path.substringAfterLast('/').trimStart('-').removeSuffix(".exe").removeSuffix(".cmd")
                 val kind = when {
                     name in listOf("claude", "claude-code", "claude-code.js") || path.contains("/@anthropic-ai/claude-code/") -> ProgramKind.CLAUDE
-                    name in listOf("codex", "codex.js", "@openai/codex") || path.contains("/@openai/codex/") || Regex("codex-(aarch64|x86_64)-.*").matches(name) -> ProgramKind.CODEX
+                    name in listOf("codex", "codex.js", "@openai/codex") || path.contains("/@openai/codex/") || codexRegex.matches(name) -> ProgramKind.CODEX
                     name in listOf("antigravity", "agy", "antigravity-cli") || name.startsWith("antigravity-") || path.contains("/antigravity") || path.contains("/.gemini/antigravity") -> ProgramKind.ANTIGRAVITY
                     name in listOf("nvim", "neovim") -> ProgramKind.NEOVIM
                     name in listOf("vim", "vi", "gvim") -> ProgramKind.VIM
                     name in listOf("git", "lazygit", "tig") -> ProgramKind.GIT
-                    name == "python" || Regex("python[23](\\.\\d+)?").matches(name) || name == "ipython" -> ProgramKind.PYTHON
+                    name == "python" || pythonRegex.matches(name) || name == "ipython" -> ProgramKind.PYTHON
                     name in listOf("node", "nodejs", "node.js", "npm", "pnpm", "yarn", "bun", "deno") -> ProgramKind.NODE
                     name in listOf("ssh", "mosh", "mosh-client") -> ProgramKind.SSH
                     name in listOf("tmux", "zellij", "screen") -> ProgramKind.TMUX
                     name in listOf("top", "htop", "btop") -> ProgramKind.MONITOR
                     name in listOf("cloudflared", "cloudflare") -> ProgramKind.CLOUDFLARE
-                    name in listOf("rex", "rex-server", "rex-cli") || Regex("rex-(aarch64|x86_64)-.*").matches(name) -> ProgramKind.REX
+                    name in listOf("rex", "rex-server", "rex-cli") || rexRegex.matches(name) -> ProgramKind.REX
                     else -> null
                 }
                 if (kind != null) return create(ProgramIdentity(kind, when(kind) {

@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.semantics
 @Composable internal fun ProgramIcon(program: ProgramIdentity, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
     val assets=LocalContext.current.assets
     val tint=if(color==Color.Unspecified) MaterialTheme.colorScheme.onSurface else color
-    val glyph=remember(program.kind,program.executable,program.label,assets) {ProgramCatalog.glyph(program,assets)}
+    val glyph=remember(program,assets) {ProgramCatalog.glyph(program,assets)}
     val picture=remember(assets,glyph,tint) {glyph?.let {ProgramVectorPicture.loadGlyph(assets,it,tint.toArgb())}}
     Canvas(modifier.semantics { contentDescription=program.label }) {
         if(picture!=null) {

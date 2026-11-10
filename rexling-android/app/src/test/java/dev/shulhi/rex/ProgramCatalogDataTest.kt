@@ -36,4 +36,22 @@ class ProgramCatalogDataTest {
         assertTrue(glyphs.has("tmux"))
         assertTrue(glyphs.has("ssh"))
     }
+
+    @Test fun indexMatchesTilesCatalog() {
+        val indexFile = File("src/main/assets/program_index.json")
+        assertTrue(indexFile.exists())
+        val index = JSONObject(indexFile.readText())
+        val icons = root.getJSONObject("icons")
+        val glyphs = root.getJSONObject("glyphs")
+        val indexIcons = index.getJSONArray("icons")
+        val indexGlyphs = index.getJSONArray("glyphs")
+        assertEquals(icons.length(), indexIcons.length())
+        assertEquals(glyphs.length(), indexGlyphs.length())
+        for (i in 0 until indexIcons.length()) {
+            assertTrue(icons.has(indexIcons.getString(i)))
+        }
+        for (i in 0 until indexGlyphs.length()) {
+            assertTrue(glyphs.has(indexGlyphs.getString(i)))
+        }
+    }
 }

@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "artwork/program-icons/superlogical"
 OVERLAY = ROOT / "artwork/program-icons/rexling"
 OUTPUT = ROOT / "app/src/main/assets/program_tiles.json"
+INDEX_OUTPUT = ROOT / "app/src/main/assets/program_index.json"
 
 
 def tag(node):
@@ -191,19 +192,33 @@ def build():
     validate(manifest, icons, glyphs)
     payload = {"width": 61, "height": 48, "icons": icons, "glyphs": glyphs,
                "skins": manifest["skins"], "aliases": manifest["aliases"]}
-    return json.dumps(payload, separators=(",", ":")) + "\n", len(icons), len(glyphs)
+    index_payload = {
+        "icons": list(icons.keys()),
+        "glyphs": list(glyphs.keys()),
+        "skins": manifest["skins"],
+        "aliases": manifest["aliases"],
+    }
+    return (
+        json.dumps(payload, separators=(",", ":")) + "\n",
+        json.dumps(index_payload, separators=(",", ":")) + "\n",
+        len(icons),
+        len(glyphs),
+    )
 
 
 def main():
-    payload, icon_count, glyph_count = build()
+    payload, index_payload, icon_count, glyph_count = build()
     if "--check" in sys.argv[1:]:
         current = OUTPUT.read_text() if OUTPUT.exists() else ""
+        current_index = INDEX_OUTPUT.read_text() if INDEX_OUTPUT.exists() else ""
         assert current == payload, f"{OUTPUT.relative_to(ROOT)} is stale; rebuild the vector catalog"
-        print(f"Verified {icon_count} tiles and {glyph_count} glyphs in {OUTPUT.relative_to(ROOT)}")
+        assert current_index == index_payload, f"{INDEX_OUTPUT.relative_to(ROOT)} is stale; rebuild the vector catalog"
+        print(f"Verified {icon_count} tiles and {glyph_count} glyphs in {OUTPUT.relative_to(ROOT)} and {INDEX_OUTPUT.relative_to(ROOT)}")
         return
     OUTPUT.write_text(payload)
+    INDEX_OUTPUT.write_text(index_payload)
     print(f"Compiled {icon_count} tiles and {glyph_count} glyphs to {OUTPUT.relative_to(ROOT)} "
-          f"({OUTPUT.stat().st_size:,} bytes)")
+          f"({OUTPUT.stat().st_size:,} bytes) and {INDEX_OUTPUT.relative_to(ROOT)} ({INDEX_OUTPUT.stat().st_size:,} bytes)")
 
 
 if __name__ == "__main__":

@@ -62,8 +62,8 @@ import androidx.compose.ui.unit.dp
         return
     }
     val assets=LocalContext.current.assets
-    val skin=ProgramCatalog.skin(program,assets)
-    val catalog=ProgramCatalog.tile(program,assets)
+    val skin=remember(program,assets) {ProgramCatalog.skin(program,assets)}
+    val catalog=remember(program,assets) {ProgramCatalog.tile(program,assets)}
     if(catalog!=null) {
         val picture=remember(assets,catalog) {ProgramVectorPicture.load(assets,catalog)}
         Canvas(modifier) {picture.draw(drawContext.canvas.nativeCanvas,size.width,size.height,rotation)}
