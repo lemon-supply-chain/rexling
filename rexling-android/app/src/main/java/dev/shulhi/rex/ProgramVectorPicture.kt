@@ -92,6 +92,8 @@ internal class ProgramVectorPicture private constructor(
             if(value.optBoolean("stroke")) {
                 style=Paint.Style.STROKE
                 strokeWidth=value.optDouble("strokeWidth",1.0).toFloat()
+                strokeCap=when(value.optString("strokeCap")) {"round"->Paint.Cap.ROUND;"square"->Paint.Cap.SQUARE;else->Paint.Cap.BUTT}
+                strokeJoin=when(value.optString("strokeJoin")) {"round"->Paint.Join.ROUND;"bevel"->Paint.Join.BEVEL;else->Paint.Join.MITER}
             }
             if(tint!=null) {
                 color=Color.argb((Color.alpha(tint)*value.float("alpha")).toInt().coerceIn(0,255),
@@ -120,3 +122,6 @@ internal class ProgramVectorPicture private constructor(
         }
     }
 }
+
+internal typealias ProgramTilePicture = ProgramVectorPicture
+

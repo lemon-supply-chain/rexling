@@ -1,8 +1,8 @@
 {
   "source": "https://icons.superlogical.com/",
   "catalog_version": "1.8.30",
-  "provided_by": "User download from the signed-in catalog",
-  "rendering": "SVG subset compiled to cached native Canvas vector paths; gradients, alpha-mask logos and transforms are preserved. The PNGs are retained as visual references.",
+  "provided_by": "Existing catalog sources plus SVG additions retained from lemon-supply-chain/rexling",
+  "rendering": "SVG sources compiled to cached native Canvas vector paths. Original 11 PNG references are retained; new icons remain vector-only.",
   "notice": "All trademarks and logos are the property of their respective owners. Their use does not imply affiliation or endorsement.",
   "sha256": {
     "amp": "9ba95d38dad571dc9578b1917639f8075d88b72daa3ba0ce1db8e2bce0bdb2e9",
@@ -33,7 +33,6 @@
     "consul": "c964e3f54aa72735f25e5ccbc917a69f8ad2b14231cd01222769935c74746fb6",
     "copilot": "7bc767f877d0a8ee3dae7798db025a42b0045a914c604ff7eef7caa03ca280e5",
     "crush": "abd056ddb9c42172b8bbb9f7237348e771c8326fd72e14ddb5244e275518d285",
-    "cua": "f9adf84e72814c2d9fb6b71f98b1b89a4d936f34f61b1920ee64c84a2023b32c",
     "cursor": "5bdf14f1ff4184f506207a6aa5ec9306a78fe3289c7caee85436bd2229492441",
     "d2": "c13ac02eab1d0634b44331ece6d81fd5c939a1caa7314c0e302d15c90323340a",
     "dart": "65271b061cdf2696e76a27ce5e95a3816971604c21832d440629f7c23eb4851e",
@@ -191,7 +190,6 @@
     "consul": "6d87212575a6e3775c90ea840c0ed5399f55620615796b7f4f4fe55f63280512",
     "copilot": "ff3fff101d21119d23897a7f0f8ecccb04d4e2f405ac9a416266ea0daf0eca3f",
     "crush": "525ed30d857bc2e78cac2a4904e1befad1f456a42e57f9de03296790043aba4c",
-    "cua": "dbaa881d7094e39e3f5fdcb4e74808f46c77a67d0eeebbc7a3ee5f7648fcbed5",
     "cursor": "a563a35a6bac0cad3234b241eaae0eaf563fef1f2feb9f87c7595f120a92126d",
     "d2": "af5648be74a199d136f327e54946e50efc224bc79ef6510033b43753d9e2b762",
     "dart": "556c3d9e45da8c5177b87bec8641aaf252165bcff88d76402de4671613d54dc7",
@@ -318,5 +316,9 @@
     "yazi": "56c753f7a0f03453f929113b10f07fcf630ece0a142e590f8b60d154775141d6",
     "zig": "1672666bd16a03d4ccf24ba99fa52f0032a8f8fb263cc465d1ee48548609d33f",
     "zsh": "192291e3ca811eb7a5240cbcca1003feb48f386ba7828dc3d32acd805335c704"
+  },
+  "fork_source": "https://github.com/lemon-supply-chain/rexling/tree/ed05beb791122a005695ecbd5fbd51d9c12f2dfe/rexling-android/artwork/program-icons/superlogical",
+  "excluded_icons": {
+    "cua": "Embedded raster logo unsupported by the vector-only renderer; retain terminal fallback."
   }
 }

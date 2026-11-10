@@ -29,6 +29,23 @@ class ProgramTileRenderingTest {
     private val context=InstrumentationRegistry.getInstrumentation().targetContext
     private val testAssets=InstrumentationRegistry.getInstrumentation().context.assets
     private val names=listOf("codex","claude_code","neovim","vim","git","python","node","shell","htop","btop","cloudflare")
+    @Test fun expandedCatalogRendersEveryTileAtPhoneSizes() {
+        val icons=org.json.JSONObject(context.assets.open("program_tiles.json").bufferedReader().use {it.readText()}).getJSONObject("icons")
+        assertEquals(ProgramCatalog.tiles,icons.keys().asSequence().toSet())
+        val sorted=ProgramCatalog.tiles.sorted();val cols=8;val tileWidth=100;val tileHeight=90
+        val atlas=Bitmap.createBitmap(cols*tileWidth,((sorted.size+cols-1)/cols)*tileHeight,Bitmap.Config.ARGB_8888)
+        val canvas=Canvas(atlas);canvas.drawColor(Color.rgb(225,229,237))
+        val labels=Paint(Paint.ANTI_ALIAS_FLAG).apply {textSize=11f;color=Color.BLACK}
+        for((index,name) in sorted.withIndex()) {
+            val tile=Bitmap.createBitmap(66,54,Bitmap.Config.ARGB_8888)
+            ProgramTilePicture.load(context.assets,name).draw(Canvas(tile),66f,54f)
+            assertTrue("$name is blank",(0 until tile.height).any {y->(0 until tile.width).any {x->Color.alpha(tile.getPixel(x,y))>0}})
+            val x=(index%cols)*tileWidth;val y=(index/cols)*tileHeight
+            canvas.drawBitmap(tile,x+16f,y+4f,null);canvas.drawText(name.take(16),x+2f,y+76f,labels);tile.recycle()
+        }
+        File(context.cacheDir,"expanded-program-catalog.png").outputStream().use {atlas.compress(Bitmap.CompressFormat.PNG,100,it)}
+        atlas.recycle()
+    }
     @Test fun nativeVectorsKeepTheCatalogGeometryColorsAndLogoMasks() {
         val atlas=Bitmap.createBitmap(976,384*names.size,Bitmap.Config.ARGB_8888);val out=Canvas(atlas)
         val deltas=mutableListOf<String>()

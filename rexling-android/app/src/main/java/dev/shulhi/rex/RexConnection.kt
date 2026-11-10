@@ -26,6 +26,13 @@ internal class RexConnection(application: Application, private val scope: Corout
     private var paneMoveSerial=0L
     private var pendingPaneOrder by mutableStateOf<PendingPaneOrder?>(null)
     fun orderedWindows(value: AppState): List<WindowItem> = pendingPaneOrder?.apply(value,pendingTabOrder?.apply(value) ?: value.windows) ?: pendingTabOrder?.apply(value) ?: value.windows
+    fun editTerminal(session: String,window: String,id: String,type: String,label: String="",anchor: String="",split: PaneSplit=PaneSplit.RIGHT): Boolean {
+        val current=state.value
+        if(!visible || !foreground || !current.connected || current.creating || navigationRequest.pending || current.selectedSession!=session) return false
+        val tab=current.windows.firstOrNull {it.id==window} ?: return false
+        if(type=="rename_tab") {if(id!=window) return false} else if(tab.blocks.none {it.id==id}) return false
+        return command(type,"session" to session,"window" to window,"id" to id,"label" to label.trim(),"anchor" to anchor,"direction" to split.name.lowercase())
+    }
     fun movePane(window: String,id: String,before: String?): Boolean {
         val current=state.value
         if(handle==0L || !visible || !foreground || !current.connected || current.creating || navigationRequest.pending) return false

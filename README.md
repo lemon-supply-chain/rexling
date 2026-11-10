@@ -303,3 +303,13 @@ Enable **Preferences → Panes → Minimize floating panes** to keep floating pa
 ### Server icons
 
 Open **Servers → ⋮ → Edit → Icon** to choose Globe, Server, Cloud, MacBook, Mac mini, Mac Studio or Desktop, then save. The icon is stored on this phone and shown beside that server in the server list, session header and drawer, and Activity groups. Existing servers default to Globe.
+
+### Rename and arrange terminals
+
+In the **Tabs/Panes** drawer, use a row’s **⋮** menu to rename a tab or pane. Clear its name to restore the automatic title. Custom pane names stay visible while the program changes its terminal title.
+
+A docked pane’s menu offers **Float pane**. A floating pane’s menu offers **Dock pane**, where you choose an existing docked pane in that tab and split right or below. Rex requires a docked anchor, so Rexling keeps at least one docked pane in each tab. These actions update Rex’s layout and labels without navigating to the edited terminal.
+
+### Program icons
+
+Rexling ships 155 vector program tiles and recognizes executable aliases for tools such as Yazi, Docker/Podman, Kubernetes, GitHub/GitLab CLI, Cargo, Go, Homebrew, PostgreSQL/SQLite, Ollama, Gemini, OpenCode and Antigravity. Icons follow Rex’s executable metadata, including full paths and interpreter wrappers; custom tab/pane titles do not change program identity. Unknown programs keep the terminal fallback.

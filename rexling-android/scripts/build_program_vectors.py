@@ -83,9 +83,9 @@ def compile_icon(root, ink=None, crop=True):
                 if ":" in item:
                     k, v = item.split(":", 1)
                     k, v = k.strip(), v.strip()
-                    if k in ("fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity"):
+                    if k in ("fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin"):
                         style[k] = v
-        style.update({k: node.attrib[k] for k in ("fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity") if k in node.attrib})
+        style.update({k: node.attrib[k] for k in ("fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin") if k in node.attrib})
         opacity *= float(node.get("opacity", 1))
         commands.append({"op": "save"})
         if node.get("transform"):
@@ -108,7 +108,18 @@ def compile_icon(root, ink=None, crop=True):
                              {"op": "scale", "x": scale, "y": scale},
                              {"op": "translate", "x": -vx, "y": -vy}])
             draw(logo, {}, {x.get("id"): x for x in logo.iter() if x.get("id")}, color, opacity)
-        elif kind in ("defs", "title", "desc", "mask", "image"):
+        elif kind == "image":
+            href = node.get("href", node.get("{http://www.w3.org/1999/xlink}href", ""))
+            assert href.startswith("data:image/svg+xml;base64,"), "Only embedded vector images are supported"
+            logo = ET.fromstring(base64.b64decode(href.split(",", 1)[1]))
+            x, y, w, h = [number(node.get(k, 0)) for k in ("x", "y", "width", "height")]
+            vx, vy, vw, vh = map(float, logo.attrib["viewBox"].split())
+            scale = min(w/vw, h/vh)
+            commands.extend([{"op": "translate", "x": x+(w-vw*scale)/2, "y": y+(h-vh*scale)/2},
+                             {"op": "scale", "x": scale, "y": scale},
+                             {"op": "translate", "x": -vx, "y": -vy}])
+            draw(logo, {}, {x.get("id"): x for x in logo.iter() if x.get("id")}, ink_color, opacity)
+        elif kind in ("defs", "title", "desc", "mask"):
             return
         elif kind == "use":
             href = node.attrib.get("{http://www.w3.org/1999/xlink}href") or node.attrib.get("href") or node.attrib.get("xlink:href", "")
@@ -131,7 +142,8 @@ def compile_icon(root, ink=None, crop=True):
                 commands.append({"op": "path", "path": shapes(node), "evenOdd": style.get("fill-rule") == "evenodd", "paint": paint})
             if stroke and stroke not in ("none", "transparent"):
                 paint = {"color": ink_color or stroke, "alpha": opacity*float(style.get("stroke-opacity", 1)),
-                         "stroke": True, "strokeWidth": float(style.get("stroke-width", 1))}
+                         "stroke": True, "strokeWidth": float(style.get("stroke-width", 1)),
+                         "strokeCap": style.get("stroke-linecap", "butt"), "strokeJoin": style.get("stroke-linejoin", "miter")}
                 commands.append({"op": "path", "path": shapes(node), "evenOdd": False, "paint": paint})
         else:
             raise ValueError(f"Unsupported SVG element: {kind}")

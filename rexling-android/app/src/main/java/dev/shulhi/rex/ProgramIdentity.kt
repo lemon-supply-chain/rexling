@@ -23,7 +23,7 @@ data class ProgramIdentity(
 
     /** A task title is presentation only; executable identity still chooses the icon. */
     fun paneTitle(paneLabel: String, reportedTitle: String = ""): String =
-        if (isShell) title else reportedTitle.takeUnless(::genericTitle) ?: paneLabel.takeUnless(::genericTitle) ?: title
+        paneLabel.takeUnless {genericTitle(it) || it.equals(title,true) || it.equals(label,true)} ?: if (isShell) title else reportedTitle.takeUnless(::genericTitle) ?: title
 
     /** Explicit tab names stay put; defaults follow the remembered focused pane. */
     fun tabTitle(windowLabel: String, paneLabel: String, number: Int, reportedTitle: String = ""): String {
@@ -44,11 +44,7 @@ data class ProgramIdentity(
         val Loading = ProgramIdentity(ProgramKind.TERMINAL,"Loading…",pending=true)
         fun resolve(candidates: List<String>): ProgramIdentity {
             fun create(identity: ProgramIdentity) = identity.apply { this.candidates = candidates }
-            val isBrew = candidates.any { it.replace('\\', '/').lowercase(Locale.ROOT).let { p ->
-                p == "brew" || p.endsWith("/brew") || p.contains("/homebrew/library/homebrew/") ||
-                    p.substringAfterLast('/') in listOf("homebrew", "hombrew", "brew.rb", "brew.sh")
-            } }
-            if (isBrew) return create(ProgramIdentity(ProgramKind.TERMINAL, "brew", "brew"))
+            var runtime: ProgramIdentity? = null
             for (candidate in candidates) {
                 val path = candidate.replace('\\', '/').lowercase(Locale.ROOT)
                 val name = path.substringAfterLast('/').trimStart('-').removeSuffix(".exe").removeSuffix(".cmd")
@@ -68,19 +64,37 @@ data class ProgramIdentity(
                     name in listOf("rex", "rex-server", "rex-cli") || rexRegex.matches(name) -> ProgramKind.REX
                     else -> null
                 }
-                if (kind != null) return create(ProgramIdentity(kind, when(kind) {
+                if (kind == null) {
+                    if (name !in shellNames && name !in setOf("shell", "terminal", "placeholder", "minimal") && ProgramCatalog.tile(name) != null) {
+                        val resolved = ProgramIdentity(ProgramKind.TERMINAL, name, name)
+                        if (name in listOf("ruby", "perl")) {
+                            if (runtime == null) runtime = resolved
+                            continue
+                        }
+                        return create(resolved)
+                    }
+                    continue
+                }
+                val resolved = ProgramIdentity(kind, when(kind) {
                     ProgramKind.CLAUDE -> "Claude Code"; ProgramKind.CODEX -> "Codex"; ProgramKind.ANTIGRAVITY -> "Antigravity"
                     ProgramKind.NEOVIM -> "Neovim"; ProgramKind.VIM -> "Vim"; ProgramKind.GIT -> "Git"
                     ProgramKind.PYTHON -> "Python"; ProgramKind.NODE -> "JavaScript runtime"
                     ProgramKind.SSH -> "Remote shell"; ProgramKind.TMUX -> "Terminal multiplexer"
                     ProgramKind.MONITOR -> "System monitor"; ProgramKind.CLOUDFLARE -> "Cloudflare"; ProgramKind.REX -> "Rex"; ProgramKind.TERMINAL -> "Terminal"
-                },name))
+                }, name)
+                if (kind in listOf(ProgramKind.NODE, ProgramKind.PYTHON)) {
+                    if (runtime == null) runtime = resolved
+                } else {
+                    return create(resolved)
+                }
             }
-            val nonShell = candidates.map { it.replace('\\', '/').substringAfterLast('/').trimStart('-').removeSuffix(".exe").removeSuffix(".cmd") }
-                .firstOrNull { it.lowercase(Locale.ROOT) !in shellNames && it.isNotBlank() }
-            val rawName = (nonShell ?: candidates.firstOrNull()?.replace('\\', '/')?.substringAfterLast('/')?.trimStart('-'))
-                ?.filterNot { it.isISOControl() || Character.getType(it)==Character.FORMAT.toInt() }?.take(40).orEmpty()
-            return create(ProgramIdentity(ProgramKind.TERMINAL, rawName.ifBlank { "Terminal" }, rawName))
+            runtime?.let { return create(it) }
+            val fallback = candidates.firstOrNull { candidate ->
+                candidate.replace('\\', '/').substringAfterLast('/').trimStart('-').lowercase(Locale.ROOT) !in shellNames
+            } ?: candidates.firstOrNull()
+            val name = fallback?.replace('\\', '/')?.substringAfterLast('/')?.trimStart('-')
+                ?.filterNot { it.isISOControl() || Character.getType(it) == Character.FORMAT.toInt() }?.take(40).orEmpty()
+            return create(ProgramIdentity(ProgramKind.TERMINAL, name.ifBlank { "Terminal" }, name))
         }
     }
 }

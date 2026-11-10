@@ -23,22 +23,23 @@ class FloatingPaneDockTest {
         val active=mutableStateOf<String?>(null)
         val panes=listOf(BlockItem("vim","Editor"),BlockItem("shell","Logs"))
         val programs=mapOf("vim" to ProgramIdentity(ProgramKind.NEOVIM,"nvim"),"shell" to ProgramIdentity.Terminal)
-        var minimized=0
+        var minimized=0;var capturing=false
         ui.setContent {RexTheme(false,ThemeCatalog.defaults[1]) {
             Box(Modifier.fillMaxSize()) {
-                FloatingPaneDock(panes,active.value,programs,emptyMap(),true,{active.value=it},{active.value=null;minimized++},Modifier.align(Alignment.BottomEnd))
+                FloatingPaneDock(panes,active.value,programs,emptyMap(),true,{active.value=it},{active.value=null;minimized++},Modifier.align(Alignment.BottomEnd),directories=mapOf("vim" to "~/Dev/rexling","shell" to "~/Dev/logs"),onExpandedChange={capturing=it})
             }
         }}
         ui.onRoot().captureToImage().asAndroidBitmap().let {bitmap->
             File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"floating-stack-light.png").outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
         }
         ui.onNodeWithContentDescription("Open floating pane: Editor").assertDoesNotExist()
-        ui.onNodeWithText("Editor").assertDoesNotExist()
+        ui.onNodeWithText("Editor · ~/Dev/rexling").assertDoesNotExist()
         ui.onNodeWithContentDescription("Floating panes").assertIsNotSelected()
         val anchor=ui.onNodeWithContentDescription("Floating panes").fetchSemanticsNode().boundsInRoot
         ui.onNodeWithContentDescription("Floating panes").performClick()
-        ui.onNodeWithText("Editor").assertIsDisplayed()
-        ui.onNodeWithText("Logs").assertIsDisplayed()
+        ui.onNodeWithText("Editor · ~/Dev/rexling").assertIsDisplayed()
+        ui.runOnIdle {assertTrue(capturing)}
+        ui.onNodeWithText("Logs · ~/Dev/logs").assertIsDisplayed()
         assertEquals(anchor,ui.onNodeWithContentDescription("Floating panes").fetchSemanticsNode().boundsInRoot)
         ui.onNodeWithContentDescription("Open floating pane: Editor").performClick()
         ui.onNodeWithContentDescription("Minimize floating pane: Editor").assertDoesNotExist()
@@ -57,6 +58,8 @@ class FloatingPaneDockTest {
         ui.runOnIdle {assertNull(active.value);assertEquals(1,minimized)}
         ui.onNodeWithContentDescription("Floating panes").performClick()
         ui.onNodeWithContentDescription("Open floating pane: Editor").assertDoesNotExist()
+        ui.mainClock.advanceTimeBy(200)
+        ui.runOnIdle {assertFalse(capturing)}
     }
     @Test fun singleFloatingPaneOpensDirectlyAndMinimizesWithoutAMenu() {
         val active=mutableStateOf<String?>(null);var minimized=0
