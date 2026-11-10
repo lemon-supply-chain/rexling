@@ -176,7 +176,6 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
         model.pendingImageTarget=target
         photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
-    SideEffect {model.setPaneObscured(model.activityVisible || picker.isNotEmpty() || preferencesOpen || servers || newSession || appearance || about || shortcutSettings || editingProfile!=null || pendingShortcut!=null || alerts || fontPicker || closeTarget!=null)}
     DisposableEffect(client) {onDispose {model.setPaneObscured(true)}}
     val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
     val blocks=window?.blocks ?: if(state.phase=="preview") listOf(BlockItem("preview","Terminal")) else emptyList()
@@ -186,7 +185,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     val floatingActive=floating.any {it.id==chosen}
     var hiddenFloating by rememberSaveable(displayedSession,window?.id) {mutableStateOf("")}
     val controlled=state.controlled && ready && client.hasScreen && (!floatingActive || hiddenFloating!=chosen)
-    SideEffect {model.setPaneObscured((floatingActive && hiddenFloating==chosen) || model.activityVisible || picker.isNotEmpty() || preferencesOpen || languageDialog || servers || newSession || appearance || about || neovimSettings || alerts || fontPicker || closeTarget!=null)}
+    SideEffect {model.setPaneObscured((floatingActive && hiddenFloating==chosen) || model.activityVisible || picker.isNotEmpty() || preferencesOpen || languageDialog || servers || newSession || appearance || about || shortcutSettings || editingProfile!=null || pendingShortcut!=null || alerts || fontPicker || closeTarget!=null)}
     fun openPane(id: String) {hiddenFloating="";client.selectBlock(id)}
     fun minimizeFloating() {
         hiddenFloating=chosen
@@ -195,7 +194,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     LaunchedEffect(navigation.id) {if(navigation.pending) hiddenFloating=""}
     LaunchedEffect(model.minimizeFloatingPanes) {if(model.minimizeFloatingPanes && floatingActive) minimizeFloating()}
     SideEffect {window?.let {client.floatingNavigation.remember(displayedSession,it,chosen)}}
-    BackHandler(enabled=ready && model.minimizeFloatingPanes && !newSession && !appearance && !about && !neovimSettings && !alerts && !fontPicker && !languageDialog && closeTarget==null && floatingActive && hiddenFloating!=chosen && picker.isEmpty() && !preferencesOpen && !model.activityVisible) {minimizeFloating()}
+    BackHandler(enabled=ready && model.minimizeFloatingPanes && !newSession && !appearance && !about && !shortcutSettings && editingProfile==null && pendingShortcut==null && !alerts && !fontPicker && !languageDialog && closeTarget==null && floatingActive && hiddenFloating!=chosen && picker.isEmpty() && !preferencesOpen && !model.activityVisible) {minimizeFloating()}
     val liveBlock=state.selectedBlock.ifBlank {if(state.phase=="preview") "preview" else ""}
     fun closePaneTarget(block: BlockItem)=TerminalCloseTarget(state.selectedSession,block.id,
         (state.programs[block.id] ?: ProgramIdentity.Loading).paneTitle(block.label,state.titles[block.id].orEmpty()),false,listOf(block.id))
