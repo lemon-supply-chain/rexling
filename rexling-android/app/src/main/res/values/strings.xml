@@ -201,4 +201,62 @@
     <string name="reset_defaults">Reset defaults</string>
     <string name="customize_shortcuts">Customize shortcuts</string>
     <string name="shortcuts">Shortcuts</string>
+
+    <!-- Terminal Padding -->
+    <string name="terminal_padding">Terminal padding</string>
+    <string name="terminal_padding_detail">Space around the terminal</string>
+    <string name="terminal_padding_none">None</string>
+    <string name="terminal_padding_small">Small</string>
+    <string name="terminal_padding_normal">Normal</string>
+    <string name="extend_padding">Extend colors into padding</string>
+    <string name="extend_padding_detail_on">Edge cell colors fill the padding, like Neovim’s background</string>
+    <string name="extend_padding_detail_off">Padding keeps the theme background</string>
+
+    <!-- Predictive Echo -->
+    <string name="predictive_echo">Predictive echo</string>
+    <string name="predictive_echo_off">Off</string>
+    <string name="predictive_echo_off_detail">Typed text appears when the server echoes it.</string>
+    <string name="predictive_echo_slow">When slow</string>
+    <string name="predictive_echo_slow_detail">Shows typing immediately once the connection is slow, in shells and pi.</string>
+    <string name="predictive_echo_always">Always</string>
+    <string name="predictive_echo_always_detail">Always shows typing immediately in shells and pi.</string>
+
+    <!-- Shortcut Profiles -->
+    <string name="shortcuts_detail">Floating key menus for Neovim, the shell and other programs</string>
+    <string name="close_shortcuts">Close shortcuts</string>
+    <string name="shortcuts_subtitle">The floating menu shows the profile that matches the program in the pane.</string>
+    <string name="shortcut_profiles">Profiles</string>
+    <string name="new_profile">New profile</string>
+    <string name="new_profile_detail">Shortcuts for another program, such as lazygit</string>
+    <string name="shortcut_menu">Menu</string>
+    <string name="effect_fan_out">Fan out</string>
+    <string name="effect_fan_out_detail">Segments open clockwise in a wave.</string>
+    <string name="effect_spin">Spin</string>
+    <string name="effect_spin_detail">The wheel spins into place.</string>
+    <string name="effect_expand">Expand</string>
+    <string name="effect_expand_detail">The wheel grows outward from the center.</string>
+    <string name="effect_none">None</string>
+    <string name="effect_none_detail">Opens and closes immediately.</string>
+    <string name="selection_haptics_detail">Hold and slide to a segment; release to run.</string>
+    <string name="shortcuts_hint">Drag the floating button to move it. A more specific program name wins over a path pattern, and both win over *.</string>
+    <string name="programs">Programs</string>
+    <string name="programs_hint">Names such as lazygit, separated by commas. Use * in a path pattern, or * alone for any program. Shell names match only at the prompt.</string>
+    <string name="keys_sent_first">Keys sent first</string>
+    <string name="keys_sent_first_hint">Optional. For example &lt;Esc&gt;, or &lt;C-\\gt;&lt;C-n&gt; to leave any Neovim mode.</string>
+    <string name="enter_section">Enter</string>
+    <string name="press_enter_after">Press Enter after</string>
+    <string name="enter_never">Never</string>
+    <string name="enter_never_detail">Keys are sent exactly as written.</string>
+    <string name="enter_text">Plain text</string>
+    <string name="enter_text_detail">Plain text gets Enter; key sequences such as &lt;C-c&gt; do not.</string>
+    <string name="enter_ex_commands">: commands</string>
+    <string name="enter_ex_commands_detail">Only plain : commands get Enter, as in Neovim.</string>
+    <string name="shortcut_syntax_hint">One shortcut per line, optionally named: Name = keys. [Group] headers put the following shortcuts in a submenu; [] ends the group. Start a line with ! to ask before sending it. Key notation: &lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, arrows and F1–F12.</string>
+    <string name="reset_shortcuts">Reset shortcuts</string>
+    <string name="delete_profile_title">Delete %s?</string>
+    <string name="delete_profile_confirm">Its shortcuts will be removed from this phone.</string>
+    <string name="run_shortcut_title">Run %s?</string>
+    <string name="run_shortcut_confirm">This sends the following to the %s pane:</string>
+    <string name="run">Run</string>
+    <string name="close_title_format">Close %s</string>
 </resources>

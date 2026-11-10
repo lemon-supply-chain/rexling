@@ -30,11 +30,16 @@ import androidx.compose.ui.unit.dp
                 SettingsRow(stringResource(R.string.language),when(language){"zh"->stringResource(R.string.language_zh);"en"->stringResource(R.string.language_en);else->stringResource(R.string.language_system)},SettingsGlyph.APPEARANCE,onLanguage)
                 SettingsDivider()
                 Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    Text("Terminal padding",style=SettingsType.row)
-                    Text("Space around the terminal",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.terminal_padding),style=SettingsType.row)
+                    Text(stringResource(R.string.terminal_padding_detail),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         TerminalPadding.entries.forEach {option->
-                            FilterChip(selected=terminalPadding==option,onClick={onTerminalPadding(option)},label={Text(option.label,style=SettingsType.row)})
+                            val labelRes=when(option) {
+                                TerminalPadding.NONE->R.string.terminal_padding_none
+                                TerminalPadding.SMALL->R.string.terminal_padding_small
+                                TerminalPadding.NORMAL->R.string.terminal_padding_normal
+                            }
+                            FilterChip(selected=terminalPadding==option,onClick={onTerminalPadding(option)},label={Text(stringResource(labelRes),style=SettingsType.row)})
                         }
                     }
                 }
@@ -42,8 +47,8 @@ import androidx.compose.ui.unit.dp
                 Row(Modifier.fillMaxWidth().toggleable(extendPadding,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onExtendPadding)
                     .padding(horizontal=16.dp,vertical=14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-                        Text("Extend colors into padding",style=SettingsType.row)
-                        Text(if(extendPadding) "Edge cell colors fill the padding, like Neovim's background" else "Padding keeps the theme background",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.extend_padding),style=SettingsType.row)
+                        Text(stringResource(if(extendPadding) R.string.extend_padding_detail_on else R.string.extend_padding_detail_off),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked=extendPadding,onCheckedChange=null)
                 }
@@ -79,17 +84,27 @@ import androidx.compose.ui.unit.dp
                     }
                 }
                 SettingsDivider()
-                SettingsRow("Shortcuts","Floating key menus for Neovim, the shell and other programs",SettingsGlyph.COMMAND,onShortcuts)
+                SettingsRow(stringResource(R.string.shortcuts),stringResource(R.string.shortcuts_detail),SettingsGlyph.COMMAND,onShortcuts)
             }
             SettingsSection(stringResource(R.string.section_connections)) {
                 SettingsRow(stringResource(R.string.background_alerts),stringResource(R.string.background_alerts_detail),SettingsGlyph.ALERTS,onAlerts)
                 SettingsDivider()
                 Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    Text("Predictive echo",style=SettingsType.row)
-                    Text(predictiveEcho.detail,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.predictive_echo),style=SettingsType.row)
+                    val detailRes=when(predictiveEcho) {
+                        PredictiveEcho.OFF->R.string.predictive_echo_off_detail
+                        PredictiveEcho.SLOW->R.string.predictive_echo_slow_detail
+                        PredictiveEcho.ALWAYS->R.string.predictive_echo_always_detail
+                    }
+                    Text(stringResource(detailRes),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         PredictiveEcho.entries.forEach {mode->
-                            FilterChip(selected=predictiveEcho==mode,onClick={onPredictiveEcho(mode)},label={Text(mode.label,style=SettingsType.row)})
+                            val labelRes=when(mode) {
+                                PredictiveEcho.OFF->R.string.predictive_echo_off
+                                PredictiveEcho.SLOW->R.string.predictive_echo_slow
+                                PredictiveEcho.ALWAYS->R.string.predictive_echo_always
+                            }
+                            FilterChip(selected=predictiveEcho==mode,onClick={onPredictiveEcho(mode)},label={Text(stringResource(labelRes),style=SettingsType.row)})
                         }
                     }
                 }

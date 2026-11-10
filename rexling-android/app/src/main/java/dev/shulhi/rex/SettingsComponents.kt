@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -126,7 +127,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
 }
 
 /** A labelled single choice among a few options. */
-@Composable internal fun <T> SettingsChoiceRow(title: String,options: List<T>,selected: T,label: (T)->String,onSelect: (T)->Unit,subtitle: String?=null) {
+@Composable internal fun <T> SettingsChoiceRow(title: String,options: List<T>,selected: T,label: @Composable (T)->String,onSelect: (T)->Unit,subtitle: String?=null) {
     Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Text(title,style=SettingsType.row)
         subtitle?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
@@ -153,5 +154,5 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
             Text(body,style=SettingsType.body)
             detail?.let {Text(it,style=SettingsType.body.copy(fontFamily=MonoUi),color=MaterialTheme.colorScheme.primary)}
         }
-    },confirmButton={TextButton(onClick=onConfirm) {Text(confirm)}},dismissButton={TextButton(onClick=onDismiss) {Text("Cancel")}})
+    },confirmButton={TextButton(onClick=onConfirm) {Text(confirm)}},dismissButton={TextButton(onClick=onDismiss) {Text(stringResource(R.string.cancel))}})
 }

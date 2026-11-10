@@ -201,4 +201,62 @@
     <string name="reset_defaults">恢复默认</string>
     <string name="customize_shortcuts">自定义快捷键</string>
     <string name="shortcuts">快捷键</string>
+
+    <!-- Terminal Padding -->
+    <string name="terminal_padding">终端边距</string>
+    <string name="terminal_padding_detail">终端周围的留白间距</string>
+    <string name="terminal_padding_none">无</string>
+    <string name="terminal_padding_small">窄</string>
+    <string name="terminal_padding_normal">常规</string>
+    <string name="extend_padding">颜色延伸至边距</string>
+    <string name="extend_padding_detail_on">边缘单元格背景色填充边距，如同 Neovim 的底色</string>
+    <string name="extend_padding_detail_off">边距保持主题背景色</string>
+
+    <!-- Predictive Echo -->
+    <string name="predictive_echo">预测回显</string>
+    <string name="predictive_echo_off">关闭</string>
+    <string name="predictive_echo_off_detail">仅在服务器回显时显示输入内容。</string>
+    <string name="predictive_echo_slow">网络较慢时</string>
+    <string name="predictive_echo_slow_detail">当连接较慢时，在 Shell 与各类终端中立即显示输入。</string>
+    <string name="predictive_echo_always">始终开启</string>
+    <string name="predictive_echo_always_detail">始终在 Shell 与各类终端中立即显示输入。</string>
+
+    <!-- Shortcut Profiles -->
+    <string name="shortcuts_detail">适用于 Neovim、Shell 及其他程序的浮动按键菜单</string>
+    <string name="close_shortcuts">关闭快捷键</string>
+    <string name="shortcuts_subtitle">浮动菜单将显示与当前窗格程序匹配的配置文件。</string>
+    <string name="shortcut_profiles">配置文件</string>
+    <string name="new_profile">新建配置文件</string>
+    <string name="new_profile_detail">为其他程序（例如 lazygit）配置快捷键</string>
+    <string name="shortcut_menu">菜单</string>
+    <string name="effect_fan_out">扇形展开</string>
+    <string name="effect_fan_out_detail">扇形区域按顺时针波浪展开。</string>
+    <string name="effect_spin">旋转</string>
+    <string name="effect_spin_detail">滚轮旋转就位。</string>
+    <string name="effect_expand">扩散</string>
+    <string name="effect_expand_detail">滚轮从中心向外放大展开。</string>
+    <string name="effect_none">无动效</string>
+    <string name="effect_none_detail">立即打开与关闭。</string>
+    <string name="selection_haptics_detail">长按并滑动至对应区域，松开即可执行。</string>
+    <string name="shortcuts_hint">拖动悬浮按钮可调整位置。具体的程序名称优先级高于路径通配符，两者均高于 *。</string>
+    <string name="programs">程序</string>
+    <string name="programs_hint">程序名称如 lazygit，多个用逗号分隔。可在路径中使用 * 通配符，或单独使用 * 匹配任意程序。Shell 仅在命令行提示符处匹配。</string>
+    <string name="keys_sent_first">优先发送的按键</string>
+    <string name="keys_sent_first_hint">可选。例如 &lt;Esc&gt;，或使用 &lt;C-\\gt;&lt;C-n&gt; 退出任意 Neovim 模式。</string>
+    <string name="enter_section">回车键 (Enter)</string>
+    <string name="press_enter_after">发送按键后按下 Enter</string>
+    <string name="enter_never">从不</string>
+    <string name="enter_never_detail">按键完全按原样发送。</string>
+    <string name="enter_text">仅普通文本</string>
+    <string name="enter_text_detail">普通文本自动附带 Enter；&lt;C-c&gt; 等组合按键不会附带。</string>
+    <string name="enter_ex_commands">仅 : 命令</string>
+    <string name="enter_ex_commands_detail">仅普通 : 命令附带 Enter，如 Neovim 命令。</string>
+    <string name="shortcut_syntax_hint">每行一个快捷键，可命名：名称 = 按键。[分组] 标题将后续快捷键放入子菜单；[] 结束分组。以 ! 开头将在发送前确认。按键表示法：&lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, 方向键及 F1–F12。</string>
+    <string name="reset_shortcuts">重置快捷键</string>
+    <string name="delete_profile_title">删除 %s？</string>
+    <string name="delete_profile_confirm">其快捷键将从此手机中移除。</string>
+    <string name="run_shortcut_title">执行 %s？</string>
+    <string name="run_shortcut_confirm">这将向 %s 窗格发送以下内容：</string>
+    <string name="run">执行</string>
+    <string name="close_title_format">关闭 %s</string>
 </resources>

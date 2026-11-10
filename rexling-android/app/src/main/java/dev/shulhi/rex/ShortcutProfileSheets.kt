@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -24,30 +25,39 @@ import androidx.compose.ui.unit.dp
     hapticsEnabled: Boolean=true,onHaptics: (Boolean)->Unit={}) {
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
-            SettingsHeader("Shortcuts","Close shortcuts",onClose,subtitle="The floating menu shows the profile that matches the program in the pane.")
-            SettingsSection("Profiles") {
+            SettingsHeader(stringResource(R.string.shortcuts),stringResource(R.string.close_shortcuts),onClose,subtitle=stringResource(R.string.shortcuts_subtitle))
+            SettingsSection(stringResource(R.string.shortcut_profiles)) {
                 profiles.forEachIndexed {index,profile->
                     if(index>0) SettingsDivider()
                     ShortcutProfileRow(profile,{onEdit(profile.id)},{onEnabled(profile.id,it)})
                 }
                 if(profiles.isNotEmpty()) SettingsDivider()
-                SettingsRow("New profile","Shortcuts for another program, such as lazygit",SettingsGlyph.COMMAND,onNew)
+                SettingsRow(stringResource(R.string.new_profile),stringResource(R.string.new_profile_detail),SettingsGlyph.COMMAND,onNew)
             }
-            SettingsSection("Menu") {
-                SettingsChoiceRow("Layout",NeovimShortcutLayout.entries,layout,{if(it==NeovimShortcutLayout.GRID) "Grid" else "Circular"},onLayout)
+            SettingsSection(stringResource(R.string.shortcut_menu)) {
+                SettingsChoiceRow(stringResource(R.string.menu_layout),NeovimShortcutLayout.entries,layout,{
+                    stringResource(if(it==NeovimShortcutLayout.GRID) R.string.layout_grid else R.string.layout_circular)
+                },onLayout)
                 if(layout==NeovimShortcutLayout.CIRCULAR) {
                     SettingsDivider()
-                    SettingsChoiceRow("Opening effect",NeovimShortcutEffect.entries,effect,{it.label},onEffect,subtitle=when(effect) {
-                        NeovimShortcutEffect.FAN_OUT->"Segments open clockwise in a wave."
-                        NeovimShortcutEffect.SPIN->"The wheel spins into place."
-                        NeovimShortcutEffect.EXPAND->"The wheel grows outward from the center."
-                        NeovimShortcutEffect.NONE->"Opens and closes immediately."
-                    })
+                    SettingsChoiceRow(stringResource(R.string.opening_effect),NeovimShortcutEffect.entries,effect,{
+                        stringResource(when(it) {
+                            NeovimShortcutEffect.FAN_OUT->R.string.effect_fan_out
+                            NeovimShortcutEffect.SPIN->R.string.effect_spin
+                            NeovimShortcutEffect.EXPAND->R.string.effect_expand
+                            NeovimShortcutEffect.NONE->R.string.effect_none
+                        })
+                    },onEffect,subtitle=stringResource(when(effect) {
+                        NeovimShortcutEffect.FAN_OUT->R.string.effect_fan_out_detail
+                        NeovimShortcutEffect.SPIN->R.string.effect_spin_detail
+                        NeovimShortcutEffect.EXPAND->R.string.effect_expand_detail
+                        NeovimShortcutEffect.NONE->R.string.effect_none_detail
+                    }))
                     SettingsDivider()
-                    SettingsToggleRow("Selection haptics",hapticsEnabled,onHaptics,subtitle="Hold and slide to a segment; release to run.")
+                    SettingsToggleRow(stringResource(R.string.selection_haptics),hapticsEnabled,onHaptics,subtitle=stringResource(R.string.selection_haptics_detail))
                 }
             }
-            Text("Drag the floating button to move it. A more specific program name wins over a path pattern, and both win over *.",
+            Text(stringResource(R.string.shortcuts_hint),
                 style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -83,36 +93,46 @@ internal fun shortcutCount(items: List<NeovimShortcut>): String {
     var draft by rememberSaveable {mutableStateOf(NeovimShortcuts.editorText(profile?.items.orEmpty()))}
     var error by remember {mutableStateOf<String?>(null)}
     var deleting by remember {mutableStateOf(false)}
-    val title=profile?.name ?: "New profile"
+    val defaultTitle=stringResource(R.string.new_profile)
+    val title=profile?.name ?: defaultTitle
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-            SettingsHeader(title,"Close $title",onClose)
-            SettingsTextField("Name",name,{name=it;error=null})
-            SettingsTextField("Programs",match,{match=it;error=null},mono=true,
-                supporting="Names such as lazygit, separated by commas. Use * in a path pattern, or * alone for any program. Shell names match only at the prompt.")
-            SettingsTextField("Keys sent first",prefix,{prefix=it;error=null},mono=true,
-                supporting="Optional. For example <Esc>, or <C-\\><C-n> to leave any Neovim mode.")
-            SettingsSection("Enter") {
-                SettingsChoiceRow("Press Enter after",ShortcutEnter.entries,enter,{it.label},{enter=it},subtitle=enter.detail)
+            SettingsHeader(title,stringResource(R.string.close_title_format,title),onClose)
+            SettingsTextField(stringResource(R.string.name),name,{name=it;error=null})
+            SettingsTextField(stringResource(R.string.programs),match,{match=it;error=null},mono=true,
+                supporting=stringResource(R.string.programs_hint))
+            SettingsTextField(stringResource(R.string.keys_sent_first),prefix,{prefix=it;error=null},mono=true,
+                supporting=stringResource(R.string.keys_sent_first_hint))
+            SettingsSection(stringResource(R.string.enter_section)) {
+                SettingsChoiceRow(stringResource(R.string.press_enter_after),ShortcutEnter.entries,enter,{
+                    stringResource(when(it) {
+                        ShortcutEnter.NEVER->R.string.enter_never
+                        ShortcutEnter.TEXT->R.string.enter_text
+                        ShortcutEnter.EX_COMMANDS->R.string.enter_ex_commands
+                    })
+                },{enter=it},subtitle=stringResource(when(enter) {
+                    ShortcutEnter.NEVER->R.string.enter_never_detail
+                    ShortcutEnter.TEXT->R.string.enter_text_detail
+                    ShortcutEnter.EX_COMMANDS->R.string.enter_ex_commands_detail
+                }))
             }
-            SettingsTextField("Shortcuts",draft,{draft=it;error=null},mono=true,singleLine=false,minLines=6,maxLines=12,isError=error!=null)
+            SettingsTextField(stringResource(R.string.shortcuts),draft,{draft=it;error=null},mono=true,singleLine=false,minLines=6,maxLines=12,isError=error!=null)
             error?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.error)}
-            Text("One shortcut per line, optionally named: Name = keys. [Group] headers put the following shortcuts in a submenu; [] ends the group. " +
-                "Start a line with ! to ask before sending it. Key notation: <CR>, <Esc>, <Tab>, <Space>, <C-x>, <M-x>, arrows and F1–F12.",
+            Text(stringResource(R.string.shortcut_syntax_hint),
                 style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
-                if(onDelete!=null) TextButton(onClick={deleting=true}) {Text("Delete",color=MaterialTheme.colorScheme.error)}
-                if(defaults!=null) TextButton(onClick={draft=NeovimShortcuts.editorText(defaults);error=null}) {Text("Reset shortcuts")}
+                if(onDelete!=null) TextButton(onClick={deleting=true}) {Text(stringResource(R.string.delete),color=MaterialTheme.colorScheme.error)}
+                if(defaults!=null) TextButton(onClick={draft=NeovimShortcuts.editorText(defaults);error=null}) {Text(stringResource(R.string.reset_shortcuts))}
                 Spacer(Modifier.weight(1f))
-                Button(onClick={error=onSave(name,match,prefix,enter,draft);if(error==null) onClose()}) {Text("Save")}
+                Button(onClick={error=onSave(name,match,prefix,enter,draft);if(error==null) onClose()}) {Text(stringResource(R.string.save))}
             }
         }
     }
-    if(deleting && onDelete!=null) SettingsConfirmDialog("Delete $title?","Its shortcuts will be removed from this phone.","Delete",
+    if(deleting && onDelete!=null) SettingsConfirmDialog(stringResource(R.string.delete_profile_title,title),stringResource(R.string.delete_profile_confirm),stringResource(R.string.delete),
         onConfirm={deleting=false;onDelete();onClose()},onDismiss={deleting=false})
 }
 
 /** Asks before a shortcut marked with ! is sent. */
 @Composable internal fun ShortcutConfirmDialog(profile: ShortcutProfile,item: NeovimShortcut,onConfirm: ()->Unit,onDismiss: ()->Unit) {
-    SettingsConfirmDialog("Run ${item.label}?","This sends the following to the ${profile.name} pane:","Run",onConfirm,onDismiss,detail=item.keys)
+    SettingsConfirmDialog(stringResource(R.string.run_shortcut_title,item.label),stringResource(R.string.run_shortcut_confirm,profile.name),stringResource(R.string.run),onConfirm,onDismiss,detail=item.keys)
 }
