@@ -18,13 +18,13 @@ The actor requires this session to still be selected and connected, then sends
 ```json
 {
   "session_id": "session:<id>",
-  "window_label": "Terminal 3",
+  "window_label": "",
   "focus": false,
   "layout": {"block": {"flavor": "com.superlogical.terminal.shell"}}
 }
 ```
 
-The label is generated from the current window count. The reply supplies
+The label is left empty for dynamic title resolution. The reply supplies
 `window_id`, `block_ids` and `revision`. The app opens the first returned block
 with the existing authenticated data-ticket/snapshot/VT path, refreshes the view,
 and selects the corresponding local tab. `focus:false` avoids requesting a

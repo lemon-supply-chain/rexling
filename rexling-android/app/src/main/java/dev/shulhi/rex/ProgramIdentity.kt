@@ -62,8 +62,10 @@ data class ProgramIdentity(val kind: ProgramKind, val label: String, val executa
             }
             val nonShell = candidates.map { it.replace('\\', '/').substringAfterLast('/').trimStart('-').removeSuffix(".exe").removeSuffix(".cmd") }
                 .firstOrNull { it.lowercase(Locale.ROOT) !in shellNames && it.isNotBlank() }
-            val name = (nonShell ?: candidates.firstOrNull()?.replace('\\', '/')?.substringAfterLast('/')?.trimStart('-'))
+            val rawName = (nonShell ?: candidates.firstOrNull()?.replace('\\', '/')?.substringAfterLast('/')?.trimStart('-'))
                 ?.filterNot { it.isISOControl() || Character.getType(it)==Character.FORMAT.toInt() }?.take(40).orEmpty()
+            val name = if (rawName.lowercase(Locale.ROOT) in listOf("homebrew", "hombrew", "brew.rb", "brew.sh") ||
+                candidates.any { it.replace('\\', '/').lowercase(Locale.ROOT).let { p -> p.contains("/homebrew/library/homebrew/") || p.endsWith("/brew") } }) "brew" else rawName
             return ProgramIdentity(ProgramKind.TERMINAL, name.ifBlank { "Terminal" }, name)
         }
     }

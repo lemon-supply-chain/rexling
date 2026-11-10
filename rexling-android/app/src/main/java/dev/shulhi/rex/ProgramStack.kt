@@ -148,7 +148,7 @@ private val tileAliases = mapOf(
     "clang++" to "clang", "gcc" to "clang", "g++" to "clang", "cc" to "clang", "c++" to "clang",
     "docker-compose" to "docker", "podman-compose" to "podman",
     "container" to "apple_container",
-    "adb" to "android", "homebrew" to "brew",
+    "adb" to "android", "homebrew" to "brew", "hombrew" to "brew", "brew.rb" to "brew", "brew.sh" to "brew",
     "emacsclient" to "emacs",
     "xcodebuild" to "xcode", "xcrun" to "xcode",
     "jupyter-lab" to "jupyter", "jupyter-notebook" to "jupyter", "ipython" to "jupyter",

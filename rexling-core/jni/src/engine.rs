@@ -1151,7 +1151,7 @@ impl Actor {
                 let (method, args) = if value["type"] == "new_tab" {
                     (
                         "session.new_window",
-                        json!({"session_id":self.selected_session,"window_label":format!("Terminal {}", self.windows.as_array().map_or(0, Vec::len) + 1),"layout":layout,"focus":false}),
+                        json!({"session_id":self.selected_session,"window_label":"","layout":layout,"focus":false}),
                     )
                 } else {
                     let anchor=split_anchor(&self.windows,&value)?;

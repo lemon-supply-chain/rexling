@@ -54,6 +54,12 @@ class ProgramIdentityTest {
         assertEquals(ProgramKind.PYTHON,ProgramIdentity.resolve(listOf("/tmp/custom.py","python3.12")).kind)
         assertEquals(ProgramIdentity.Terminal,ProgramIdentity.resolve(emptyList()))
         assertEquals("fish",ProgramIdentity.resolve(listOf("-fish")).label)
+        for (candidate in listOf("brew", "homebrew", "hombrew", "brew.rb", "/opt/homebrew/bin/brew", "/opt/homebrew/Library/Homebrew/brew.rb")) {
+            val program = ProgramIdentity.resolve(listOf(candidate, "ruby"))
+            assertEquals("brew", program.label)
+            assertEquals("brew", program.executable)
+            assertFalse(program.isShell)
+        }
     }
     @Test fun headerDirectoryIsOptionalAndStripsInvisibleFormatting() {
         val state=AppState.parse("""{"directories":{"a":"~/code/project","b":"/tmp/\u202ehidden\n"}}""")

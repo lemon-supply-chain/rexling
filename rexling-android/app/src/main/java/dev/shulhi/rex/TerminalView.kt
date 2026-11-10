@@ -168,8 +168,8 @@ class TerminalView(context: Context) : View(context) {
         val saved = canvas.save()
         canvas.clipRect(0, 0, width, height)
         canvas.drawColor(palette.background)
-        val visibleColumns = minOf(frame.columns, max(1, ceil(contentWidth / cellWidth).toInt()))
-        val visibleRows = minOf(frame.rows, max(1, ceil(contentHeight / cellHeight).toInt()))
+        val visibleColumns = minOf(frame.columns, max(1, floor(contentWidth / cellWidth).toInt()))
+        val visibleRows = minOf(frame.rows, max(1, floor(contentHeight / cellHeight).toInt()))
         android.os.Trace.beginSection("Rexlet.drawTerminal")
         val token=frameTraceToken.takeIf {selection==null}
         if(token!=null) android.os.Trace.beginSection("Rexlink.draw.$token")
@@ -177,28 +177,28 @@ class TerminalView(context: Context) : View(context) {
         if(geometry!=rowGeometry) {clearRows();recorded=arrayOfNulls(visibleRows);rowGeometry=geometry}
         android.os.Trace.beginSection("Rexlink.linkIndex")
         val rowLinks=try {linkIndex.update(frame)} finally {android.os.Trace.endSection()}
+        canvas.save();canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
         for(y in 0 until visibleRows) {
             val cells=frame.lines[y]
             var row=recorded[y]
             val links=rowLinks[y]
             if(row==null || !row.recording.valid || row.cells!=cells || row.links!=links) {
-                val origin=if(y==0) 0f else insetTop+y*cellHeight
-                val top=if(y==0) insetTop else 0f
-                val bottom=if(y==visibleRows-1) height-origin else top+cellHeight
+                val origin=insetTop+y*cellHeight
                 val recording=row?.recording ?: TerminalRowRecording.create(canvas.isHardwareAccelerated)
-                recording.record(width,bottom.toInt().coerceAtLeast(1)) { target ->
-                    drawRow(target,cells,visibleColumns,top,bottom)
-                    target.save();target.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
+                recording.record(width,cellHeight.toInt().coerceAtLeast(1)) { target ->
+                    drawRow(target,cells,visibleColumns,0f,cellHeight)
+                    target.save();target.clipRect(insetHorizontal,0f,width-insetHorizontal,cellHeight)
                     backgroundPaint.color=palette.accent;backgroundPaint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
-                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,top+baseline+2,
-                        insetHorizontal+link.end*cellWidth,top+baseline+2,backgroundPaint)
+                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,baseline+2,
+                        insetHorizontal+link.end*cellWidth,baseline+2,backgroundPaint)
                     target.restore()
                 }
                 row=RecordedRow(cells,recording,links);recorded[y]=row;recordedRowCount++
             }
-            canvas.save();canvas.translate(0f,if(y==0) 0f else insetTop+y*cellHeight)
+            canvas.save();canvas.translate(0f,insetTop+y*cellHeight)
             row.recording.draw(canvas);canvas.restore()
         }
+        canvas.restore()
         canvas.save()
         canvas.clipRect(insetHorizontal,insetTop,width-insetHorizontal,height-insetBottom)
         canvas.translate(insetHorizontal,insetTop)
@@ -236,8 +236,8 @@ class TerminalView(context: Context) : View(context) {
         fun flush() {
             if(end<=start || start>=columns || color==palette.background) return
             backgroundPaint.color=color
-            canvas.drawRect(if(start==0) 0f else insetHorizontal+start*cellWidth,0f,
-                if(end>=columns) width.toFloat() else insetHorizontal+end*cellWidth,bottom,backgroundPaint)
+            canvas.drawRect(insetHorizontal+start*cellWidth,0f,
+                insetHorizontal+end*cellWidth,bottom,backgroundPaint)
         }
         for(cell in cells) {
             if(cell.width==0 && cell.x<end) continue
