@@ -84,6 +84,7 @@ async fn exercise(reject_second: bool, stale: bool) {
         .unwrap();
     let shared = Arc::new(Mutex::new(Shared {
         revision: 0,
+        force_full_frame: false,
         json: String::new(),
         pending_previews: BTreeMap::new(),
         frame: None,

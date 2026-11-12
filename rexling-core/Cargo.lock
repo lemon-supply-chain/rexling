@@ -782,6 +782,7 @@ name = "rexling-jni"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "futures-util",
  "jni",
  "rexling-core",

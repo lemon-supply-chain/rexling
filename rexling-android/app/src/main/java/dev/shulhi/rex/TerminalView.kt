@@ -114,9 +114,6 @@ class TerminalView(context: Context) : View(context) {
     private val advances=object: LinkedHashMap<Pair<Int,String>,Float>(256,.75f,true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Int,String>,Float>?)=size>4096
     }
-    private val imageBitmaps = object : LinkedHashMap<Int, Bitmap>(16, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Bitmap>?) = size > 64
-    }
     private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val imageSrcRect = Rect()
     private val imageDstRect = RectF()
@@ -196,32 +193,9 @@ class TerminalView(context: Context) : View(context) {
         if(geometry!=rowGeometry) {clearRows();recorded=arrayOfNulls(visibleRows);rowGeometry=geometry}
         android.os.Trace.beginSection("Rexlink.linkIndex")
         val rowLinks=try {linkIndex.update(frame)} finally {android.os.Trace.endSection()}
-        if (frame.imagePayloads.isNotEmpty()) {
-            for (p in frame.imagePayloads) {
-                if (p.pixels.isNotEmpty() && p.width > 0 && p.height > 0) {
-                    val existing = imageBitmaps[p.imageId]
-                    val bitmap = if (existing != null && existing.width == p.width && existing.height == p.height) {
-                        existing
-                    } else {
-                        existing?.recycle()
-                        Bitmap.createBitmap(p.width, p.height, Bitmap.Config.ARGB_8888).also {
-                            imageBitmaps[p.imageId] = it
-                        }
-                    }
-                    bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(p.pixels))
-                }
-            }
-        }
-        if (imageBitmaps.size > 32) {
-            val active = frame.imagePlacements.mapTo(HashSet()) { it.imageId }
-            val iter = imageBitmaps.entries.iterator()
-            while (iter.hasNext()) {
-                val entry = iter.next()
-                if (entry.key !in active) {
-                    entry.value.recycle()
-                    iter.remove()
-                }
-            }
+        // Pixels are cached by the poll thread; a draw only records what is on screen.
+        if (frame.imagePlacements.isNotEmpty()) {
+            TerminalImageCache.prune(frame.imagePlacements.mapTo(HashSet()) { it.imageId })
         }
         drawImages(canvas, frame.imagePlacements, underText = true)
         canvas.save();canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
@@ -340,20 +314,29 @@ class TerminalView(context: Context) : View(context) {
         canvas.clipRect(insetHorizontal, insetTop, width - insetHorizontal, height - insetBottom)
         for (img in placements) {
             if ((img.z < 0) != underText) continue
-            val bitmap = imageBitmaps[img.imageId] ?: continue
+            val bitmap = TerminalImageCache.get(img.imageId) ?: continue
             val left = insetHorizontal + img.col * cellWidth + img.offsetX
             val top = insetTop + img.row * cellHeight + img.offsetY
             val drawW = if (img.cols > 0) img.cols * cellWidth else img.width.toFloat()
             val drawH = if (img.rows > 0) img.rows * cellHeight else img.height.toFloat()
             if (drawW <= 0f || drawH <= 0f) continue
 
-            if (img.srcWidth > 0 && img.srcHeight > 0) {
-                imageSrcRect.set(img.srcX, img.srcY, img.srcX + img.srcWidth, img.srcY + img.srcHeight)
+            if (img.srcWidth > 0 && img.srcHeight > 0 &&
+                img.srcX < bitmap.width && img.srcY < bitmap.height) {
+                // Coordinates are image pixels; a stale payload must never hide the image.
+                val sx = img.srcX.coerceIn(0, bitmap.width - 1)
+                val sy = img.srcY.coerceIn(0, bitmap.height - 1)
+                val sw = img.srcWidth.coerceIn(1, bitmap.width - sx)
+                val sh = img.srcHeight.coerceIn(1, bitmap.height - sy)
+                imageSrcRect.set(sx, sy, sx + sw, sy + sh)
             } else {
                 imageSrcRect.set(0, 0, bitmap.width, bitmap.height)
             }
             imageDstRect.set(left, top, left + drawW, top + drawH)
-            canvas.drawBitmap(bitmap, imageSrcRect, imageDstRect, imagePaint)
+            try {
+                canvas.drawBitmap(bitmap, imageSrcRect, imageDstRect, imagePaint)
+            } catch (_: Throwable) {
+            }
         }
         canvas.restoreToCount(saved)
     }

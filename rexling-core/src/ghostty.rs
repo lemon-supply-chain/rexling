@@ -67,6 +67,7 @@ struct RawFrame {
     scroll_offset: u64,
     scroll_visible: u64,
     input_flags: u8,
+    full: u8,
 }
 unsafe extern "C" {
     fn rp_new(cols: u16, rows: u16, out: *mut *mut c_void) -> i32;
@@ -117,6 +118,16 @@ unsafe extern "C" {
         image_callback: ImageFn,
         userdata: *mut c_void,
     ) -> i32;
+    fn rp_frame_dirty(
+        term: *mut c_void,
+        frame: *mut RawFrame,
+        callback: CellFn,
+        placement_callback: PlacementFn,
+        image_callback: ImageFn,
+        userdata: *mut c_void,
+    ) -> i32;
+    fn rp_next_full(term: *mut c_void);
+    fn rp_is_held(term: *mut c_void) -> i32;
 }
 fn check(code: i32, action: &str) -> Result<()> {
     ensure!(code == 0, "libghostty {action} failed (result {code})");
@@ -169,7 +180,12 @@ pub struct Frame {
     pub cursor_at: Option<(u16, u16)>,
     pub foreground: [u8; 3],
     pub background: [u8; 3],
+    /// True when `cells` holds every row, so a reader may replace its whole screen.
+    pub full: bool,
     pub cells: Vec<Cell>,
+    /// Pixels whose generation changed since the previous frame of this terminal.
+    /// A repainting program must not copy megabytes across the wire twice; the
+    /// renderer keeps the last payload it received for every image id.
     pub images: Vec<ImagePayload>,
     pub placements: Vec<ImagePlacement>,
     pub scroll_total: u64,
@@ -411,7 +427,22 @@ impl Terminal {
     pub fn scroll_to_bottom(&mut self) {
         unsafe { rp_scroll(self.handle.as_ptr(), 0, 1) };
     }
+    pub fn is_held(&self) -> bool {
+        unsafe { rp_is_held(self.handle.as_ptr()) != 0 }
+    }
+    /// Every row. A reader replaces its whole screen with the result.
     pub fn frame(&mut self) -> Result<Frame> {
+        self.collect(false)
+    }
+    /// Only the rows the terminal marked dirty; other rows are absent from `cells`.
+    pub fn frame_dirty(&mut self) -> Result<Frame> {
+        self.collect(true)
+    }
+    /// Ask the next frame for every row, for a reader that has no previous screen.
+    pub fn set_full_frame(&mut self) {
+        unsafe { rp_next_full(self.handle.as_ptr()) };
+    }
+    fn collect(&mut self, dirty_only: bool) -> Result<Frame> {
         struct FrameCollector {
             cells: Vec<Cell>,
             images: Vec<ImagePayload>,
@@ -547,9 +578,10 @@ impl Terminal {
             images: Vec::new(),
             placements: Vec::new(),
         };
+        let read = if dirty_only { rp_frame_dirty } else { rp_frame };
         check(
             unsafe {
-                rp_frame(
+                read(
                     self.handle.as_ptr(),
                     &mut raw,
                     cell,
@@ -561,6 +593,7 @@ impl Terminal {
             "render state",
         )?;
         Ok(Frame {
+            full: raw.full != 0,
             columns: raw.columns,
             rows: raw.rows,
             cursor: (raw.cursor_visible & 1 != 0).then_some((raw.cursor_x, raw.cursor_y)),
@@ -959,5 +992,73 @@ mod tests {
         assert_eq!(frame.placements.len(), 1);
         let pl = &frame.placements[0];
         assert_eq!(pl.image_id, 42);
+    }
+
+    #[test]
+    fn test_tb_chunk() {
+        let mut terminal = Terminal::new(100, 50).unwrap();
+        terminal.resize(100, 50, 8, 16).unwrap();
+        let chunks: Vec<&str> = vec![
+            "eJztwTEBAAAAwqDqi24MH6AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeBrip94w"
+        ];
+        for (i, chunk_str) in chunks.iter().enumerate() {
+            let is_last = i == chunks.len() - 1;
+            let m = if is_last { 0 } else { 1 };
+            let cmd = if i == 0 {
+                format!("\x1b_Ga=T,f=32,o=z,s=1280,v=816,t=d,i=1,p=1,C=1,z=0,q=2,m={};{}\x1b\\", m, chunk_str)
+            } else {
+                format!("\x1b_Gm={};{}\x1b\\", m, chunk_str)
+            };
+            terminal.write(cmd.as_bytes()).unwrap();
+        }
+        let frame = terminal.frame().unwrap();
+        assert_eq!(frame.images.len(), 1);
+        assert_eq!(frame.images[0].image_id, 1);
+        assert_eq!(frame.images[0].width, 1280);
+        assert_eq!(frame.images[0].height, 816);
+        assert_eq!(frame.images[0].rgba.len(), 1280 * 816 * 4);
+        assert_eq!(frame.placements.len(), 1);
+        assert_eq!(frame.placements[0].image_id, 1);
+        assert_eq!(frame.placements[0].width, 1280);
+        assert_eq!(frame.placements[0].height, 816);
+    }
+
+    #[test]
+    fn kitty_pixels_only_cross_once_per_generation() {
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        terminal.resize(80, 24, 8, 16).unwrap();
+        // A repainting program re-sends a whole screen image on every frame. Only a
+        // changed generation may copy megabytes across the boundary again.
+        terminal
+            .write(b"\x1b_Ga=T,f=32,s=1,v=1,i=7;/////w==\x1b\\")
+            .unwrap();
+        let first = terminal.frame().unwrap();
+        assert_eq!(first.images.len(), 1);
+        assert_eq!(first.placements.len(), 1);
+        let idle = terminal.frame().unwrap();
+        assert!(idle.images.is_empty(), "unchanged pixels were copied again");
+        assert_eq!(idle.placements.len(), 1, "placements still describe the image");
+        terminal
+            .write(b"\x1b_Ga=T,f=32,s=1,v=1,i=7;AAD//w==\x1b\\")
+            .unwrap();
+        let changed = terminal.frame().unwrap();
+        assert_eq!(changed.images.len(), 1);
+        assert_eq!(changed.images[0].rgba.as_slice(), &[0, 0, 255, 255][..]);
+    }
+
+    #[test]
+    fn test_many_placements_deduplication() {
+        let mut terminal = Terminal::new(100, 50).unwrap();
+        terminal
+            .write(b"\x1b_Ga=T,f=32,s=1,v=1,i=1;/////w==\x1b\\")
+            .unwrap();
+        for _ in 0..300 {
+            terminal.write(b"\x1b_Ga=p,i=1\x1b\\").unwrap();
+        }
+        let frame = terminal.frame().unwrap();
+        assert_eq!(frame.images.len(), 1);
+        assert_eq!(frame.images[0].image_id, 1);
+        assert!(frame.placements.len() > 1);
     }
 }

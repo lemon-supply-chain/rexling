@@ -48,12 +48,12 @@ internal object ShortcutProfiles {
 
     fun newId()="p-"+UUID.randomUUID().toString().take(8)
 
-    private fun baseName(value: String)=value.replace('\\','/').lowercase(Locale.ROOT).substringAfterLast('/').trimStart('-')
-        .removeSuffix(".exe").removeSuffix(".cmd")
+    private fun baseName(value: String)=ProgramIdentity.baseName(value)
 
     fun matches(pattern: String,program: ProgramIdentity): Boolean {
         val wanted=pattern.trim().lowercase(Locale.ROOT)
         if(wanted.isEmpty() || program.pending) return false
+        if(!program.isShell && (wanted in ProgramIdentity.shellNames || baseName(wanted) in ProgramIdentity.shellNames)) return false
         val names=program.matchNames
         if(wanted.contains('*') || wanted.contains('/') || wanted.contains('?')) {
             val glob=Regex(wanted.split('*').joinToString(".*") {part->part.split('?').joinToString(".") {Regex.escape(it)}})

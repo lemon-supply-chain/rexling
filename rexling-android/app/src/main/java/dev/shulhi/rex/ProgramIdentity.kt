@@ -11,7 +11,13 @@ data class ProgramIdentity(
     val candidates: List<String> = emptyList(),
 ) {
     /** Names and paths Rex reported for the foreground program; falls back to the resolved name. */
-    internal val matchNames: List<String> get()=candidates.ifEmpty {listOf(executable,label).filter {it.isNotBlank()}.distinct()}
+    internal val matchNames: List<String> get() {
+        val raw = candidates.ifEmpty { listOf(executable, label) }
+        val filtered = if (isShell) raw else raw.filterNot { baseName(it) in shellNames }
+        // A shell's title is a prompt, so only real programs contribute it as a name.
+        val named = if (isShell) listOf(executable) else listOf(executable, title)
+        return (named.filter { it.isNotBlank() } + filtered).distinct()
+    }
     val title: String get() = when(kind) {
         ProgramKind.CLAUDE -> "claude"; ProgramKind.CODEX -> "codex"; ProgramKind.ANTIGRAVITY -> "antigravity"
         ProgramKind.NEOVIM -> "nvim"; ProgramKind.VIM -> "vim"; ProgramKind.GIT -> "git"; ProgramKind.PYTHON -> "python"
@@ -34,6 +40,8 @@ data class ProgramIdentity(
     }
 
     companion object {
+        internal fun baseName(value: String): String = value.replace('\\', '/').lowercase(Locale.ROOT)
+            .substringAfterLast('/').trimStart('-').removeSuffix(".exe").removeSuffix(".cmd")
         internal val shellNames = setOf("fish", "zsh", "bash", "sh", "dash", "ash", "ksh", "mksh", "tcsh", "csh", "nu", "nushell", "pwsh", "powershell", "cmd")
         private val defaultTitle = Regex("(?:(?:Window|Tab|Block)[ _:-]+[0-9a-f]+(?:-[0-9a-f]+)*|Terminal \\d+|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", RegexOption.IGNORE_CASE)
         private val codexRegex = Regex("codex-(aarch64|x86_64)-.*")

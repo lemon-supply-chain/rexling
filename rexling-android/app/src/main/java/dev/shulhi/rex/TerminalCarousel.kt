@@ -89,12 +89,14 @@ import dev.chrisbanes.haze.hazeSource
             Snapshot.withMutableSnapshot {
                 settlingTarget=blocks.getOrNull(target)?.id;toast=target!=index;settling=true;dragging=false
             }
-            if(target!=index) blocks.getOrNull(target)?.let {latestSelect(it.id)}
             scope.launch {
                 val animation=Animatable(drag)
                 animation.animateTo(if(target==index) 0f else if(step>0) -stride else stride,tween(190)) {drag=value}
                 Snapshot.withMutableSnapshot {
-                    if(target!=index) visualId=blocks[target].id
+                    if(target!=index) {
+                        visualId=blocks[target].id
+                        blocks.getOrNull(target)?.let {latestSelect(it.id)}
+                    }
                     drag=0f;settling=false
                 }
             }

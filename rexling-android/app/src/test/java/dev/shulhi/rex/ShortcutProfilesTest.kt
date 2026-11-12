@@ -12,9 +12,12 @@ class ShortcutProfilesTest {
     private val pi=ShortcutProfile("pi","pi",listOf("*/pi-coding-agent/*"),items=NeovimShortcuts.parse("/model"))
 
     @Test fun profilesMatchExecutableNamesAndPathPatterns() {
+        val antigravity=ShortcutProfile("agy","Antigravity",listOf("antigravity"),items=NeovimShortcuts.parse("Help = ?"))
         assertTrue(ShortcutProfiles.matches(ShortcutProfiles.neovim(),program("/opt/homebrew/bin/nvim")))
         assertTrue(ShortcutProfiles.matches(ShortcutProfiles.shell(),program("-fish","fish")))
         assertFalse(ShortcutProfiles.matches(ShortcutProfiles.shell(),program("nvim")))
+        assertFalse(ShortcutProfiles.matches(ShortcutProfiles.shell(),program("antigravity","zsh")))
+        assertTrue(ShortcutProfiles.matches(antigravity,program("antigravity","zsh")))
         assertTrue(ShortcutProfiles.matches(pi,program("/usr/lib/node_modules/@mariozechner/pi-coding-agent/dist/cli.js","node")))
         assertFalse(ShortcutProfiles.matches(pi,program("node")))
         assertTrue(ShortcutProfiles.matches(lazygit,program("LazyGit.exe")))
@@ -22,8 +25,11 @@ class ShortcutProfilesTest {
     }
 
     @Test fun specificProfilesWinOverPatternsAndPatternsOverAnyProgram() {
-        val profiles=listOf(any,pi,lazygit,ShortcutProfiles.neovim(),ShortcutProfiles.shell())
-        assertEquals("lg",ShortcutProfiles.active(profiles,program("lazygit"))?.id)
+        val antigravity=ShortcutProfile("agy","Antigravity",listOf("antigravity"),items=NeovimShortcuts.parse("Help = ?"))
+        // Shell comes before user-added profiles, but must not steal focus from child programs
+        val profiles=listOf(any,pi,lazygit,ShortcutProfiles.neovim(),ShortcutProfiles.shell(),antigravity)
+        assertEquals("lg",ShortcutProfiles.active(profiles,program("lazygit","zsh"))?.id)
+        assertEquals("agy",ShortcutProfiles.active(profiles,program("antigravity","zsh"))?.id)
         assertEquals("pi",ShortcutProfiles.active(profiles,program("/x/pi-coding-agent/cli.js","node"))?.id)
         assertEquals("any",ShortcutProfiles.active(profiles,program("htop"))?.id)
         assertEquals(ShortcutProfiles.SHELL,ShortcutProfiles.active(profiles,program("zsh"))?.id)

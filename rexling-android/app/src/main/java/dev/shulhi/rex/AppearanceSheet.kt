@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 @Composable internal fun QuickThemeMenuItem(dark: Boolean,onDark: (Boolean)->Unit) {
-    TerminalMenuItem(stringResource(if(dark) R.string.toggle_light_theme else R.string.toggle_dark_theme),if(dark) ChromeIcon.SUN else ChromeIcon.MOON,onClick={onDark(!dark)})
+    TerminalMenuItem(stringResource(if(dark) R.string.toggle_light_theme else R.string.toggle_dark_theme),if(dark) ChromeIcon.SUN else ChromeIcon.MOON,enabled=true,onClick={onDark(!dark)})
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

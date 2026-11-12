@@ -17,8 +17,29 @@ use std::{
 };
 use tokio::sync::mpsc;
 
+#[cfg(target_os = "android")]
+pub fn android_log(msg: &str) {
+    let msg_c = std::ffi::CString::new(msg).unwrap_or_default();
+    let tag_c = std::ffi::CString::new("RexEngine").unwrap_or_default();
+    unsafe extern "C" {
+        fn __android_log_print(prio: i32, tag: *const std::ffi::c_char, fmt: *const std::ffi::c_char, ...) -> i32;
+    }
+    unsafe {
+        __android_log_print(6, tag_c.as_ptr(), c"%s".as_ptr(), msg_c.as_ptr());
+    }
+}
+#[cfg(not(target_os = "android"))]
+pub fn android_log(msg: &str) {
+    eprintln!("[RexEngine] {msg}");
+}
+
+/// Shown while a repainting program outruns the device; cleared by the next good chunk.
+const SPEED_NOTICE: &str = "This terminal paints faster than the screen updates; showing the newest frame";
+
 pub struct Shared {
     pub revision: u64,
+    /// Set when a reader has no previous screen and needs every row next frame.
+    pub force_full_frame: bool,
     pub json: String,
     pub activity: Arc<Value>,
     pub pending_previews: BTreeMap<String, Value>,
@@ -36,6 +57,7 @@ impl Session {
         let (tx, rx) = mpsc::channel(128);
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -370,6 +392,9 @@ struct Actor {
     program_refresh: tokio::time::Instant,
     preview_updates: BTreeMap<String, Value>,
     session_details: Value,
+    /// Consecutive stream reopens without a single decoded chunk between them.
+    data_retries: u32,
+    data_retry_at: tokio::time::Instant,
 }
 impl Actor {
     fn new(shared: Arc<Mutex<Shared>>, updates: Arc<crate::updates::Updates>) -> Self {
@@ -411,6 +436,8 @@ impl Actor {
             paused: false,
             retry: None,
             backoff: 1,
+            data_retries: 0,
+            data_retry_at: tokio::time::Instant::now(),
             dirty: false,
             preview_task: None,
             summary_task: None,
@@ -502,6 +529,8 @@ impl Actor {
                 continue;
             }
             let active = !self.paused;
+            // Snapshot the stream state before the select so its future never borrows self.
+            let data_pending = self.data.is_none();
             tokio::select! {
                 value=rx.recv()=>{
                     let Some(value)=value else{break;};
@@ -541,18 +570,30 @@ impl Actor {
                     }
                 },
                 chunk=async {match &mut self.data{Some(d)=>d.read().await,None=>pending().await}}=>{
-                    match chunk {
-                        Ok(chunk)=>{
-                            let result=self.replica.as_mut().context("terminal replica missing").and_then(|r|r.feed(&chunk));
-                            if let Err(e)=result {
-                                self.error=format!("Terminal state could not be decoded: {e}");
-                                self.data=None;self.replica=None;self.data_resume=None;self.phase="error".into();self.controlled=false;self.publish();
-                            } else {
-                                self.dirty=true;
-                                self.update_apcs();
+                    // A terminal that paints frames streams far faster than one 64 KiB
+                    // message per loop turn, so drain what already arrived before
+                    // returning to commands and rendering.
+                    self.feed_chunk(chunk);
+                    // Stay responsive: feed a bounded amount, then let the render
+                    // branch draw the newest complete frame before reading again.
+                    if self.data.is_some() && self.replica.is_some() {
+                        let mut budget = 4 * 1024 * 1024usize;
+                        while budget > 0 {
+                            let Some(next) = self.data.as_mut().and_then(Data::try_read) else {
+                                break;
+                            };
+                            budget = budget.saturating_sub(match &next {
+                                Ok(bytes) => bytes.len(),
+                                Err(_) => budget,
+                            });
+                            self.feed_chunk(next);
+                            if self.replica.is_none() {
+                                break;
                             }
                         }
-                        Err(e)=>self.recover(e),
+                        if budget < 4 * 1024 * 1024 {
+                            self.dirty = true;
+                        }
                     }
                 },
                 result=async {match &mut self.preview_task {Some(task)=>task.await,None=>pending().await}}=>{
@@ -604,10 +645,30 @@ impl Actor {
                         }
                     }
                 },
-                _=async {if active {tokio::time::sleep_until(if self.dirty && self.visible {render_at}else{maintenance_at}).await;}else{pending::<()>().await;}}=>{
+                _=async {if active {
+                    let mut at=if self.dirty && self.visible {render_at}else{maintenance_at};
+                    if data_pending && self.data_retry_at < at {at=self.data_retry_at;}
+                    tokio::time::sleep_until(at).await;
+                }else{pending::<()>().await;}}=>{
                     let now=tokio::time::Instant::now();
-                    render_at=now+Duration::from_millis(16);
+                    render_at=now+Duration::from_millis(8);
                     maintenance_at=now+Duration::from_secs(1);
+                    if self.data.is_none() && self.data_retry_at<=now && self.control.is_some()
+                        && !self.selected_session.is_empty() && !self.selected_block.is_empty() && !self.paused
+                    {
+                        if let Err(error)=self.reopen_data().await {
+                            android_log(&format!("data reopen failed: {error:#}"));
+                            self.data_retries=self.data_retries.saturating_add(1);
+                            if self.data_retries>12 {
+                                self.data_resume=None;self.data_retries=0;
+                                self.recover(error.context("terminal stream unavailable"));
+                            } else {
+                                self.schedule_data_retry();self.publish();
+                            }
+                        } else {
+                            self.data_retries=0;
+                        }
+                    }
                     if self.network_online && self.connect_task.is_none() && self.retry.is_some_and(|at|at<=now) && !self.paused {
                         self.retry=None;
                         if let Some(endpoint)=self.endpoint.clone() {
@@ -644,17 +705,30 @@ impl Actor {
                     }
                     if self.predictor.expire(std::time::Instant::now()) {self.dirty=true;}
                     if self.dirty && self.visible {
-                        self.dirty=false;
-                        if let Some(replica)=self.replica.as_mut().filter(|r|r.ready()) {
-                            match replica.terminal().and_then(|t|t.frame()) {
-                                Ok(frame)=>{
-                                    let frame=Arc::new(frame);
-                                    let target=self.input_target();
-                                    self.predictor.retarget(&prediction_key(&target));
-                                    self.predictor.observe(frame.clone(),std::time::Instant::now());
-                                    self.screen=Some(self.predictor.display(frame));self.publish_frame();
+                        let is_held = self.screen.is_some() && self.replica.as_mut().filter(|r| r.ready()).and_then(|r| r.terminal().ok()).map_or(false, |t| t.is_held());
+                        if !is_held {
+                            self.dirty=false;
+                            // A dirty frame only carries the rows the terminal touched; a reader
+                            // with no base, or one that inspects the screen, asks for every row.
+                            let forced=self.shared.lock().map(|mut s| std::mem::replace(&mut s.force_full_frame,false)).unwrap_or(true);
+                            let program=crate::prediction::program(&self.programs[self.selected_block.as_str()]);
+                            let full=forced||self.predictor.requires_full_frame(program);
+                            if let Some(replica)=self.replica.as_mut().filter(|r|r.ready()) {
+                                match replica.terminal().and_then(|t|{
+                                    if full {t.set_full_frame();t.frame()} else {t.frame_dirty()}
+                                }) {
+                                    Ok(frame)=>{
+                                        let frame=Arc::new(frame);
+                                        let target=self.input_target();
+                                        self.predictor.retarget(&prediction_key(&target));
+                                        self.predictor.observe(frame.clone(),std::time::Instant::now());
+                                        self.screen=Some(self.predictor.display(frame));self.publish_frame();
+                                    }
+                                    Err(e)=>{
+                                        android_log(&format!("terminal.frame ERROR: {e}"));
+                                        self.error=e.to_string();self.publish();
+                                    }
                                 }
-                                Err(e)=>{self.error=e.to_string();self.publish();}
                             }
                         }
                     }
@@ -734,11 +808,15 @@ impl Actor {
     }
     fn recover(&mut self, error: anyhow::Error) {
         let input_pending = !self.input_acks.is_empty();
+        let message = error.to_string();
         self.lose_connections();
+        if message.contains("data reconnect required") {
+            self.data_resume = None;
+        }
         if input_pending {
             self.notice = "Request outcome is uncertain; input was not resent".into();
         }
-        self.error = error.to_string();
+        self.error = message;
         if self.endpoint.is_some() && !self.paused {
             self.phase = "reconnecting".into();
             self.retry = self
@@ -770,36 +848,55 @@ impl Actor {
         self.backoff = 1;
         if !self.selected_session.is_empty() {
             let session = self.selected_session.clone();
-            let attached = self.control.as_mut().unwrap().attach(&session).await?;
-            self.set_view(&attached["view"]);
-            if !self.selected_block.is_empty() {
-                let block = self.selected_block.clone();
-                self.apply_theme().await?;
-                let mut recovered = None;
-                if resumed && let Some(state) = self.data_resume.take() {
-                    recovered = state.connect(&endpoint).await.ok();
+            match self.control.as_mut().unwrap().attach(&session).await {
+                Ok(attached) => {
+                    self.set_view(&attached["view"]);
+                    if !self.selected_block.is_empty() {
+                        let block = self.selected_block.clone();
+                        self.apply_theme().await?;
+                        let mut recovered = None;
+                        if resumed && let Some(state) = self.data_resume.take() {
+                            recovered = state.connect(&endpoint).await.ok();
+                        }
+                        self.data = if let Some(data) = recovered {
+                            Some(data)
+                        } else {
+                            let data = Data::open(
+                                &endpoint,
+                                self.control.as_mut().unwrap(),
+                                &session,
+                                &block,
+                                Trace::default(),
+                            )
+                            .await?;
+                            self.replica = Some(Replica::new(data.nonce));
+                            Some(data)
+                        };
+                        self.data_resume = None;
+                        self.notice = if resumed {
+                            "Connection restored"
+                        } else {
+                            "Connected; terminal state refreshed"
+                        }
+                        .into();
+                    }
                 }
-                self.data = if let Some(data) = recovered {
-                    Some(data)
-                } else {
-                    let data = Data::open(
-                        &endpoint,
-                        self.control.as_mut().unwrap(),
-                        &session,
-                        &block,
-                        Trace::default(),
-                    )
-                    .await?;
-                    self.replica = Some(Replica::new(data.nonce));
-                    Some(data)
-                };
-                self.data_resume = None;
-                self.notice = if resumed {
-                    "Connection restored"
-                } else {
-                    "Connected; terminal state refreshed"
+                Err(error)
+                    if error
+                        .downcast_ref::<rex_core::control::RpcError>()
+                        .is_some_and(|e| e.code == "session_not_found") =>
+                {
+                    self.selected_session.clear();
+                    self.selected_block.clear();
+                    self.windows = json!([]);
+                    self.screen = None;
+                    self.data = None;
+                    self.data_resume = None;
+                    self.replica = None;
+                    self.controlled = false;
+                    self.notice = "That session has closed".into();
                 }
-                .into();
+                Err(error) => return Err(error),
             }
         }
         self.publish();
@@ -2161,6 +2258,7 @@ impl Actor {
         Ok(())
     }
     async fn open_block(&mut self, block: String) -> Result<()> {
+        android_log(&format!("open_block: session={}, block={}", self.selected_session, block));
         ensure!(!self.selected_session.is_empty(), "Choose a session first");
         self.release_selected().await?;
         if let Some(mut data) = self.data.take() {
@@ -2179,11 +2277,128 @@ impl Actor {
             Trace::default(),
         )
         .await?;
+        android_log(&format!("open_block: Data::open ok, nonce={}", data.nonce));
         self.replica = Some(Replica::new(data.nonce));
         self.data = Some(data);
         self.error.clear();
         self.notice = "Viewing terminal; take control to type".into();
         self.refresh_view().await?;
+        Ok(())
+    }
+    /// Feed one stream chunk into the replica. A lost stream resumes from the exact
+    /// byte offset when the server still holds it, so a huge terminal snapshot is
+    /// only downloaded when the stream really ended.
+    fn feed_chunk(&mut self, chunk: Result<Vec<u8>>) {
+        match chunk {
+            Ok(bytes) => {
+                let Some(replica) = self.replica.as_mut() else {
+                    return;
+                };
+                match replica.feed(&bytes) {
+                    Ok(()) => {
+                        if self.data_retries > 0 {
+                            self.data_retries = 0;
+                            self.data_retry_at = tokio::time::Instant::now();
+                            if self.notice == SPEED_NOTICE {
+                                self.notice.clear();
+                            }
+                        }
+                        self.dirty = true;
+                        self.update_apcs();
+                    }
+                    Err(error) => {
+                        android_log(&format!("chunk feed ERROR: {error}"));
+                        self.error = format!("Terminal state could not be decoded: {error}");
+                        self.data = None;
+                        self.replica = None;
+                        self.data_resume = None;
+                        self.phase = "error".into();
+                        self.controlled = false;
+                        self.publish();
+                    }
+                }
+            }
+            Err(error) => self.stream_lost(error),
+        }
+    }
+    /// A lost stream is scheduled, never awaited: blocking the actor here would stop
+    /// reading and rendering exactly when the connection needs attention most.
+    fn stream_lost(&mut self, error: anyhow::Error) {
+        let message = format!("{error:#}");
+        android_log(&format!("data stream lost: {message}"));
+        if self.control.is_none() || self.selected_session.is_empty() || self.selected_block.is_empty() {
+            self.recover(error);
+            return;
+        }
+        // The server ended the stream itself (1013 "data reconnect required") when more
+        // output piled up than it could keep, so only a new ticket and HELLO work.
+        let ended = message.contains("data reconnect required") || message.contains("block closed");
+        if ended {
+            self.data_resume = None;
+        } else if self.data_resume.is_none()
+            && let Some(data) = self.data.take()
+        {
+            self.data_resume = Some(data.disconnect());
+        }
+        self.data = None;
+        self.data_retries = self.data_retries.saturating_add(1);
+        if self.data_retries > 12 {
+            self.data_resume = None;
+            self.data_retries = 0;
+            self.recover(error);
+            return;
+        }
+        if self.data_retries == 3 {
+            self.notice = SPEED_NOTICE.into();
+        }
+        self.schedule_data_retry();
+        self.publish();
+    }
+    fn schedule_data_retry(&mut self) {
+        let delay = Duration::from_millis(match self.data_retries {
+            0..=2 => 100,
+            3..=5 => 500,
+            6..=9 => 2_000,
+            _ => 10_000,
+        });
+        self.data_retry_at = tokio::time::Instant::now() + delay;
+    }
+    async fn reopen_data(&mut self) -> Result<()> {
+        if self.selected_session.is_empty() || self.selected_block.is_empty() {
+            self.data = None;
+            self.data_resume = None;
+            return Ok(());
+        }
+        self.data = None;
+        let endpoint = self.endpoint.clone().context("no server")?;
+        // RESUME replays from the exact offset and keeps the stream's channel nonce,
+        // so an 11 MiB snapshot never crosses the wire just to recover a hiccup.
+        if let Some(resume) = self.data_resume.take() {
+            match resume.connect(&endpoint).await {
+                Ok(data) => {
+                    self.data = Some(data);
+                    self.dirty = true;
+                    self.publish();
+                    return Ok(());
+                }
+                Err(error) => android_log(&format!("data resume rejected: {error}")),
+            }
+        }
+        let control = self.control.as_mut().context("not connected")?;
+        let data = Data::open(
+            &endpoint,
+            control,
+            &self.selected_session,
+            &self.selected_block,
+            Trace::default(),
+        )
+        .await?;
+        self.replica = Some(Replica::new(data.nonce));
+        self.data = Some(data);
+        self.dirty = true;
+        self.publish();
+        // The stream is already delivering; a stale view only costs ownership chrome.
+        let _ = self.refresh_view().await;
         Ok(())
     }
     async fn refresh_close_view(&mut self) -> Result<bool> {
@@ -2741,6 +2956,7 @@ mod tests {
     fn pane_layout_preserves_nested_window_rects_and_floating_layers() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -2794,6 +3010,7 @@ mod tests {
     fn layout_only_changes_keep_the_selected_pane_and_program_metadata() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -2851,6 +3068,7 @@ mod tests {
     fn split_rejects_stale_targets_and_invalid_direction_before_starting_creation() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -4282,6 +4500,7 @@ while True:
     fn activity_metadata_publish_benchmark() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -4316,6 +4535,7 @@ while True:
     fn background_monitor_is_read_only_and_publishes_activity_without_a_terminal() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -4364,6 +4584,7 @@ while True:
     fn hidden_activity_is_shared_for_focus_policy_without_recopied_snapshots() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -4395,6 +4616,7 @@ while True:
     fn stale_or_hidden_take_and_resize_commands_cannot_target_the_new_pane() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -4429,6 +4651,7 @@ while True:
     fn delayed_resize_apcs_cannot_revoke_canonical_ownership() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -4461,6 +4684,7 @@ while True:
     fn unowned_layout_resize_is_quiet_but_unowned_typing_is_rejected() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             pending_previews: BTreeMap::new(),
             frame: None,
@@ -4504,6 +4728,7 @@ while True:
     fn losing_network_cancels_a_pending_handshake_and_preserves_the_target() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             activity: Arc::default(),
             pending_previews: BTreeMap::new(),
@@ -4545,6 +4770,7 @@ while True:
     fn reordering_windows_preserves_program_metadata() {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             activity: Arc::default(),
             pending_previews: BTreeMap::new(),
@@ -4894,3 +5120,6 @@ mod latency_tests;
 #[cfg(test)]
 #[path = "pane_reorder_tests.rs"]
 mod pane_reorder_tests;
+#[cfg(test)]
+#[path = "metrics_tests.rs"]
+mod metrics_tests;

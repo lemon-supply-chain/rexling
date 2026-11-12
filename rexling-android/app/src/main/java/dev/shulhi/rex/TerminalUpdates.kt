@@ -63,8 +63,20 @@ internal class TerminalUpdates {
                         val imageId=data.int;val generation=data.long
                         val width=data.int;val height=data.int
                         val pixelLen=data.int
-                        val pixelBytes=ByteArray(pixelLen)
-                        data.get(pixelBytes)
+                        require(pixelLen in 0..data.remaining()) { "Invalid pixelLen $pixelLen" }
+                        val offset = data.position()
+                        val pixelSlice = ByteBuffer.wrap(bytes, offset, pixelLen)
+                        try {
+                            TerminalImageCache.update(imageId, generation, width, height, pixelSlice)
+                        } catch (_: Throwable) {}
+                        val pixelBytes = if (pixelLen <= 65536) {
+                            val bytes = ByteArray(pixelLen)
+                            data.get(bytes)
+                            bytes
+                        } else {
+                            data.position(offset + pixelLen)
+                            ByteArray(0)
+                        }
                         TerminalImagePayload(imageId,generation,width,height,pixelBytes)
                     }
                 } else emptyList()

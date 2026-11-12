@@ -61,12 +61,17 @@ fn text(out: &mut Vec<u8>, v: &str) {
 fn rgb(v: [u8; 3]) -> u32 {
     0xff000000 | ((v[0] as u32) << 16) | ((v[1] as u32) << 8) | v[2] as u32
 }
-fn rows(frame: &Frame) -> Vec<&[Cell]> {
-    let mut result = Vec::with_capacity(frame.rows as usize);
+/// A row the terminal handed out, indexed by viewport row. Rows the render state did
+/// not touch are absent, so a dirty frame stays dirty all the way to the wire.
+fn rows(frame: &Frame) -> Vec<Option<&[Cell]>> {
+    let mut result = vec![None; frame.rows as usize];
     let mut start = 0;
-    for y in 0..frame.rows {
-        let end = start + frame.cells[start..].iter().take_while(|c| c.y == y).count();
-        result.push(&frame.cells[start..end]);
+    while start < frame.cells.len() {
+        let y = frame.cells[start].y as usize;
+        let end = start + frame.cells[start..].iter().take_while(|c| c.y as usize == y).count();
+        if let Some(slot) = result.get_mut(y) {
+            *slot = Some(&frame.cells[start..end]);
+        }
         start = end;
     }
     result
@@ -94,8 +99,12 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     } else {
         text(&mut out, "");
     }
-    match &state.frame {
-        None => out.push(1),
+    // The frame the reader now holds; None when this packet carried no screen.
+    let delivered: Option<Arc<Frame>> = match &state.frame {
+        None => {
+            out.push(1);
+            None
+        }
         Some(frame)
             if !reset
                 && base
@@ -103,14 +112,27 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                     .as_ref()
                     .is_some_and(|old| Arc::ptr_eq(old, frame)) =>
         {
-            out.push(0)
+            out.push(0);
+            Some(frame.clone())
         }
         Some(frame) => {
             let previous = base
                 .frame
                 .as_ref()
                 .filter(|old| !reset && old.columns == frame.columns && old.rows == frame.rows);
-            out.push(if previous.is_some() { 2 } else { 3 });
+            let next = rows(frame);
+            let complete = next.iter().all(Option::is_some);
+            // A reader without a base can only be given a whole screen, so ask the
+            // terminal for every row and send nothing rather than half a screen.
+            if previous.is_none() && !complete {
+                state.force_full_frame = true;
+                out.push(1);
+                return settle(state, out, None);
+            }
+            // A full packet is only needed for a reader without a base; otherwise the
+            // packet is a row delta even when the frame happens to hold every row.
+            let full = previous.is_none();
+            out.push(if full { 3 } else { 2 });
             u16le(&mut out, frame.columns);
             u16le(&mut out, frame.rows);
             let (x, y) = frame
@@ -128,18 +150,26 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                 u64le(&mut out, v);
             }
             out.push(frame.input_flags);
-            let next = rows(frame);
             let old = previous.map(|old| rows(old));
-            let changed: Vec<_> = next
+            let changed: Vec<(u16, &[Cell])> = next
                 .iter()
                 .enumerate()
-                .filter(|(y, row)| old.as_ref().is_none_or(|old| old[*y] != **row))
+                .filter_map(|(y, row)| {
+                    let row = (*row)?;
+                    if full {
+                        return Some((y as u16, row));
+                    }
+                    match old.as_ref().and_then(|old| old[y]) {
+                        Some(same) if same == row => None,
+                        _ => Some((y as u16, row)),
+                    }
+                })
                 .collect();
             u16le(&mut out, changed.len() as u16);
             for (y, row) in changed {
                 u16le(&mut out, y as u16);
                 u16le(&mut out, row.len() as u16);
-                for cell in *row {
+                for cell in row {
                     u16le(&mut out, cell.x);
                     out.push(cell.width);
                     u32le(&mut out, cell.attributes);
@@ -149,7 +179,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                 }
                 // Sparse contiguous link ranges keep ordinary rows cheap.
                 let mut links: Vec<(u16, u16, &str)> = Vec::new();
-                for cell in *row {
+                for cell in row {
                     if cell.width == 0 {
                         continue;
                     }
@@ -179,6 +209,8 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                     new_payloads.push(img);
                 }
             }
+            let total_payload_size: usize = new_payloads.iter().map(|img| img.rgba.len() + 24).sum();
+            out.reserve(total_payload_size + frame.placements.len() * 48);
             u16le(&mut out, new_payloads.len() as u16);
             for img in new_payloads {
                 u32le(&mut out, img.image_id);
@@ -206,14 +238,17 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                 u32le(&mut out, pl.src_height);
                 out.extend(pl.z.to_le_bytes());
             }
+            Some(frame.clone())
         }
-    }
-    let mut known_images = if reset {
-        std::collections::HashMap::new()
-    } else {
-        base.known_images.clone()
     };
-    if let Some(frame) = &state.frame {
+    settle(state, out, delivered)
+}
+
+/// Record what the reader now holds. `delivered` is the frame this packet carried, so
+/// `None` means the reader has no screen base and the next packet must be a full one.
+fn settle(state: &mut Shared, out: Vec<u8>, delivered: Option<Arc<Frame>>) -> Vec<u8> {
+    let mut known_images = std::collections::HashMap::new();
+    if let Some(frame) = &delivered {
         for img in &frame.images {
             known_images.insert(img.image_id, img.generation);
         }
@@ -223,7 +258,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
         metadata: state.json.clone(),
         activity: state.activity.clone(),
         key: state.key.clone(),
-        frame: state.frame.clone(),
+        frame: delivered,
         known_images,
     };
     out
@@ -254,6 +289,7 @@ mod wire_tests {
         Frame {
             columns: 100,
             rows: 50,
+            full: true,
             cursor: Some((0, 0)),
             cursor_at: Some((0, 0)),
             foreground: [255; 3],
@@ -284,6 +320,7 @@ mod wire_tests {
     fn packets_diff_against_delivered_frame_and_reset_on_unknown_base() {
         let mut state = Shared {
             revision: 1,
+            force_full_frame: false,
             json: "{}".into(),
             pending_previews: BTreeMap::new(),
             frame: Some(Arc::new(frame())),
@@ -329,6 +366,76 @@ mod wire_tests {
         updates.close();
         assert_eq!(thread.join().unwrap(), -1);
     }
+    /// Metadata length, then the frame flag, then the changed-row count.
+    fn changed_rows(packet: &[u8]) -> u16 {
+        let metadata = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
+        // columns, rows, cursor x/y, fg, bg, three scrollbar words, input flags
+        let at = 16 + metadata + 1 + 2 + 2 + 4 + 4 + 4 + 4 + 24 + 1;
+        u16::from_le_bytes(packet[at..at + 2].try_into().unwrap())
+    }
+    /// Only some rows, as the terminal hands them out for a dirty frame.
+    fn dirty(rows: &[u16]) -> Frame {
+        let mut frame = frame();
+        frame.full = false;
+        frame.cells.retain(|cell| rows.contains(&cell.y));
+        frame
+    }
+
+    #[test]
+    fn a_dirty_frame_sends_only_the_rows_it_carries() {
+        let mut state = Shared {
+            revision: 1,
+            force_full_frame: false,
+            json: "{}".into(),
+            activity: Arc::default(),
+            pending_previews: BTreeMap::new(),
+            frame: Some(Arc::new(frame())),
+            key: "a".into(),
+            wire: WireBase::default(),
+        };
+        let full = encode(&mut state, 0);
+        assert_eq!(full[16 + u32::from_le_bytes(full[12..16].try_into().unwrap()) as usize], 3);
+
+        let mut next = dirty(&[7]);
+        next.cells[0].text = "z".into();
+        state.frame = Some(Arc::new(next));
+        state.revision = 2;
+        let delta = encode(&mut state, 1);
+        let metadata = u32::from_le_bytes(delta[12..16].try_into().unwrap()) as usize;
+        assert_eq!(delta[16 + metadata], 2, "a dirty frame is a row delta");
+        assert_eq!(changed_rows(&delta), 1);
+        assert!(delta.len() * 10 < full.len(), "one row must not cost a screen");
+    }
+
+    #[test]
+    fn a_dirty_frame_without_a_base_waits_for_a_full_one() {
+        // A reader that never received the screen cannot apply row 7 alone.
+        let mut state = Shared {
+            revision: 1,
+            force_full_frame: false,
+            json: "{}".into(),
+            activity: Arc::default(),
+            pending_previews: BTreeMap::new(),
+            frame: Some(Arc::new(dirty(&[7]))),
+            key: "a".into(),
+            wire: WireBase::default(),
+        };
+        let packet = encode(&mut state, 0);
+        let metadata = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
+        assert_eq!(packet[16 + metadata], 1, "no half a screen for a reader without a base");
+        assert!(state.force_full_frame, "the terminal is asked for every row next time");
+
+        // The engine obeys the request, so the next packet replaces the whole screen.
+        state.force_full_frame = false;
+        state.revision = 2;
+        state.frame = Some(Arc::new(frame()));
+        let complete = encode(&mut state, 1);
+        let metadata = u32::from_le_bytes(complete[12..16].try_into().unwrap()) as usize;
+        assert_eq!(complete[16 + metadata], 3);
+        assert_eq!(changed_rows(&complete), 50);
+        assert!(!state.force_full_frame);
+    }
+
     #[test]
     fn hyperlink_only_changes_emit_a_sparse_row_delta_and_removal() {
         let mut first = frame();
@@ -337,6 +444,7 @@ mod wire_tests {
         }
         let mut state = Shared {
             revision: 1,
+            force_full_frame: false,
             json: "{}".into(),
             pending_previews: BTreeMap::new(),
             frame: Some(Arc::new(first)),
@@ -378,6 +486,7 @@ mod wire_tests {
     fn activity_catalog_is_sent_only_when_changed_and_resets_clear_it() {
         let mut state = Shared {
             revision: 1,
+            force_full_frame: false,
             json: "{}".into(),
             activity: Arc::new(serde_json::json!([{"title":"Task"}])),
             pending_previews: BTreeMap::new(),
@@ -428,6 +537,7 @@ mod wire_tests {
         });
         let mut state = Shared {
             revision: 1,
+            force_full_frame: false,
             json: "{}".into(),
             pending_previews: BTreeMap::new(),
             frame: Some(Arc::new(first)),

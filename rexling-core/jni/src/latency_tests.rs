@@ -126,6 +126,7 @@ impl Peer {
     async fn actor(&self, limit: usize, batch: bool) -> (Actor, Arc<Mutex<Shared>>) {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
+            force_full_frame: false,
             json: String::new(),
             activity: Arc::default(),
             pending_previews: BTreeMap::new(),

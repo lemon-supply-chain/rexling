@@ -241,7 +241,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                             TerminalMenuItem(stringResource(R.string.new_session),ChromeIcon.ADD,enabled=ready,onClick={menu=false;newSession=true})
                             OwnershipMenuItem(controlled,ready&&client.hasScreen) {menu=false;if(controlled) client.releaseControl() else client.takeControl()}
                             QuickThemeMenuItem(palette.dark) {dark->menu=false;model.changeAppearance(if(dark) Appearance.DARK else Appearance.LIGHT)}
-                            TerminalMenuItem(stringResource(R.string.preferences),ChromeIcon.SETTINGS,onClick={menu=false;preferencesOpen=true})
+                            TerminalMenuItem(stringResource(R.string.preferences),ChromeIcon.SETTINGS,enabled=true,onClick={menu=false;preferencesOpen=true})
                             TerminalMenuItem(stringResource(R.string.copy_viewport),ChromeIcon.COPY,enabled=client.hasScreen,onClick={
                                 menu=false;client.terminal.value?.let {screen->(getClipboard(model.getApplication()) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Rex terminal",screen.plainText()))}
                             })
@@ -249,7 +249,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                 menu=false;pasteClipboard()
                             })
                             TerminalMenuItem(stringResource(R.string.attach_image),ChromeIcon.IMAGE,enabled=controlled && model.images.state==null,onClick={menu=false;chooseImage()})
-                            TerminalMenuItem(stringResource(R.string.servers_connected_format,model.connectedCount),ChromeIcon.SERVER,onClick={menu=false;servers=true})
+                            TerminalMenuItem(stringResource(R.string.servers_connected_format,model.connectedCount),ChromeIcon.SERVER,enabled=true,onClick={menu=false;servers=true})
                             TerminalMenuItem(stringResource(R.string.refresh_sessions),ChromeIcon.REFRESH,enabled=state.connected,onClick={menu=false;client.refresh()})
                         }
                     }

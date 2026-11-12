@@ -134,6 +134,7 @@ internal class RexConnection(application: Application, private val scope: Corout
     private var restoreWorkspace=true
     private val activation=PaneActivation()
     private var navigationSerial = 0L
+    private var navigationPendingSince = 0L
     private var keyEpoch by mutableStateOf(0L)
     fun cancelKeyRepeats() {keyEpoch++}
     internal val selectionVersion: Long get()=navigationSerial
@@ -197,6 +198,15 @@ internal class RexConnection(application: Application, private val scope: Corout
                             android.os.Trace.beginSection("Rexlink.ready.$handle.${next.revision}");android.os.Trace.endSection()
                             withContext(Dispatchers.Main.immediate) {
                                 navigationRequest = navigationRequest.acknowledge(next)
+                                // Safety net: never wait forever for a navigation the state already satisfies.
+                                val nowMs=android.os.SystemClock.elapsedRealtime()
+                                if(navigationRequest.pending) {if(navigationPendingSince==0L) navigationPendingSince=nowMs}
+                                else navigationPendingSince=0L
+                                if(navigationRequest.pending && nowMs-navigationPendingSince>2500L &&
+                                    (navigationRequest.session==null || next.selectedSession==navigationRequest.session) &&
+                                    (navigationRequest.block==null || (next.selectedBlock==navigationRequest.block && next.screen!=null))) {
+                                    navigationRequest=NavigationRequest();navigationPendingSince=0L
+                                }
                                 pendingTabOrder=pendingTabOrder?.keepFor(next)
                                 pendingPaneOrder=pendingPaneOrder?.keepFor(next)
                                 val old=state.value
@@ -225,7 +235,7 @@ internal class RexConnection(application: Application, private val scope: Corout
 
                                 openPreferredTerminal();rememberCurrentTerminal();claimActivePane()
                             }
-                        } catch (error: Exception) {
+                        } catch (error: Throwable) {
                             withContext(Dispatchers.Main.immediate) {
                                 navigationRequest = NavigationRequest()
                                 setState(state.value.copy(error = "Could not read terminal state: ${error.message}"))

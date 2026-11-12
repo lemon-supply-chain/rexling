@@ -123,4 +123,20 @@ class TerminalUpdatesTest {
         assertEquals(1, second.screen.imagePlacements[0].col)
     }
 
+    @Test fun versionFourRejectsCorruptedPixelLength() {
+        val decoder = TerminalUpdates()
+        val out = ByteArrayOutputStream()
+        fun number(value: Long, size: Int) { repeat(size) { out.write((value ushr (8 * it)).toInt() and 255) } }
+        fun text(value: String) { val bytes = value.toByteArray(); number(bytes.size.toLong(), 4); out.write(bytes) }
+        out.write("RXT4".toByteArray()); number(1, 8); text(""); number(3, 1)
+        number(2, 2); number(2, 2); number(-1, 4); number(-1, 4); number(-1, 4); number(0xff000000, 4)
+        repeat(3) { number(2, 8) }; number(3, 1); number(0, 2)
+        number(1, 2)
+        number(10, 4); number(1, 8); number(10, 4); number(10, 4)
+        number(9999999, 4)
+        number(0, 2)
+        assertTrue(runCatching { decoder.decode(out.toByteArray()) }.isFailure)
+        assertEquals(0L, decoder.revision)
+    }
+
 }

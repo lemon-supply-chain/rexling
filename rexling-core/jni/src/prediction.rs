@@ -227,6 +227,17 @@ impl Predictor {
         id
     }
 
+    /// Prediction reads the screen under the cursor and rebases on each frame, so a
+    /// frame that only carries dirty rows cannot feed it. Callers ask for every row
+    /// only while a guess is possible: the feature is on, and the pane runs a program
+    /// that accepts predicted typing, or guesses are already pending.
+    pub fn requires_full_frame(&self, program: Program) -> bool {
+        self.mode != Mode::Off
+            && (!matches!(program, Program::Other)
+                || !self.predictions.is_empty()
+                || self.awaiting.is_some())
+    }
+
     /// Forgets predictions made for another pane or connection.
     pub fn retarget(&mut self, target: &str) {
         if target != self.target {
@@ -339,7 +350,13 @@ impl Predictor {
 
     /// Checks predictions against a new server frame.
     pub fn observe(&mut self, frame: Arc<Frame>, now: Instant) {
-        let previous = self.base.replace(frame.clone());
+        // Guesses read the screen under the cursor, so only a frame that holds every row
+        // may become the base; a dirty frame must never hide the rows around the cursor.
+        let previous = if frame.full {
+            self.base.replace(frame.clone())
+        } else {
+            self.base.clone()
+        };
         if let Some((origin, _)) = self.awaiting
             && frame.cursor_at.is_some_and(|at| at != origin)
         {
@@ -473,6 +490,7 @@ impl Predictor {
         Arc::new(Frame {
             columns: frame.columns,
             rows: frame.rows,
+            full: frame.full,
             cursor,
             cursor_at: frame.cursor_at,
             foreground: frame.foreground,
@@ -535,6 +553,7 @@ mod tests {
         Arc::new(Frame {
             columns: COLS,
             rows: ROWS,
+            full: true,
             cursor: visible.then_some(cursor),
             cursor_at: Some(cursor),
             foreground: [200; 3],
@@ -570,6 +589,71 @@ mod tests {
         let echoed = frame(&["$ e"], (3, 0), true, 0);
         p.observe(echoed.clone(), start + Duration::from_millis(200));
         (p, echoed)
+    }
+
+    /// A frame that carries only dirty rows, as the engine reads it when a pane
+    /// cannot be predicted on.
+    fn dirty_frame(lines: &[&str], rows: &[u16], cursor: (u16, u16)) -> Arc<Frame> {
+        let complete = frame(lines, cursor, true, 0);
+        let cells: Vec<Cell> = complete
+            .cells
+            .iter()
+            .filter(|c| rows.contains(&c.y))
+            .cloned()
+            .collect();
+        Arc::new(Frame {
+            columns: complete.columns,
+            rows: complete.rows,
+            full: false,
+            cursor: complete.cursor,
+            cursor_at: complete.cursor_at,
+            foreground: complete.foreground,
+            background: complete.background,
+            cells,
+            images: Vec::new(),
+            placements: Vec::new(),
+            scroll_total: complete.scroll_total,
+            scroll_offset: complete.scroll_offset,
+            scroll_visible: complete.scroll_visible,
+            input_flags: complete.input_flags,
+        })
+    }
+
+    #[test]
+    fn a_dirty_frame_never_becomes_the_base_for_guesses() {
+        let now = Instant::now();
+        let mut p = Predictor::new();
+        p.set_mode(Mode::Always);
+        let base = frame(&["$ echo"], (6, 0), true, 0);
+        p.observe(base.clone(), now);
+        let before = p.base.as_ref().expect("base").cells.len();
+        // A dirty frame around the cursor must not hide the rest of the row.
+        p.observe(dirty_frame(&["$ echo"], &[0], (6, 0)), now);
+        assert_eq!(p.base.as_ref().expect("base").cells.len(), before);
+        assert_eq!(row(p.base.as_ref().expect("base"), 0).as_str(), "$ echo");
+    }
+
+    #[test]
+    fn a_dirty_frame_without_guesses_is_displayed_unchanged() {
+        let now = Instant::now();
+        let mut p = Predictor::new();
+        p.set_mode(Mode::Always);
+        p.observe(frame(&["$"], (2, 0), true, 0), now);
+        let dirty = dirty_frame(&["$ ls"], &[0], (4, 0));
+        let shown = p.display(dirty.clone());
+        assert!(Arc::ptr_eq(&shown, &dirty), "an unchanged frame must pass through");
+        assert_eq!(shown.cells.len(), 20);
+    }
+
+    #[test]
+    fn only_shells_and_pi_ask_for_every_row() {
+        let mut p = Predictor::new();
+        p.set_mode(Mode::Always);
+        assert!(!p.requires_full_frame(Program::Other));
+        assert!(p.requires_full_frame(Program::Shell));
+        assert!(p.requires_full_frame(Program::Pi));
+        p.set_mode(Mode::Off);
+        assert!(!p.requires_full_frame(Program::Shell));
     }
 
     #[test]
@@ -887,6 +971,7 @@ mod tests {
             Frame {
                 columns: self.columns,
                 rows: self.rows,
+                full: self.full,
                 cursor: self.cursor,
                 cursor_at: self.cursor_at,
                 foreground: self.foreground,
