@@ -185,6 +185,11 @@ static int configure(RpTerminal *t) {
   // No WRITE_PTY callback: the server's canonical terminal answers queries.
   uint64_t kitty_limit = 64 * 1024 * 1024;
   if (r == 0) r = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &kitty_limit);
+  // A remote terminal must never read files or shared memory on this phone.
+  bool remote = false;
+  if (r == 0) r = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE, &remote);
+  if (r == 0) r = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_SHARED_MEM, &remote);
+  if (r == 0) r = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_TEMP_FILE, NULL);
   if (r == 0) r = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void *)on_render_hold);
   if (r == 0) ghostty_sys_set(GHOSTTY_SYS_OPT_DECODE_PNG, (const void *)rp_decode_png);
   if (r == 0) r = ghostty_render_state_new(NULL, &t->render);

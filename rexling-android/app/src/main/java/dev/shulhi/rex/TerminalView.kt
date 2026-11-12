@@ -40,6 +40,7 @@ class TerminalView(context: Context) : View(context) {
     private var selection: TerminalSelection?=null
     private var selectionMode: ActionMode?=null
     private var selectionLink: TerminalLink?=null
+    private var selectionInputTarget: String?=null
     private var selectionTouch=false
     private var moveSelectionAnchor=false
     private var pressedLink: TerminalLink?=null
@@ -99,6 +100,7 @@ class TerminalView(context: Context) : View(context) {
             if (field != value) {
                 field = value
                 if (!value) composing = ""
+                selectionMode?.invalidate()
                 (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)
             }
         }
@@ -474,8 +476,14 @@ class TerminalView(context: Context) : View(context) {
     }
     private fun clearSelection() {
         removeCallbacks(longPress)
-        selection=null;selectionLink=null;selectionTouch=false
+        selection=null;selectionLink=null;selectionInputTarget=null;selectionTouch=false
         val mode=selectionMode;selectionMode=null;mode?.finish();invalidate()
+    }
+    private fun canPasteSelection(): Boolean = selection!=null && controlled && interactive &&
+        selectionInputTarget==imageInputTarget() && (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).hasPrimaryClip()
+    internal fun pasteSelection(): Boolean {
+        if(!canPasteSelection() || !onPaste()) return false
+        clearSelection();return true
     }
     private fun selectionEvent(event: MotionEvent): Boolean {
         val current=selection
@@ -508,16 +516,20 @@ class TerminalView(context: Context) : View(context) {
     override fun performLongClick(): Boolean {
         val frame=screen ?: return false
         if(!interactive) return false
+        clearSelection()
         selectionLink=linkAt(pressX,pressY)
         pressedLink=null
         removeCallbacks(longPress);paneGesture.cancel();dragging=false;scrolling=false;scrollFling.abortAnimation();onPaneDrag?.invoke(0f,false)
+        selectionInputTarget=imageInputTarget()
         selection=TerminalSelection(frame,((pressX-insetHorizontal)/cellWidth).toInt(),((pressY-insetTop)/cellHeight).toInt()).also {it.word()}
         selectionTouch=true;moveSelectionAnchor=false;parent?.requestDisallowInterceptTouchEvent(true)
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         selectionMode=startActionMode(object: ActionMode.Callback2() {
             override fun onCreateActionMode(mode: ActionMode,menu: Menu): Boolean {
                 menu.add(0,android.R.id.copy,0,"Copy").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu.add(0,android.R.id.selectAll,1,"Select all").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                menu.add(0,android.R.id.paste,1,"Paste").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.findItem(android.R.id.paste)?.isVisible=canPasteSelection()
+                menu.add(0,android.R.id.selectAll,2,"Select all").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 if(selectionLink!=null) {
                     menu.add(0,0x524501,2,"Open link").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                     menu.add(0,0x524502,3,"Copy link address").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
@@ -526,6 +538,7 @@ class TerminalView(context: Context) : View(context) {
                 return true
             }
             override fun onPrepareActionMode(mode: ActionMode,menu: Menu): Boolean {
+                menu.findItem(android.R.id.paste)?.isVisible=canPasteSelection()
                 for(id in listOf(0x524501,0x524502,0x524503)) menu.findItem(id)?.isVisible=selectionLink!=null
                 return true
             }
@@ -534,13 +547,14 @@ class TerminalView(context: Context) : View(context) {
                     (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Terminal selection",selection?.text().orEmpty()))
                     mode.finish();true
                 }
+                android.R.id.paste -> pasteSelection()
                 android.R.id.selectAll -> {selection?.all();selectionLink=null;invalidate();mode.invalidate();mode.invalidateContentRect();true}
                 0x524501 -> selectedLinkAction(TerminalLinkAction.OPEN)
                 0x524502 -> selectedLinkAction(TerminalLinkAction.COPY_ADDRESS)
                 0x524503 -> selectedLinkAction(TerminalLinkAction.SHARE)
                 else -> false
             }
-            override fun onDestroyActionMode(mode: ActionMode) {if(selectionMode===mode) {selectionMode=null;selection=null;selectionLink=null;invalidate()}}
+            override fun onDestroyActionMode(mode: ActionMode) {if(selectionMode===mode) {selectionMode=null;selection=null;selectionLink=null;selectionInputTarget=null;invalidate()}}
             override fun onGetContentRect(mode: ActionMode,view: View,outRect: android.graphics.Rect) {
                 val selected=selection ?: return super.onGetContentRect(mode,view,outRect)
                 outRect.set((insetHorizontal+selected.first.column*cellWidth).toInt(),(insetTop+selected.first.row*cellHeight).toInt(),

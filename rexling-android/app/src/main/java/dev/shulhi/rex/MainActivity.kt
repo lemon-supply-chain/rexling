@@ -282,7 +282,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                     if(state.error.isNotBlank() && state.phase !in listOf("connecting","reconnecting")) Text(state.error,Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(10.dp),
                         color=MaterialTheme.colorScheme.onErrorContainer,fontSize=11.sp,maxLines=3,overflow=TextOverflow.Ellipsis)
                     if(blocks.isNotEmpty()) {
-                        Box(Modifier.weight(1f).fillMaxWidth().padding(top=3.dp,bottom=3.dp)) {
+                        Box(Modifier.weight(1f).fillMaxWidth().padding(bottom=3.dp)) {
                         if(!floatingActive || hiddenFloating!=chosen) LiveTerminal(client,carouselBlocks,chosen,liveBlock,state.programs,controlled,fontSize.toFloat(),
                             client::type,client::scroll,client::wheel,client::takeControl,client::scrollToBottom,client::resize,::openPane,{picker="panes"},{terminalView=it},
                             Modifier.fillMaxSize(),floatingDock=floating.isNotEmpty(),paneLayout=window?.layout.orEmpty(),titles=state.titles,directories=state.directories,hazeState=terminalHaze,captureBackdrop=floatingBackdrop || wheelBackdrop || ownerBackdrop || readyBackdrop || model.images.state!=null,onImage=imageCommit,onPaste=::pasteClipboard,padding=model.terminalPadding,extendPadding=model.extendPadding)
@@ -304,7 +304,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                 modifier=Modifier.fillMaxSize(),position=model.neovimShortcutPosition,onPosition=model::moveNeovimShortcut,bottomInset=if(floating.isNotEmpty() || carouselBlocks.size>1) 64.dp else 10.dp)
                         }
                         if(floating.isNotEmpty()) FloatingPaneDock(floating,chosen.takeIf {floatingActive && hiddenFloating!=chosen},state.programs,state.titles,ready,
-                            ::openPane,::minimizeFloating,Modifier.align(Alignment.BottomEnd).padding(end=6.dp,bottom=2.dp),directories=state.directories,hazeState=terminalHaze,onExpandedChange={floatingBackdrop=it})
+                            ::openPane,::minimizeFloating,Modifier.align(Alignment.BottomEnd).padding(end=6.dp),directories=state.directories,hazeState=terminalHaze,onExpandedChange={floatingBackdrop=it})
                         }
                     } else Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp),contentAlignment=Alignment.Center) {
                         Text(if(state.connected) stringResource(R.string.choose_session_or_start) else stringResource(R.string.terminals_anywhere),
@@ -321,7 +321,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                     {model.showActivity(true)},{picker="tabs"},attentionCount=model.attentionCount)
                             })
                             KeyboardBar(controlled,ready,client.controlModifier,client.altModifier,client.shiftModifier,keyboardVisible,
-                                client::toggleControl,client::toggleAlt,client::toggleShift,client::pressShift,client::releaseShift,{client.keyForTarget(it,keyTarget)},readable=state.connected,onControlShortcut=client::controlShortcut,inputKey=keyTarget,shortcutGesture=model.shortcutGesture,arrowJoystickEnabled=model.arrowJoystickEnabled) {
+                                client::toggleControl,client::toggleAlt,client::toggleShift,client::pressShift,client::releaseShift,{client.keyForTarget(it,keyTarget)},readable=state.connected,onControlShortcut=client::controlShortcut,inputKey=keyTarget,shortcutGesture=model.shortcutGesture,arrowJoystickEnabled=model.arrowJoystickEnabled,onPaste=::pasteClipboard) {
                                 if(!controlled) client.takeControl() else if(keyboardVisible) terminalView?.hideKeyboard() else terminalView?.keyboard()
                             }
                         }
