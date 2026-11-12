@@ -12,12 +12,16 @@ internal enum class NeovimShortcutEffect(val label: String,val openMillis: Int,v
     }
 }
 
-/** [confirm] asks before sending; written as a leading `!` in the editor. */
-internal data class NeovimShortcut(val label: String,val keys: String,val group: String="",val confirm: Boolean=false)
+/**
+ * [confirm] asks before sending; written as a leading `!` in the editor. [category] colours the
+ * sector of the item's group, written as `[Group:green]`, and is shared by every item in the group.
+ */
+internal data class NeovimShortcut(val label: String,val keys: String,val group: String="",val confirm: Boolean=false,val category: WheelCategory?=null)
 internal sealed interface NeovimShortcutEntry {
     val label: String
-    data class Action(val shortcut: NeovimShortcut): NeovimShortcutEntry {override val label get()=shortcut.label}
-    data class Group(override val label: String): NeovimShortcutEntry
+    val category: WheelCategory?
+    data class Action(val shortcut: NeovimShortcut): NeovimShortcutEntry {override val label get()=shortcut.label;override val category get()=shortcut.category}
+    data class Group(override val label: String,override val category: WheelCategory?=null): NeovimShortcutEntry
 }
 
 internal object NeovimShortcuts {
@@ -25,7 +29,7 @@ internal object NeovimShortcuts {
     fun editorText(items: List<NeovimShortcut>): String = buildList {
         var group=""
         items.forEach {item->
-            if(item.group!=group) {add("[${item.group}]");group=item.group}
+            if(item.group!=group) {add("[${item.group}${item.category?.let {":${it.key}"}.orEmpty()}]");group=item.group}
             val line=if(item.label==item.keys && !(item.keys.startsWith("[") && item.keys.endsWith("]")) && !item.keys.startsWith("!")) item.keys else "${item.label} = ${item.keys}"
             add(if(item.confirm) "!$line" else line)
         }
@@ -35,18 +39,26 @@ internal object NeovimShortcuts {
         val seen=mutableSetOf<String>()
         return buildList {items.forEach {item->
             if(item.group.isEmpty()) add(NeovimShortcutEntry.Action(item))
-            else if(seen.add(item.group)) add(NeovimShortcutEntry.Group(item.group))
+            else if(seen.add(item.group)) add(NeovimShortcutEntry.Group(item.group,item.category))
         }}
     }
     fun parse(text: String): List<NeovimShortcut> {
         val lines=text.lineSequence().map {it.trim()}.filter {it.isNotEmpty()}.toList()
         var group=""
         val groups=mutableSetOf<String>()
+        // A group keeps one colour; a later header without a colour reopens it unchanged.
+        val categories=mutableMapOf<String,WheelCategory>()
         val items=mutableListOf<NeovimShortcut>()
         lines.forEach {line->
             if(line.startsWith("[") && line.endsWith("]") && !line.contains(" = ")) {
-                group=line.substring(1,line.lastIndex).trim()
+                val (name,category)=splitCategory(line.substring(1,line.lastIndex).trim())
+                group=name
                 require(group.length<=40 && group.none {it=='[' || it==']' || it.isISOControl() || Character.getType(it)==Character.FORMAT.toInt()}) {"Use a group name of at most 40 characters. Groups support one level only."}
+                require(category==null || group.isNotEmpty()) {"Put the colour after a group name, such as [Git:green]."}
+                if(category!=null) {
+                    val previous=categories.putIfAbsent(group,category)
+                    require(previous==null || previous==category) {"Give each group one colour."}
+                }
                 if(group.isNotEmpty()) groups.add(group)
                 return@forEach
             }
@@ -62,6 +74,7 @@ internal object NeovimShortcuts {
             decodeKeys(keys)
             items.add(NeovimShortcut(label,keys,group,confirm))
         }
+        for(i in items.indices) categories[items[i].group]?.let {items[i]=items[i].copy(category=it)}
         require(items.map {it.group to it.label}.distinct().size==items.size) {"Give shortcuts in the same group different names."}
         val populatedGroups=items.mapTo(mutableSetOf()) {it.group}
         require(populatedGroups.containsAll(groups)) {"Add at least one shortcut to each group."}
@@ -94,10 +107,23 @@ internal object NeovimShortcuts {
             append(value);i=end+1
         }
     }
-    fun encode(items: List<NeovimShortcut>)=JSONArray().apply {items.forEach {item->put(JSONObject().put("label",item.label).put("keys",item.keys).apply {if(item.group.isNotEmpty()) put("group",item.group);if(item.confirm) put("confirm",true)})}}.toString()
+    /** A trailing `:blue`, `:green`, `:orange` or `:purple` names the group colour; anything else stays in the name. */
+    fun splitCategory(header: String): Pair<String,WheelCategory?> {
+        val colon=header.lastIndexOf(':')
+        val category=if(colon<0) null else WheelCategory.fromKey(header.substring(colon+1).trim())
+        return if(category==null) header to null else header.take(colon).trim() to category
+    }
+    fun encode(items: List<NeovimShortcut>)=JSONArray().apply {items.forEach {item->put(JSONObject().put("label",item.label).put("keys",item.keys).apply {
+        if(item.group.isNotEmpty()) put("group",item.group);if(item.confirm) put("confirm",true);item.category?.let {put("category",it.key)}})}}.toString()
+    /** Stored shape shared with shortcut profiles. Older groups named like `Git:green` take that colour. */
+    fun item(o: JSONObject): NeovimShortcut {
+        val stored=WheelCategory.fromKey(o.optString("category"))
+        val (group,named)=if(stored==null) splitCategory(o.optString("group")) else o.optString("group") to stored
+        return NeovimShortcut(o.getString("label"),o.getString("keys"),group,o.optBoolean("confirm"),named)
+    }
     fun decode(text: String?): List<NeovimShortcut> = if(text==null) defaults else runCatching {
         val array=JSONArray(text)
-        val items=(0 until array.length()).map {i->array.getJSONObject(i).let {NeovimShortcut(it.getString("label"),it.getString("keys"),it.optString("group"),it.optBoolean("confirm"))}}
+        val items=(0 until array.length()).map {i->item(array.getJSONObject(i))}
         parse(editorText(items)).also {require(it==items)}
     }.getOrDefault(defaults)
 

@@ -1,7 +1,5 @@
 package dev.shulhi.rex
 
-import dev.chrisbanes.haze.HazeState
-
 import androidx.activity.compose.BackHandler
 
 import androidx.compose.foundation.layout.*
@@ -46,9 +44,9 @@ import androidx.compose.ui.window.PopupProperties
 import kotlin.math.roundToInt
 
 @Composable internal fun NeovimShortcutButton(items: List<NeovimShortcut>,target: String,enabled: Boolean,onChoose: (NeovimShortcut,String)->Unit,onCustomize: ()->Unit,modifier: Modifier=Modifier,
-    position: Offset=Offset(0f,1f),onPosition: (Offset)->Unit={},bottomInset: Dp=10.dp,layout: NeovimShortcutLayout=NeovimShortcutLayout.GRID,effect: NeovimShortcutEffect=NeovimShortcutEffect.FAN_OUT,hapticsEnabled: Boolean=true,name: String="Neovim",hazeState: HazeState?=null,onExpandedChange: (Boolean)->Unit={}) {
+    position: Offset=Offset(0f,1f),onPosition: (Offset)->Unit={},bottomInset: Dp=10.dp,layout: NeovimShortcutLayout=NeovimShortcutLayout.GRID,effect: NeovimShortcutEffect=NeovimShortcutEffect.FAN_OUT,hapticsEnabled: Boolean=true,name: String="Neovim") {
     if(layout==NeovimShortcutLayout.CIRCULAR) {
-        NeovimRadialShortcutButton(items,target,enabled,onChoose,modifier,position,onPosition,bottomInset,effect,hapticsEnabled,name,hazeState,onExpandedChange)
+        NeovimRadialShortcutButton(items,target,enabled,onChoose,modifier,position,onPosition,bottomInset,effect,hapticsEnabled,name)
         return
     }
     var open by remember(target) {mutableStateOf(false)}
@@ -94,6 +92,7 @@ import kotlin.math.roundToInt
 
 /** Small visible floating button; its parent retains the full 48 dp touch/drag target. */
 @Composable internal fun NeovimShortcutButtonFace(active: Boolean,enabled: Boolean,modifier: Modifier=Modifier,close: Boolean=false) {
+    // The trigger keeps its dark chip in every theme; only the menu it opens follows the theme.
     Box(modifier.size(40.dp).alpha(if(active) 1f else .5f).clip(CircleShape)
         .background(Color.Black.copy(alpha=if(!enabled) .22f else if(active) .78f else .54f))
         .border(1.dp,Color.White.copy(alpha=.14f),CircleShape),contentAlignment=Alignment.Center) {
@@ -115,6 +114,7 @@ import kotlin.math.roundToInt
     val hasGroups=root.any {it is NeovimShortcutEntry.Group}
     val slotCount=remember(items) {maxOf(root.size,items.groupBy {it.group}.filterKeys {it.isNotEmpty()}.values.maxOfOrNull {it.size} ?: 0)}
     val rows=((minOf(slotCount,6)+1)/2).coerceAtLeast(1)
+    val colors=rememberWheelColors()
     Popup(popupPositionProvider=provider,onDismissRequest={},properties=PopupProperties(focusable=false,dismissOnClickOutside=false,dismissOnBackPress=false)) {
         key(group) {
         val entries=NeovimShortcuts.entries(items,group)
@@ -140,7 +140,9 @@ import kotlin.math.roundToInt
                                 if(item==null) Spacer(Modifier.weight(1f).fillMaxHeight())
                                 else Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal=if(item is NeovimShortcutEntry.Group) 3.dp else 0.dp,vertical=if(item is NeovimShortcutEntry.Group) 3.dp else 0.dp)
                                     .clip(RoundedCornerShape(if(item is NeovimShortcutEntry.Group) 24.dp else 11.dp))
-                                    .then(if(item is NeovimShortcutEntry.Group) Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha=.065f))
+                                    .then(colors.categoryFill(item.category)?.let {Modifier.background(it)} ?: Modifier)
+                                    .then(if(item is NeovimShortcutEntry.Group) Modifier.then(if(item.category==null) Modifier.background(colors.content.copy(alpha=.065f)) else Modifier)
+                                        .border(1.5.dp,colors.categoryMarker(item.category) ?: Color.Transparent,RoundedCornerShape(24.dp))
                                         .semantics {contentDescription="Shortcut group ${item.label}"} else Modifier)
                                     .clickable(role=Role.Button) {when(item) {
                                         is NeovimShortcutEntry.Action->onChoose(item.shortcut)

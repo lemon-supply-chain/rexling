@@ -107,7 +107,7 @@ internal object ShortcutProfiles {
         val profiles=(0 until array.length()).mapNotNull {i-> runCatching {
             val o=array.getJSONObject(i)
             val stored=o.getJSONArray("items")
-            val items=(0 until stored.length()).map {j->stored.getJSONObject(j).let {NeovimShortcut(it.getString("label"),it.getString("keys"),it.optString("group"),it.optBoolean("confirm"))}}
+            val items=(0 until stored.length()).map {j->NeovimShortcuts.item(stored.getJSONObject(j))}
             val enter=runCatching {ShortcutEnter.valueOf(o.getString("enter"))}.getOrDefault(ShortcutEnter.TEXT)
             val match=o.getJSONArray("match").let {m->(0 until m.length()).map {m.getString(it)}}
             build(o.getString("id"),o.getString("name"),match.joinToString(","),o.optString("prefix"),enter,o.optBoolean("enabled",true),NeovimShortcuts.editorText(items),emptyList())

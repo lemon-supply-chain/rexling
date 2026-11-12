@@ -73,6 +73,14 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable internal fun RexTheme(dark: Boolean,theme: AppTheme,content: @Composable ()->Unit) {
+    val scheme=remember(dark,theme) {rexColorScheme(dark,theme)}
+    CompositionLocalProvider(LocalTerminalPalette provides theme.terminal) {
+        MaterialTheme(colorScheme=scheme,content=content)
+    }
+}
+
+/** The app colour scheme for one appearance, shared with tests that check every preset. */
+internal fun rexColorScheme(dark: Boolean,theme: AppTheme): androidx.compose.material3.ColorScheme {
     val base=if(dark) darkColorScheme(primary=Color(0xff315cf4),onPrimary=Color.White,
         background=Color(0xff090c11),surface=Color(0xff141922),onSurface=Color(0xffe5e9f2),
         surfaceVariant=Color(0xff232934),onSurfaceVariant=Color(0xff969fb1),outline=Color(0xff2b3341))
@@ -89,9 +97,7 @@ class MainActivity : ComponentActivity() {
         primaryContainer=primaryContainer,onPrimaryContainer=onPrimaryContainer,
         secondary=base.primary,onSecondary=base.onPrimary,secondaryContainer=primaryContainer,onSecondaryContainer=onPrimaryContainer,
         tertiary=base.primary,onTertiary=base.onPrimary,tertiaryContainer=primaryContainer,onTertiaryContainer=onPrimaryContainer)
-    CompositionLocalProvider(LocalTerminalPalette provides theme.terminal) {
-        MaterialTheme(colorScheme=scheme.withPreset(theme),content=content)
-    }
+    return scheme.withPreset(theme)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +127,6 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     val workspaceHaze=remember {HazeState()}
     var readyBackdrop by remember {mutableStateOf(false)}
     var floatingBackdrop by remember {mutableStateOf(false)}
-    var wheelBackdrop by remember {mutableStateOf(false)}
     var ownerBackdrop by remember {mutableStateOf(false)}
     val palette=LocalTerminalPalette.current
     var endpoint by rememberSaveable {mutableStateOf(client.savedEndpoint)}
@@ -285,7 +290,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                         Box(Modifier.weight(1f).fillMaxWidth().padding(bottom=3.dp)) {
                         if(!floatingActive || hiddenFloating!=chosen) LiveTerminal(client,carouselBlocks,chosen,liveBlock,state.programs,controlled,fontSize.toFloat(),
                             client::type,client::scroll,client::wheel,client::takeControl,client::scrollToBottom,client::resize,::openPane,{picker="panes"},{terminalView=it},
-                            Modifier.fillMaxSize(),floatingDock=floating.isNotEmpty(),paneLayout=window?.layout.orEmpty(),titles=state.titles,directories=state.directories,hazeState=terminalHaze,captureBackdrop=floatingBackdrop || wheelBackdrop || ownerBackdrop || readyBackdrop || model.images.state!=null,onImage=imageCommit,onPaste=::pasteClipboard,padding=model.terminalPadding,extendPadding=model.extendPadding)
+                            Modifier.fillMaxSize(),floatingDock=floating.isNotEmpty(),paneLayout=window?.layout.orEmpty(),titles=state.titles,directories=state.directories,hazeState=terminalHaze,captureBackdrop=floatingBackdrop || ownerBackdrop || readyBackdrop || model.images.state!=null,onImage=imageCommit,onPaste=::pasteClipboard,padding=model.terminalPadding,extendPadding=model.extendPadding)
                         if(floatingActive && hiddenFloating==chosen) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
                             Text(stringResource(R.string.floating_panes_minimized),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -300,7 +305,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                     if(item.confirm) pendingShortcut=Triple(shortcutProfile,item,target)
                                     else client.shortcut(model.shortcutProfiles,shortcutProfile,item,target)
                                 },onCustomize={editingProfile=shortcutProfile.id},layout=model.neovimShortcutLayout,effect=model.neovimShortcutEffect,hapticsEnabled=model.neovimShortcutHaptics,
-                                name=shortcutProfile.name,hazeState=terminalHaze,onExpandedChange={wheelBackdrop=it},
+                                name=shortcutProfile.name,
                                 modifier=Modifier.fillMaxSize(),position=model.neovimShortcutPosition,onPosition=model::moveNeovimShortcut,bottomInset=if(floating.isNotEmpty() || carouselBlocks.size>1) 64.dp else 10.dp)
                         }
                         if(floating.isNotEmpty()) FloatingPaneDock(floating,chosen.takeIf {floatingActive && hiddenFloating!=chosen},state.programs,state.titles,ready,

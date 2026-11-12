@@ -251,7 +251,7 @@
     <string name="enter_text_detail">普通文本自动附带 Enter；&lt;C-c&gt; 等组合按键不会附带。</string>
     <string name="enter_ex_commands">仅 : 命令</string>
     <string name="enter_ex_commands_detail">仅普通 : 命令附带 Enter，如 Neovim 命令。</string>
-    <string name="shortcut_syntax_hint">每行一个快捷键，可命名：名称 = 按键。[分组] 标题将后续快捷键放入子菜单；[] 结束分组。以 ! 开头将在发送前确认。按键表示法：&lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, 方向键及 F1–F12。</string>
+    <string name="shortcut_syntax_hint">每行一个快捷键，可命名：名称 = 按键。[分组] 标题将后续快捷键放入子菜单；[] 结束分组。在分组名后加 :blue、:green、:orange 或 :purple 可为分组着色，例如 [Git:green]。以 ! 开头将在发送前确认。按键表示法：&lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, 方向键及 F1–F12。</string>
     <string name="reset_shortcuts">重置快捷键</string>
     <string name="delete_profile_title">删除 %s？</string>
     <string name="delete_profile_confirm">其快捷键将从此手机中移除。</string>

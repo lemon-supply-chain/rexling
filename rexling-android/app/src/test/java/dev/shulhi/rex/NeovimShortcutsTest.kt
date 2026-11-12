@@ -89,6 +89,30 @@ class NeovimShortcutsTest {
         assertEquals(grouped,NeovimShortcuts.decode(NeovimShortcuts.encode(grouped)))
         assertEquals("\u001c\u000e${flat.last().keys}\r",input(grouped.last()))
     }
+    @Test fun groupColoursParseRoundTripAndApplyToEveryItemInTheGroup() {
+        val items=NeovimShortcuts.parse(":w\n[Git:green]\nLazyGit = <Space>lg\nBlame = <Space>gb\n[]\n[Files:Purple]\nFind = <Space>ff\n[Git]\nLog = <Space>gl")
+        assertEquals(listOf(null,WheelCategory.GREEN,WheelCategory.GREEN,WheelCategory.PURPLE,WheelCategory.GREEN),items.map {it.category})
+        assertEquals(listOf("","Git","Git","Files","Git"),items.map {it.group})
+        val root=NeovimShortcuts.entries(items)
+        assertEquals(NeovimShortcutEntry.Group("Git",WheelCategory.GREEN),root[1])
+        assertEquals(NeovimShortcutEntry.Group("Files",WheelCategory.PURPLE),root[2])
+        assertTrue(NeovimShortcuts.entries(items,"Git").all {it.category==WheelCategory.GREEN})
+        assertEquals(items,NeovimShortcuts.parse(NeovimShortcuts.editorText(items)))
+        assertEquals(items,NeovimShortcuts.decode(NeovimShortcuts.encode(items)))
+        assertTrue(NeovimShortcuts.editorText(items).contains("[Git:green]"))
+    }
+    @Test fun unknownColourSuffixesStayInTheGroupNameAndConflictsAreRejected() {
+        val items=NeovimShortcuts.parse("[Notes:todo]\nOpen = :e notes")
+        assertEquals("Notes:todo",items.single().group);assertNull(items.single().category)
+        try {NeovimShortcuts.parse("[Git:green]\nA = a\n[Git:blue]\nB = b");fail("Two colours accepted")} catch(_: IllegalArgumentException) {}
+        try {NeovimShortcuts.parse("[:green]\nA = a");fail("Colour without a group accepted")} catch(_: IllegalArgumentException) {}
+    }
+    @Test fun savedProfilesKeepGroupColours() {
+        val items=NeovimShortcuts.parse("[Git:orange]\nLazyGit = <Space>lg")
+        val profile=ShortcutProfiles.build("p","Git","nvim","",ShortcutEnter.TEXT,true,NeovimShortcuts.editorText(items),emptyList())
+        val restored=ShortcutProfiles.decode(ShortcutProfiles.encode(listOf(profile))) {emptyList()}
+        assertEquals(WheelCategory.ORANGE,restored.single().items.single().category)
+    }
     @Test fun olderSavedListsAndLiteralBracketKeySequencesStillLoad() {
         val old="""[{"label":":w","keys":":w"},{"label":"[]","keys":"[]"}]"""
         assertEquals(listOf(NeovimShortcut(":w",":w"),NeovimShortcut("[]","[]")),NeovimShortcuts.decode(old))

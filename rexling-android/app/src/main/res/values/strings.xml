@@ -251,7 +251,7 @@
     <string name="enter_text_detail">Plain text gets Enter; key sequences such as &lt;C-c&gt; do not.</string>
     <string name="enter_ex_commands">: commands</string>
     <string name="enter_ex_commands_detail">Only plain : commands get Enter, as in Neovim.</string>
-    <string name="shortcut_syntax_hint">One shortcut per line, optionally named: Name = keys. [Group] headers put the following shortcuts in a submenu; [] ends the group. Start a line with ! to ask before sending it. Key notation: &lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, arrows and F1–F12.</string>
+    <string name="shortcut_syntax_hint">One shortcut per line, optionally named: Name = keys. [Group] headers put the following shortcuts in a submenu; [] ends the group. Add :blue, :green, :orange or :purple to colour a group, as in [Git:green]. Start a line with ! to ask before sending it. Key notation: &lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, arrows and F1–F12.</string>
     <string name="reset_shortcuts">Reset shortcuts</string>
     <string name="delete_profile_title">Delete %s?</string>
     <string name="delete_profile_confirm">Its shortcuts will be removed from this phone.</string>
