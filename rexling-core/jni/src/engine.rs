@@ -2578,18 +2578,6 @@ fn program_candidates(process: &Value, status: &Value) -> Value {
     for key in ["script", "argv0", "invoked_path", "path", "name"] {
         add(&source[key]);
     }
-    if let Some(ancestors) = process["ancestors"].as_array() {
-        for ancestor in ancestors {
-            for key in ["script", "argv0", "invoked_path", "path", "name"] {
-                add(&ancestor[key]);
-            }
-        }
-    }
-    if foreground.is_object() {
-        for key in ["script", "argv0", "invoked_path", "path", "name"] {
-            add(&process["child"][key]);
-        }
-    }
     json!(names)
 }
 /// Predictions belong to one pane on one connection.
@@ -3232,6 +3220,28 @@ mod tests {
             json!(["-fish", "fish"])
         );
         assert_eq!(program_candidates(&json!({}), &status), json!([]));
+    }
+    #[test]
+    fn program_candidates_do_not_include_ancestor_or_child_identifiers_with_foreground() {
+        let process = json!({
+            "foreground":{"pid":2,"name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh"},
+            "ancestors":[{"pid":1,"name":"login","path":"/usr/bin/login"}],
+            "child":{"pid":1,"name":"login","path":"/usr/bin/login"}
+        });
+        assert_eq!(
+            program_candidates(&process, &json!({})),
+            json!(["-zsh", "/bin/zsh", "zsh"])
+        );
+        let process = json!({
+            "foreground":{"pid":3,"name":"node","script":"/tools/agent.js","argv0":"node"},
+            "ancestors":[{"pid":2,"name":"zsh","argv0":"-zsh"},{"pid":1,"name":"login"}],
+            "child":{"pid":1,"name":"login"}
+        });
+        let status = json!({"records":[{"effective_app":"claude-code","owner":{"pid":3,"name":"node"}}]});
+        assert_eq!(
+            program_candidates(&process, &status),
+            json!(["claude-code", "/tools/agent.js", "node"])
+        );
     }
     #[test]
     fn program_titles_prefer_live_terminal_titles_and_reject_stale_owners() {
