@@ -530,7 +530,19 @@ impl Actor {
             }
             let active = !self.paused;
             // Snapshot the stream state before the select so its future never borrows self.
-            let data_pending = self.data.is_none();
+            // Only a stream that can actually be reopened may wake the actor early. An
+            // actor without a pane (every background monitor, or one between panes)
+            // keeps a retry deadline in the past; letting that arm the timer fired it
+            // on every turn and spun this thread at 100% of a core.
+            let data_pending = self.data.is_none()
+                && self.control.is_some()
+                && !self.selected_session.is_empty()
+                && !self.selected_block.is_empty();
+            // A due reconnect wakes the actor on time instead of on the next
+            // maintenance second; the turn that starts it clears `retry`.
+            let reconnect_at = self
+                .retry
+                .filter(|_| self.network_online && self.connect_task.is_none());
             tokio::select! {
                 value=rx.recv()=>{
                     let Some(value)=value else{break;};
@@ -648,6 +660,7 @@ impl Actor {
                 _=async {if active {
                     let mut at=if self.dirty && self.visible {render_at}else{maintenance_at};
                     if data_pending && self.data_retry_at < at {at=self.data_retry_at;}
+                    if let Some(retry)=reconnect_at && retry<at {at=retry;}
                     tokio::time::sleep_until(at).await;
                 }else{pending::<()>().await;}}=>{
                     let now=tokio::time::Instant::now();
@@ -2989,6 +3002,67 @@ mod tests {
             layout[3],
             json!({"id":"d","rect":[0.1,0.1,0.5,0.5],"layer":1,"floating":true})
         );
+    }
+    /// Run an actor for `wait`, returning how many turns it took and its longest
+    /// single turn. A busy loop never parks the thread, so this counts the actor's
+    /// own polls: a spinning select either yields to the coop budget thousands of
+    /// times or never returns from one long poll. An idle actor does neither.
+    fn actor_turns(commands: Vec<Value>, wait: Duration) -> (u32, Duration) {
+        let shared = Arc::new(Mutex::new(Shared {
+            revision: 0,
+            force_full_frame: false,
+            json: String::new(),
+            pending_previews: BTreeMap::new(),
+            frame: None,
+            key: String::new(),
+            wire: crate::updates::WireBase::default(),
+            activity: Arc::default(),
+        }));
+        let (tx, rx) = mpsc::channel(8);
+        for command in commands {
+            tx.try_send(command).unwrap();
+        }
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let actor = Actor::new(shared, Arc::new(crate::updates::Updates::default()));
+        let stopper = std::thread::spawn(move || {
+            std::thread::sleep(wait);
+            let _ = tx.blocking_send(json!({"type":"shutdown"}));
+        });
+        let mut run = Box::pin(actor.run(rx));
+        let mut polls = 0u32;
+        let mut longest = Duration::ZERO;
+        runtime.block_on(std::future::poll_fn(|cx| {
+            let started = std::time::Instant::now();
+            let result = run.as_mut().poll(cx);
+            polls += 1;
+            longest = longest.max(started.elapsed());
+            result
+        }));
+        stopper.join().unwrap();
+        (polls, longest)
+    }
+    #[test]
+    fn an_actor_without_a_data_stream_sleeps_between_maintenance_turns() {
+        // A monitor (or any actor showing no pane) holds no data stream. Its
+        // retry deadline is in the past, so the select must still wait for the
+        // next maintenance turn instead of re-arming an expired timer forever.
+        let (polls, longest) = actor_turns(Vec::new(), Duration::from_millis(300));
+        assert!(polls < 20, "idle actor ran {polls} turns in 300 ms");
+        assert!(longest < Duration::from_millis(50), "idle actor held the thread for {longest:?}");
+    }
+    #[test]
+    fn a_reconnecting_actor_waits_for_its_backoff_without_spinning() {
+        // Nothing listens on port 1, so the connection fails at once and the actor
+        // schedules a reconnect a second later. It must sleep until then.
+        let (polls, longest) = actor_turns(
+            vec![json!({"type":"connect","server":"http://127.0.0.1:1"})],
+            Duration::from_millis(400),
+        );
+        assert!(polls < 40, "reconnecting actor ran {polls} turns in 400 ms");
+        assert!(longest < Duration::from_millis(100), "reconnecting actor held the thread for {longest:?}");
     }
     #[test]
     fn pane_layout_ignores_unknown_ids_and_invalid_leaves() {
