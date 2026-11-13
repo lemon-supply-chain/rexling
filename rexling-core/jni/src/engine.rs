@@ -553,6 +553,10 @@ impl Actor {
                         else {self.commands.clear();if let Err(error)=self.release_selected().await {self.recover(error);}self.publish();}
                         continue;
                     }
+                    if value["type"]=="scroll" {
+                        self.execute_command(value).await;
+                        continue;
+                    }
                     if matches!(value["type"].as_str(),Some("connect"|"retry"|"network"|"resume"|"activity")) {maintenance_at=tokio::time::Instant::now();}
                     if matches!(value["type"].as_str(),Some("monitor"|"connect"|"disconnect"|"pause"|"network"|"retry")) {
                         self.commands.clear();self.execute_command(value).await;
@@ -3040,6 +3044,51 @@ mod tests {
         let (polls, longest) = actor_turns(Vec::new(), Duration::from_millis(300));
         assert!(polls < 20, "idle actor ran {polls} turns in 300 ms");
         assert!(longest < Duration::from_millis(50), "idle actor held the thread for {longest:?}");
+    }
+    #[test]
+    fn local_scroll_bypasses_unacknowledged_input_and_checks_the_block() {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        runtime.block_on(async {
+            let mut terminal = rex_core::ghostty::Terminal::new(10, 3).unwrap();
+            for line in 0..20 { terminal.write(format!("L{line:02}\r\n").as_bytes()).unwrap(); }
+            let mut replica = Replica::new(1);
+            replica.feed(&terminal.encode().unwrap()).unwrap();
+            let shared = Arc::new(Mutex::new(Shared {
+                revision: 0, force_full_frame: false, json: String::new(),
+                pending_previews: BTreeMap::new(), frame: None, key: String::new(),
+                wire: crate::updates::WireBase::default(), activity: Arc::default(),
+            }));
+            let mut actor = Actor::new(shared.clone(), Arc::new(crate::updates::Updates::default()));
+            actor.selected_session = "s".into();
+            actor.selected_block = "b".into();
+            actor.replica = Some(replica);
+            actor.input_acks.push_back(InputAck {
+                target: actor.input_target(), paste: true, reply: Box::pin(pending()),
+            });
+            let (sender, receiver) = mpsc::channel(8);
+            let run = actor.run(receiver);
+            let commands = async {
+                sender.send(json!({"type":"scroll","block":"b","lines":-10000})).await.unwrap();
+                tokio::time::timeout(Duration::from_secs(1), async {
+                    loop {
+                        if shared.lock().unwrap().frame.as_ref().is_some_and(|frame| frame.scroll_offset == 0) { break; }
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                }).await.unwrap();
+                sender.send(json!({"type":"scroll","block":"stale","bottom":true})).await.unwrap();
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                assert_eq!(shared.lock().unwrap().frame.as_ref().unwrap().scroll_offset, 0);
+                sender.send(json!({"type":"scroll","block":"b","bottom":true})).await.unwrap();
+                tokio::time::timeout(Duration::from_secs(1), async {
+                    loop {
+                        if shared.lock().unwrap().frame.as_ref().is_some_and(|frame| frame.scroll_offset > 0) { break; }
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                }).await.unwrap();
+                sender.send(json!({"type":"shutdown"})).await.unwrap();
+            };
+            tokio::join!(run, commands);
+        });
     }
     #[test]
     fn a_reconnecting_actor_waits_for_its_backoff_without_spinning() {

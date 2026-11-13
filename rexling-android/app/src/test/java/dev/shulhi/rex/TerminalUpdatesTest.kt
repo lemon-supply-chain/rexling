@@ -7,14 +7,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalUpdatesTest {
-    private fun packet(revision: Long,flag: Int,changed: Map<Int,String>,metadata: String="",version: Int=1,links: Map<Int,List<Triple<Int,Int,String>>> = emptyMap(),payloads: List<TerminalImagePayload> = emptyList(),placements: List<TerminalImagePlacement> = emptyList()): ByteArray {
+    private fun packet(revision: Long,flag: Int,changed: Map<Int,String>,metadata: String="",version: Int=1,links: Map<Int,List<Triple<Int,Int,String>>> = emptyMap(),payloads: List<TerminalImagePayload> = emptyList(),placements: List<TerminalImagePlacement> = emptyList(),shift: Int=0): ByteArray {
         val out=ByteArrayOutputStream()
         fun number(value: Long,size: Int) {repeat(size){out.write((value ushr (8*it)).toInt() and 255)}}
         fun text(value: String) {val bytes=value.toByteArray();number(bytes.size.toLong(),4);out.write(bytes)}
         out.write("RXT$version".toByteArray());number(revision,8);text(metadata);number(flag.toLong(),1)
         if(flag>=2) {
             number(2,2);number(2,2);number(-1,4);number(-1,4);number(-1,4);number(0xff000000,4)
-            repeat(3){number(2,8)};if(version>=2) number(3,1);number(changed.size.toLong(),2)
+            repeat(3){number(2,8)};if(version>=2) number(3,1)
+            if(version>=5) number(shift.toLong(),2)
+            number(changed.size.toLong(),2)
             changed.forEach {(row,value)->
                 number(row.toLong(),2);number(1,2);number(0,2);number(1,1);number(0,4);number(-1,4);number(0xff000000,4);text(value)
                 if(version>=3) {val ranges=links[row].orEmpty();number(ranges.size.toLong(),2);for((start,end,url) in ranges) {number(start.toLong(),2);number(end.toLong(),2);text(url)}}
@@ -139,4 +141,33 @@ class TerminalUpdatesTest {
         assertEquals(0L, decoder.revision)
     }
 
+    @Test fun shiftedRowsKeepHyperlinksAndLocalImagePlacementFormat() {
+        val decoder=TerminalUpdates()
+        val payload=TerminalImagePayload(42,1,1,1,byteArrayOf(-1,0,0,-1))
+        val placement=TerminalImagePlacement(42,0,1,1,1,0,0,8,16,0,0,1,1,0)
+        decoder.decode(packet(1,3,mapOf(0 to "a",1 to "Docs"),version=5,
+            links=mapOf(1 to listOf(Triple(0,1,"https://example.com"))),payloads=listOf(payload),placements=listOf(placement)))
+        val shifted=decoder.decode(packet(2,2,mapOf(1 to "new"),version=5,shift=1,placements=listOf(placement.copy(row=0)))).screen!!
+        assertEquals(listOf("Docs","new"),shifted.lines.map {it.single().text})
+        assertEquals(listOf(0,1),shifted.cells.map {it.y})
+        assertEquals("https://example.com",shifted.lines[0].single().hyperlink)
+        assertTrue(shifted.imagePayloads.isEmpty())
+        assertEquals(placement.copy(row=0),shifted.imagePlacements.single())
+        val back=decoder.decode(packet(3,2,mapOf(0 to "above"),version=5,shift=-1)).screen!!
+        assertEquals(listOf("above","Docs"),back.lines.map {it.single().text})
+        assertEquals(1,back.lines[1].single().y)
+    }
+
+    @Test fun invalidShiftsDoNotAdvanceOrDestroyTheBase() {
+        val decoder=TerminalUpdates()
+        decoder.decode(packet(1,3,mapOf(0 to "a",1 to "b"),version=5))
+        for(invalid in listOf(packet(2,2,emptyMap(),version=5,shift=1),
+            packet(2,2,mapOf(0 to "x"),version=5,shift=-2),
+            packet(2,3,mapOf(0 to "x",1 to "y"),version=5,shift=1))) {
+            assertTrue(runCatching {decoder.decode(invalid)}.isFailure)
+            assertEquals(1L,decoder.revision)
+        }
+        val valid=decoder.decode(packet(2,2,mapOf(1 to "c"),version=5,shift=1)).screen!!
+        assertEquals(listOf("b","c"),valid.cells.map {it.text})
+    }
 }

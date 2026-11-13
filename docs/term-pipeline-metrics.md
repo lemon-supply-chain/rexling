@@ -103,3 +103,57 @@ the dirty path; a shell prompt keeps the predictable path.
    handing the decoder a direct `ByteBuffer` over the packet. That is ~5 MB per
    frame per repaint (10 MB at 1408×1920), around 40–80 MB/s at the observed
    device cadence, and it is the next measurable step.
+
+## Scroll optimization compatibility
+
+Reviewed on 2026-11-13 against local `35823fa2fcc116035a1215a027da22f37139888d`:
+[upstream scrolling change 601c385](https://github.com/michaelcosj/rexling/commit/601c3852fe4ff4db6fcb201d059266c1fe37506c).
+The recommendation is to adapt the useful parts, not cherry-pick it unchanged.
+A disposable three-way merge using its parent `bb9cb5c` reports conflicts in
+nine of the ten changed files, including a modify/delete conflict for the
+upstream `src/graphics.rs`, which this project does not use.
+
+- Row-shift deltas and moving row recordings with their content address
+  scrolling, not the same workload as the existing dirty-row optimization.
+  Preserve absent-versus-empty rows and full-frame recovery when combining
+  them; the upstream encoder assumes a complete grid.
+- The packet tag alone does not establish compatibility. Both projects use
+  `RXT4`, but their image payloads, placements and preview encoding differ.
+  Extend this project's encoder and decoder together rather than replacing
+  either with the upstream implementation. The tag is a local JNI format, not
+  a Rex server protocol upgrade.
+
+The exact upstream head has passing Rust/Kotlin tests and an APK build.
+Its instrumented tests were compiled, not run on a device; those checks do
+not validate a port into this project's dirty-row/image-cache pipeline.
+Both projects already pin the same Ghostty revision. A staged port should begin
+with the independent local-scroll queue bypass, then row-shift/cache reuse.
+
+### Selective port
+
+The port is implemented without importing the upstream graphics module:
+
+- Local `scroll` commands bypass pending input/paste acknowledgements; stale
+  block checks remain in the actor, wheel events remain on the ordered input
+  path, and the existing local 8 ms render pacing is unchanged.
+- `RXT5` adds one signed little-endian 16-bit row shift immediately after
+  `input_flags`. The rest of the packet retains this project's image and
+  JSON-preview layout. The decoder still supports `RXT1`–`RXT4`.
+- The encoder enables shifts only when both frame bases contain every row,
+  the offset change is smaller than the viewport, and at least half the
+  overlapping rows match. Other frames keep the existing sparse dirty-row
+  path. Missing bases still request a complete frame. Every uncovered row
+  must be supplied before the decoder accepts a shifted packet.
+- The view moves row recordings by the scroll offset and verifies drawing
+  content before reuse. Physical cell/link row numbers are ignored only for
+  this drawing comparison; decoder cell positions and link hit testing still
+  use the new viewport row. Changed text, styles, colors or links invalidate
+  the recording.
+
+Regression coverage includes positive/negative shifts, large jumps, sparse
+bases, malformed shifts, preserved hyperlinks and local image placements,
+and an actor with an indefinitely pending paste acknowledgement. An Android
+bitmap test compares reused rows (including link underlines) with a fresh
+view and asserts one new recording for a one-line scroll. Host Rust/Kotlin
+tests and release APK compilation pass; the bitmap/device test is compiled
+but has not been run on an Android device.

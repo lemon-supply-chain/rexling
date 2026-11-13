@@ -11,7 +11,7 @@ internal class TerminalUpdates {
         require(bytes.size in 17..134217728) {"Invalid terminal packet size"}
         val data=ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val version=data.int
-        require(version==0x31545852 || version==0x32545852 || version==0x33545852 || version==0x34545852) {"Unsupported terminal packet"}
+        require(version==0x31545852 || version==0x32545852 || version==0x33545852 || version==0x34545852 || version==0x35545852) {"Unsupported terminal packet"}
         val nextRevision=data.long;require(nextRevision>revision)
         fun text(): String {val n=data.int;require(n>=0 && n<=data.remaining());val raw=ByteArray(n);data.get(raw);return raw.toString(Charsets.UTF_8)}
         val metadata=text()
@@ -27,11 +27,16 @@ internal class TerminalUpdates {
                 val inputFlags=if(version>=0x32545852) data.get().toInt() and 0xff else 0
                 val previous=state.screen
                 if(flag==2) require(previous!=null && previous.columns==columns && previous.rows==rows) {"Missing terminal delta base"}
-                val lines=if(flag==2) previous!!.lines.toMutableList() else MutableList<List<TerminalCell>>(rows){emptyList()}
+                val shift=if(version>=0x35545852) data.short.toInt() else 0
+                require(shift==0 || (flag==2 && kotlin.math.abs(shift)<rows)) {"Invalid terminal row shift"}
+                val lines=if(flag==2) MutableList(rows) {row->
+                    previous!!.lines.getOrNull(row+shift)?.let {cells->
+                        if(shift==0) cells else cells.map {it.copy(y=row)}
+                    } ?: emptyList()
+                } else MutableList<List<TerminalCell>>(rows){emptyList()}
                 val changed=data.short.toInt() and 0xffff;require(changed<=rows)
                 val seen=HashSet<Int>()
-                repeat(changed) {
-                    val row=data.short.toInt() and 0xffff;require(row<rows && seen.add(row))
+                fun readRow(row: Int): List<TerminalCell> {
                     val count=data.short.toInt() and 0xffff;require(count<=columns)
                     val cells=List(count) {
                         val col=data.short.toInt() and 0xffff;val width=data.get().toInt() and 0xff
@@ -39,7 +44,7 @@ internal class TerminalUpdates {
                         require(col<columns && width<=2)
                         TerminalCell(col,row,text(),foreground,background,attrs,width)
                     }
-                    lines[row]=if(version>=0x33545852) {
+                    return if(version>=0x33545852) {
                         val n=data.short.toInt() and 0xffff;require(n<=columns)
                         var end=0
                         val links=List(n) {
@@ -56,8 +61,16 @@ internal class TerminalUpdates {
                         }
                     } else cells
                 }
+                repeat(changed) {
+                    val row=data.short.toInt() and 0xffff;require(row<rows && seen.add(row))
+                    lines[row]=readRow(row)
+                }
                 if(flag==3) require(changed==rows)
-                val payloads=if(version==0x34545852) {
+                if(shift!=0) {
+                    val uncovered=if(shift>0) (rows-shift until rows) else (0 until -shift)
+                    require(uncovered.all {it in seen}) {"Missing rows after terminal shift"}
+                }
+                val payloads=if(version>=0x34545852) {
                     val count=data.short.toInt() and 0xffff
                     List(count) {
                         val imageId=data.int;val generation=data.long
@@ -80,7 +93,7 @@ internal class TerminalUpdates {
                         TerminalImagePayload(imageId,generation,width,height,pixelBytes)
                     }
                 } else emptyList()
-                val placements=if(version==0x34545852) {
+                val placements=if(version>=0x34545852) {
                     val count=data.short.toInt() and 0xffff
                     List(count) {
                         val imageId=data.int

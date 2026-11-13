@@ -82,7 +82,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     }
     let base = &state.wire;
     let reset = after != base.revision || base.key != state.key;
-    let mut out = b"RXT4".to_vec();
+    let mut out = b"RXT5".to_vec();
     u64le(&mut out, state.revision);
     let previews = std::mem::take(&mut state.pending_previews);
     let activity_changed = reset || !Arc::ptr_eq(&base.activity, &state.activity);
@@ -151,6 +151,10 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
             }
             out.push(frame.input_flags);
             let old = previous.map(|old| rows(old));
+            let shift = previous.zip(old.as_ref()).map_or(0, |(previous, old)| {
+                row_shift(previous, frame, old, &next)
+            });
+            out.extend(shift.to_le_bytes());
             let changed: Vec<(u16, &[Cell])> = next
                 .iter()
                 .enumerate()
@@ -159,8 +163,11 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                     if full {
                         return Some((y as u16, row));
                     }
-                    match old.as_ref().and_then(|old| old[y]) {
-                        Some(same) if same == row => None,
+                    let from = y as i64 + i64::from(shift);
+                    match old.as_ref().and_then(|old| {
+                        usize::try_from(from).ok().and_then(|from| old.get(from)).copied().flatten()
+                    }) {
+                        Some(same) if same_row(same, row) => None,
                         _ => Some((y as u16, row)),
                     }
                 })
@@ -168,38 +175,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
             u16le(&mut out, changed.len() as u16);
             for (y, row) in changed {
                 u16le(&mut out, y as u16);
-                u16le(&mut out, row.len() as u16);
-                for cell in row {
-                    u16le(&mut out, cell.x);
-                    out.push(cell.width);
-                    u32le(&mut out, cell.attributes);
-                    u32le(&mut out, rgb(cell.foreground));
-                    u32le(&mut out, rgb(cell.background));
-                    text(&mut out, &cell.text);
-                }
-                // Sparse contiguous link ranges keep ordinary rows cheap.
-                let mut links: Vec<(u16, u16, &str)> = Vec::new();
-                for cell in row {
-                    if cell.width == 0 {
-                        continue;
-                    }
-                    if let Some(uri) = cell.hyperlink.as_deref() {
-                        if let Some(last) = links
-                            .last_mut()
-                            .filter(|last| last.1 == cell.x && last.2 == uri)
-                        {
-                            last.1 = cell.x + u16::from(cell.width);
-                        } else {
-                            links.push((cell.x, cell.x + u16::from(cell.width), uri));
-                        }
-                    }
-                }
-                u16le(&mut out, links.len() as u16);
-                for (start, end, uri) in links {
-                    u16le(&mut out, start);
-                    u16le(&mut out, end);
-                    text(&mut out, uri);
-                }
+                encode_row(&mut out, row);
             }
             let mut new_payloads = Vec::new();
             for img in &frame.images {
@@ -242,6 +218,59 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
         }
     };
     settle(state, out, delivered)
+}
+fn same_row(first: &[Cell], second: &[Cell]) -> bool {
+    first.len() == second.len() && first.iter().zip(second).all(|(first, second)| {
+        first.x == second.x && first.width == second.width && first.text == second.text
+            && first.attributes == second.attributes && first.foreground == second.foreground
+            && first.background == second.background && first.hyperlink == second.hyperlink
+    })
+}
+fn encode_row(out: &mut Vec<u8>, row: &[Cell]) {
+    u16le(out, row.len() as u16);
+    for cell in row {
+        u16le(out, cell.x);
+        out.push(cell.width);
+        u32le(out, cell.attributes);
+        u32le(out, rgb(cell.foreground));
+        u32le(out, rgb(cell.background));
+        text(out, &cell.text);
+    }
+    let mut links: Vec<(u16, u16, &str)> = Vec::new();
+    for cell in row {
+        if cell.width == 0 { continue; }
+        if let Some(uri) = cell.hyperlink.as_deref() {
+            if let Some(last) = links.last_mut().filter(|last| last.1 == cell.x && last.2 == uri) {
+                last.1 = cell.x + u16::from(cell.width);
+            } else {
+                links.push((cell.x, cell.x + u16::from(cell.width), uri));
+            }
+        }
+    }
+    u16le(out, links.len() as u16);
+    for (start, end, uri) in links {
+        u16le(out, start);
+        u16le(out, end);
+        text(out, uri);
+    }
+}
+fn row_shift(previous: &Frame, frame: &Frame, old: &[Option<&[Cell]>], next: &[Option<&[Cell]>]) -> i16 {
+    let moved = i128::from(frame.scroll_offset) - i128::from(previous.scroll_offset);
+    if moved == 0 || moved.abs() >= next.len() as i128 || moved.abs() > i128::from(i16::MAX)
+        || old.iter().any(Option::is_none) || next.iter().any(Option::is_none) {
+        return 0;
+    }
+    let shift = moved as i16;
+    let mut overlap = 0;
+    let mut matched = 0;
+    for (row, cells) in next.iter().enumerate() {
+        let from = row as i64 + i64::from(shift);
+        if let Some(previous) = usize::try_from(from).ok().and_then(|from| old.get(from)) {
+            overlap += 1;
+            if same_row(previous.unwrap(), cells.unwrap()) { matched += 1; }
+        }
+    }
+    if matched * 2 >= overlap { shift } else { 0 }
 }
 
 /// Record what the reader now holds. `delivered` is the frame this packet carried, so
@@ -370,7 +399,7 @@ mod wire_tests {
     fn changed_rows(packet: &[u8]) -> u16 {
         let metadata = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
         // columns, rows, cursor x/y, fg, bg, three scrollbar words, input flags
-        let at = 16 + metadata + 1 + 2 + 2 + 4 + 4 + 4 + 4 + 24 + 1;
+        let at = 16 + metadata + 1 + 2 + 2 + 4 + 4 + 4 + 4 + 24 + 1 + 2;
         u16::from_le_bytes(packet[at..at + 2].try_into().unwrap())
     }
     /// Only some rows, as the terminal hands them out for a dirty frame.
@@ -379,6 +408,56 @@ mod wire_tests {
         frame.full = false;
         frame.cells.retain(|cell| rows.contains(&cell.y));
         frame
+    }
+
+    fn scrolled(offset: u64) -> Frame {
+        let mut frame = frame();
+        frame.scroll_total = 1000;
+        frame.scroll_offset = offset;
+        for cell in &mut frame.cells {
+            cell.text = (offset + u64::from(cell.y)).to_string();
+        }
+        frame
+    }
+
+    fn packet_shift(packet: &[u8]) -> i16 {
+        let metadata = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
+        let at = 16 + metadata + 1 + 44 + 1;
+        i16::from_le_bytes(packet[at..at + 2].try_into().unwrap())
+    }
+
+    #[test]
+    fn scrolling_sends_only_uncovered_rows_and_resets_on_jumps() {
+        let mut state = Shared {
+            revision: 1, force_full_frame: false, json: "{}".into(),
+            activity: Arc::default(), pending_previews: BTreeMap::new(),
+            frame: Some(Arc::new(scrolled(100))), key: "a".into(), wire: WireBase::default(),
+        };
+        let full = encode(&mut state, 0);
+        assert_eq!(packet_shift(&full), 0);
+        for (revision, offset, shift, count) in [(2, 103, 3, 3), (3, 101, -2, 2), (4, 500, 0, 50)] {
+            state.revision = revision;
+            state.frame = Some(Arc::new(scrolled(offset)));
+            let packet = encode(&mut state, revision - 1);
+            assert_eq!(packet_shift(&packet), shift);
+            assert_eq!(changed_rows(&packet), count);
+            if shift != 0 { assert!(packet.len() < full.len() / 10); }
+        }
+    }
+
+    #[test]
+    fn shifts_require_complete_bases_and_preserve_changed_links() {
+        let previous = scrolled(100);
+        let mut next = scrolled(103);
+        next.cells[0].hyperlink = Some("https://example.com/changed".into());
+        assert_eq!(row_shift(&previous, &next, &rows(&previous), &rows(&next)), 3);
+        assert!(!same_row(&previous.cells[300..400], &next.cells[0..100]));
+        let mut partial = scrolled(100);
+        partial.cells.retain(|cell| cell.y == 7);
+        assert_eq!(row_shift(&partial, &next, &rows(&partial), &rows(&next)), 0);
+        assert_eq!(row_shift(&previous, &partial, &rows(&previous), &rows(&partial)), 0);
+        let unrelated = frame();
+        assert_eq!(row_shift(&previous, &unrelated, &rows(&previous), &rows(&unrelated)), 0);
     }
 
     #[test]
@@ -453,7 +532,7 @@ mod wire_tests {
             activity: Arc::default(),
         };
         let full = encode(&mut state, 0);
-        assert_eq!(&full[..4], b"RXT4");
+        assert_eq!(&full[..4], b"RXT5");
         assert_eq!(
             full.windows(b"https://example.com/one".len())
                 .filter(|w| *w == b"https://example.com/one")
@@ -547,7 +626,7 @@ mod wire_tests {
         };
         let full = encode(&mut state, 0);
         assert!(full.len() > 40000);
-        assert_eq!(&full[..4], b"RXT4");
+        assert_eq!(&full[..4], b"RXT5");
 
         let mut next = frame();
         next.images.push(rex_core::ghostty::ImagePayload {

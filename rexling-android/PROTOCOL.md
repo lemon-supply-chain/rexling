@@ -853,3 +853,13 @@ Unchanged pixels reuse the delivered delta base. Full frames include every refer
 
 Android draws images below cell backgrounds, between backgrounds/text or above text in z order, clipped to terminal content. Image-free terminals retain the existing row cache. Image bitmaps are cached by owned image identity, so IDs reused in another pane/server cannot display old pixels. Cropping, pixel-to-cell scaling and alpha are applied during Canvas rendering; snapshots retain pixels for disconnected/cached pane views.
 
+## Row-shift deltas and local RXT5 frames
+
+Private JNI packets now use `RXT5`, retaining RXT4's header, input flags, changed-row/cell, hyperlink and image layout. One signed little-endian i16 row shift follows the input-flags byte, for both full and delta frames.
+
+Scrolling moves the whole visible grid by one offset delta, so a delta frame declares that shift instead of resending every row: encode sends only the rows the shift exposes, and the decoder moves the previous frame's rows by `shift`, restamping each cell's viewport `y`. A shift is used only when both frames hold every row, the offset change is smaller than the viewport and at least half the overlapping rows match cell for cell; otherwise the existing sparse dirty-row path sends the changed rows without a shift. The decoder requires a delta base for a non-zero shift, `|shift| < rows`, and every row the shift exposes present in the packet; otherwise it rejects the packet without committing the revision. The decoder accepts historical `RXT1`–`RXT4` and the current `RXT5`. This is a local packet format only; no Rex wire format, server RPC or Ghostty ABI changes.
+
+The `RXT` tag is this project's own: upstream Rexling reuses the same four bytes for a different graphics layout, so a tag match never proves compatibility. Nothing reads a foreign packet, and the tag exists only to catch a stale native library or decoder inside this APK.
+
+The Android view moves its recorded row render nodes by the same offset and re-records a row when its text, styles, colors or links differ, ignoring only physical row numbers in that comparison.
+

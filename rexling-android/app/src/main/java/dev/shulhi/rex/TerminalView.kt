@@ -112,6 +112,7 @@ class TerminalView(context: Context) : View(context) {
     private data class RecordedRow(val cells: List<TerminalCell>,val recording: TerminalRowRecording,val links: List<TerminalLink>)
     private val linkIndex=TerminalLinks.Index()
     private var recorded= arrayOfNulls<RecordedRow>(0)
+    private var recordedOffset: Long?=null
     private var rowGeometry=""
     private val advances=object: LinkedHashMap<Pair<Int,String>,Float>(256,.75f,true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Int,String>,Float>?)=size>4096
@@ -120,7 +121,7 @@ class TerminalView(context: Context) : View(context) {
     private val imageSrcRect = Rect()
     private val imageDstRect = RectF()
     internal var recordedRowCount=0;private set
-    private fun clearRows() {recorded.forEach {it?.recording?.release()};recorded=arrayOfNulls(0);rowGeometry=""}
+    private fun clearRows() {recorded.forEach {it?.recording?.release()};recorded=arrayOfNulls(0);rowGeometry="";recordedOffset=null}
     private fun advance(text: String,style: Int): Float=advances.getOrPut(style to text){paint.measureText(text)}
     private var cellWidth = 1f
     private var cellHeight = 1f
@@ -195,6 +196,7 @@ class TerminalView(context: Context) : View(context) {
         if(geometry!=rowGeometry) {clearRows();recorded=arrayOfNulls(visibleRows);rowGeometry=geometry}
         android.os.Trace.beginSection("Rexlink.linkIndex")
         val rowLinks=try {linkIndex.update(frame)} finally {android.os.Trace.endSection()}
+        reuseShiftedRows(frame,visibleRows)
         // Pixels are cached by the poll thread; a draw only records what is on screen.
         if (frame.imagePlacements.isNotEmpty()) {
             TerminalImageCache.prune(frame.imagePlacements.mapTo(HashSet()) { it.imageId })
@@ -205,7 +207,7 @@ class TerminalView(context: Context) : View(context) {
             val cells=frame.lines[y]
             var row=recorded[y]
             val links=rowLinks[y]
-            if(row==null || !row.recording.valid || row.cells!=cells || row.links!=links) {
+            if(row==null || !row.recording.valid || !sameRowCells(row.cells,cells) || !sameRowLinks(row.links,links)) {
                 val origin=insetTop+y*cellHeight
                 val recording=row?.recording ?: TerminalRowRecording.create(canvas.isHardwareAccelerated)
                 recording.record(width,cellHeight.toInt().coerceAtLeast(1)) { target ->
@@ -254,6 +256,17 @@ class TerminalView(context: Context) : View(context) {
         canvas.restoreToCount(saved)
         if(token!=null) android.os.Trace.endSection()
         android.os.Trace.endSection()
+    }
+    private fun reuseShiftedRows(frame: TerminalScreen,visibleRows: Int) {
+        val previous=recordedOffset;recordedOffset=frame.scroll.offset
+        if(previous==null || recorded.size!=visibleRows) return
+        val moved=frame.scroll.offset-previous
+        if(moved==0L || moved<=-visibleRows || moved>=visibleRows) return
+        val shift=moved.toInt()
+        val next=arrayOfNulls<RecordedRow>(visibleRows)
+        for(row in next.indices) next[row]=recorded.getOrNull(row+shift)
+        for(row in recorded.indices) if(row-shift !in next.indices) recorded[row]?.recording?.release()
+        recorded=next
     }
     private fun drawRow(canvas: Canvas,cells: List<TerminalCell>,columns: Int,top: Float,bottom: Float) {
         var start=0;var end=0;var color=0

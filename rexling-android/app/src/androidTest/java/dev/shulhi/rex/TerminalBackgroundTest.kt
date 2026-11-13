@@ -140,4 +140,34 @@ class TerminalBackgroundTest {
         }
     }
 
+    @Test fun scrollingReusesRecordingsAndMatchesFreshDrawingIncludingLinks() {
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val context=instrumentation.targetContext
+            fun frame(offset: Int): TerminalScreen {
+                val cells=(0 until 4).flatMap {row->(0 until 20).map {column->
+                    TerminalCell(column,row,('A'.code+offset+row).toChar().toString(),-1,
+                        0xff283442.toInt()+row+offset,0,1,if(column==0) "https://example.com/${offset+row}" else null)
+                }}
+                return TerminalScreen(20,4,null,null,-1,0,cells,TerminalScroll(100,offset.toLong(),4))
+            }
+            fun view(frame: TerminalScreen)=TerminalView(context).apply {
+                screen=frame;setTerminalPaddingDp(12,8,6)
+                measure(View.MeasureSpec.makeMeasureSpec(500,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(220,View.MeasureSpec.EXACTLY))
+                layout(0,0,500,220)
+            }
+            fun draw(view: TerminalView)=Bitmap.createBitmap(500,220,Bitmap.Config.ARGB_8888).also {view.draw(Canvas(it))}
+            val cached=view(frame(10))
+            draw(cached).recycle()
+            for(offset in listOf(11,10,40)) {
+                val before=cached.recordedRowCount
+                val next=frame(offset);cached.screen=next
+                val actual=draw(cached);val expected=draw(view(next))
+                assertEquals(before+if(offset==40) 4 else 1,cached.recordedRowCount)
+                assertTrue("Moved rows and links must match fresh drawing",actual.sameAs(expected))
+                actual.recycle();expected.recycle()
+            }
+        }
+    }
+
 }
