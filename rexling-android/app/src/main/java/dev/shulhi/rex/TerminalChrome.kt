@@ -583,10 +583,14 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
 }
 
 @Composable private fun DockKey(label: String,enabled: Boolean,active: Boolean=false,description: String=label,modifier: Modifier=Modifier.width(if(label=="ctrl") 47.dp else 40.dp),icon: ChromeIcon?=null,readable: Boolean=enabled,repeat: Boolean=false,inputKey: String="",onClick: ()->Unit) {
+    val haptic=LocalHapticFeedback.current
     Box(modifier.fillMaxHeight().clip(RoundedCornerShape(11.dp))
         .background(if(active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
         .semantics(mergeDescendants=true) {contentDescription=description;selected=active}
-        .then(if(repeat) Modifier.repeatKey(enabled,inputKey,onKey=onClick) else Modifier.clickable(enabled=enabled,role=Role.Button,onClick=onClick)),contentAlignment=Alignment.Center) {
+        .then(if(repeat) Modifier.repeatKey(enabled,inputKey,onKey=onClick) else Modifier.clickable(enabled=enabled,role=Role.Button) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        }),contentAlignment=Alignment.Center) {
         val color=(if(active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface).copy(alpha=if(readable) 1f else .38f)
         if(icon!=null) ChromeSymbol(icon,Modifier.size(20.dp),color)
         else Text(label,fontFamily=MonoUi,fontSize=11.sp,fontWeight=if(active) FontWeight.Bold else FontWeight.Normal,color=color,letterSpacing=0.sp)

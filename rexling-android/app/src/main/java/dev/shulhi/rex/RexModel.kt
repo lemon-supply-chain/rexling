@@ -30,6 +30,10 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         private set
     private var paneObscured=true
     internal fun setPaneObscured(value: Boolean) {paneObscured=value;updateActivity()}
+    /** The IME started closing: eagerly restore the full-height terminal grid. */
+    internal fun onImeClosing() {connections[activeServerId]?.onImeClosing()}
+    /** The IME finished animating: the terminal grid is settled, so send its resize now. */
+    internal fun onImeAnimationEnd() {connections[activeServerId]?.flushPendingSize()}
     private fun watchedPane(): WatchedPane? {
         val client=connections[activeServerId] ?: return null
         val state=client.state.value

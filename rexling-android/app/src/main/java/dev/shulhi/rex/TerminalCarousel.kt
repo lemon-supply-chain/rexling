@@ -139,6 +139,7 @@ import dev.chrisbanes.haze.hazeSource
                                 view.onActivate=if(center && block.id==liveBlock) onActivate else ({})
                                 view.onWheel=if(center && block.id==liveBlock) onWheel else ({_,_,_,_,_->})
                                 view.onScroll=if(center && block.id==liveBlock) onScroll else {_->}
+                                view.onBottom=if(center && block.id==liveBlock) onBottom else null
                                 view.onPaneDrag=if(center) {dx,active ->
                                     if(!settling) {
                                         dragging=active;toast=false

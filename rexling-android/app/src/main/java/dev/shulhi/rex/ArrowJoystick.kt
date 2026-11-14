@@ -55,7 +55,7 @@ private val arrowIcons=mapOf("left" to ChromeIcon.LEFT,"down" to ChromeIcon.DOWN
         .background(if(active || popupOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
         .semantics {
             contentDescription="Arrow keys";role=Role.Button;selected=active || popupOpen
-            stateDescription=if(popupOpen) "Arrow popup expanded" else if(active) direction?.let {"${it.replaceFirstChar(Char::uppercaseChar)} arrow"} ?: "Neutral" else if(useJoystick) "Hold and slide or double tap for arrows" else "Tap for arrows"
+            stateDescription=if(popupOpen) "Arrow popup expanded" else if(active) direction?.let {"${it.replaceFirstChar(Char::uppercaseChar)} arrow"} ?: "Neutral" else "Tap or slide for arrows"
             if(enabled) {
                 onClick(label="Toggle arrow popup") {popupOpen=!popupOpen;true}
                 customActions=arrowIcons.keys.map {key->CustomAccessibilityAction("${key.replaceFirstChar(Char::uppercaseChar)} arrow") {latest(key);true}}
@@ -63,14 +63,11 @@ private val arrowIcons=mapOf("left" to ChromeIcon.LEFT,"down" to ChromeIcon.DOWN
         }.pointerInput(enabled,inputKey,deadZone,useJoystick) {
             if(!enabled) return@pointerInput
             coroutineScope {
-                var lastTap: Long?=null
                 awaitEachGesture {
                     // Consuming in Initial prevents ancestor swipe/back handlers taking the drag.
                     val down=awaitFirstDown(pass=PointerEventPass.Initial);down.consume()
                     val send=latest // Freeze the original pane's guarded callback for this gesture.
                     val closingPopup=popupOpen
-                    val doubleTap=lastTap?.let {down.uptimeMillis-it in configuration.doubleTapMinTimeMillis..configuration.doubleTapTimeoutMillis}==true
-                    lastTap=null
                     active=true;direction=null;displacement=Offset.Zero
                     var repeating: Job?=null
                     var steering=false
@@ -82,11 +79,8 @@ private val arrowIcons=mapOf("left" to ChromeIcon.LEFT,"down" to ChromeIcon.DOWN
                             change.consume()
                             if(!change.pressed) {
                                 if(!steering && change.position.x in 0f..size.width.toFloat() && change.position.y in 0f..size.height.toFloat()) {
-                                    if(closingPopup) popupOpen=false
-                                    else if(!useJoystick) popupOpen=true
-                                    else if(change.uptimeMillis-down.uptimeMillis<configuration.longPressTimeoutMillis) {
-                                        if(doubleTap) popupOpen=!popupOpen else lastTap=change.uptimeMillis
-                                    }
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    popupOpen=!closingPopup
                                 }
                                 break
                             }

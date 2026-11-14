@@ -772,6 +772,51 @@ mod tests {
         assert!(alternate.text().contains("ALTERNATE"));
     }
     #[test]
+    fn resize_keeps_an_at_bottom_viewport_pinned_to_new_output() {
+        // A keyboard opening shrinks the grid mid-stream. The viewport was pinned to
+        // the active area, so reflow and the redraw that follows must stay at the
+        // bottom instead of leaving the user parked in history.
+        let below = |frame: &Frame| {
+            (frame.scroll_total - frame.scroll_visible).saturating_sub(frame.scroll_offset)
+        };
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        for i in 0..200 {
+            terminal
+                .write(format!("HISTORY_{i:03}\r\n").as_bytes())
+                .unwrap();
+        }
+        assert_eq!(below(&terminal.frame().unwrap()), 0);
+        terminal.resize(52, 12, 8, 16).unwrap();
+        let shrunk = terminal.frame().unwrap();
+        assert_eq!(below(&shrunk), 0, "resize while at bottom keeps the bottom");
+        assert!(shrunk.text().contains("HISTORY_199"));
+        // The program answers SIGWINCH by clearing and redrawing.
+        terminal.write(b"\x1b[2J\x1b[H").unwrap();
+        for i in 200..240 {
+            terminal
+                .write(format!("HISTORY_{i:03}\r\n").as_bytes())
+                .unwrap();
+        }
+        let redrawn = terminal.frame().unwrap();
+        assert_eq!(below(&redrawn), 0, "the redraw after a resize stays at bottom");
+        assert!(redrawn.text().contains("HISTORY_239"));
+    }
+    #[test]
+    fn resize_keeps_a_scrolled_viewport_on_its_row() {
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        for i in 0..200 {
+            terminal
+                .write(format!("HISTORY_{i:03}\r\n").as_bytes())
+                .unwrap();
+        }
+        terminal.scroll_viewport(-10000);
+        assert!(terminal.frame().unwrap().text().contains("HISTORY_000"));
+        terminal.resize(52, 12, 8, 16).unwrap();
+        // Explicitly scrolling back is a different intent than following output, so
+        // reflow keeps the row the reader chose rather than jumping to the bottom.
+        assert!(terminal.frame().unwrap().text().contains("HISTORY_000"));
+    }
+    #[test]
     fn restores_binary_snapshot_then_handles_fragmented_vt_and_nonce_apcs() {
         let mut terminal = Terminal::new(40, 6).unwrap();
         terminal

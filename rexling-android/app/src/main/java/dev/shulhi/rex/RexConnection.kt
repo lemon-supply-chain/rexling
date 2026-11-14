@@ -167,17 +167,24 @@ internal class RexConnection(application: Application, private val scope: Corout
         if(seen.length()>2048) {val keys=seen.keys().asSequence().toList();keys.take(keys.size-2048).forEach {seen.remove(it)}}
         preferences.edit {putString("activity_seen:$savedEndpoint",seen.toString())};command("activity_seen","items" to seen)
     }
-    fun retryNow() {if(foreground && savedEndpoint.isNotBlank()) {cancelKeyRepeats();resizeJob?.cancel();activation.resume();command("retry")}}
+    fun retryNow() {if(foreground && savedEndpoint.isNotBlank()) {cancelKeyRepeats();dropResize();activation.resume();command("retry")}}
     fun networkChanged(change: NetworkChange) {
-        if(foreground && (!change.available || change.reroute || !state.value.connected)) {cancelKeyRepeats();resizeJob?.cancel();command("network","online" to change.available,"force" to change.reroute)}
+        if(foreground && (!change.available || change.reroute || !state.value.connected)) {cancelKeyRepeats();dropResize();command("network","online" to change.available,"force" to change.reroute)}
     }
     private var handle = 0L
     private var resizeJob: Job? = null
     private var lastSize = 0 to 0
+    /** One settled PTY size. A redraw or a recomposition never counts as a new one. */
+    private data class PaneSize(val columns: Int, val rows: Int, val cellWidthPx: Int, val cellHeightPx: Int,
+        val session: String, val block: String, val navigationId: Long, val connectionEpoch: Long)
+    private var pendingSize: PaneSize? = null
+    private var sentSize: PaneSize? = null
+    private var unconstrainedSize: PaneSize? = null
+    private var imeSettling = false
     @Volatile private var foreground = true
     @Volatile private var closed = false
     @Volatile var visible = true
-        set(value) {if(field!=value){field=value;if(!value) {pendingTabOrder=null;pendingPaneOrder=null;cancelDisplay();resetModifiers();cancelKeyRepeats();resizeJob?.cancel()} else {activation.navigate();queueDisplay(state.value)};command("visibility","visible" to value)}}
+        set(value) {if(field!=value){field=value;if(!value) {pendingTabOrder=null;pendingPaneOrder=null;cancelDisplay();resetModifiers();cancelKeyRepeats();dropResize()} else {activation.navigate();queueDisplay(state.value)};command("visibility","visible" to value)}}
     private var pollJob: Job? = null
 
     init {
@@ -272,6 +279,9 @@ internal class RexConnection(application: Application, private val scope: Corout
     private fun setState(next: AppState) {mutableState.value=next;mutableChrome.value=presentation.chrome(next).copy(revision=0,screen=null,previewFrames=emptyMap())}
     private fun command(type: String, vararg args: Pair<String, Any>): Boolean {
         if (handle == 0L) return false
+        // A grid change must reach the PTY before anything typed at that grid, so a
+        // deferred size is flushed instead of letting the key jump the queue.
+        if (type == "input" || type == "paste") flushSize()
         val request = JSONObject().put("type", type)
         args.forEach { (key, value) -> request.put(key, value) }
         val error = NativeBridge.command(handle, request.toString())
@@ -287,7 +297,7 @@ internal class RexConnection(application: Application, private val scope: Corout
     fun connect(server: String) {
         restoreWorkspace=true
         pendingTabOrder=null;pendingPaneOrder=null
-        cancelDisplay();cancelKeyRepeats();resizeJob?.cancel();activation.navigate()
+        cancelDisplay();cancelKeyRepeats();dropResize();activation.navigate()
         resetModifiers()
         val value = server.trim()
         navigationRequest = NavigationRequest()
@@ -312,7 +322,7 @@ internal class RexConnection(application: Application, private val scope: Corout
             lastSessionId=old
             preferences.edit { putString("last_session:${state.value.endpoint}",old) }
         }
-        cancelDisplay();cancelKeyRepeats();resizeJob?.cancel();activation.navigate()
+        cancelDisplay();cancelKeyRepeats();dropResize();activation.navigate()
         navigationRequest = NavigationRequest(session = id, id = ++navigationSerial)
         controlModifier = false; altModifier = false;shiftState=ShiftKeyState();keyboardRequest=""
         command("session", "id" to id, "navigationId" to navigationRequest.id)
@@ -322,7 +332,7 @@ internal class RexConnection(application: Application, private val scope: Corout
         if (navigationRequest.session != null && navigationRequest.session != current.selectedSession) return
         if (id == navigationRequest.block || (id == current.selectedBlock && !navigationRequest.pending)) return
         if (current.windows.none { window -> window.blocks.any { it.id == id } }) return
-        cancelDisplay();cancelKeyRepeats();resizeJob?.cancel();activation.navigate()
+        cancelDisplay();cancelKeyRepeats();dropResize();activation.navigate()
         navigationRequest = NavigationRequest(block = id, id = ++navigationSerial)
         controlModifier = false; altModifier = false;shiftState=ShiftKeyState();keyboardRequest=""
         restoreWorkspace=false
@@ -336,7 +346,7 @@ internal class RexConnection(application: Application, private val scope: Corout
         if(current.selectedSession.isNotBlank() && current.selectedSession!=session) {
             lastSessionId=current.selectedSession;preferences.edit {putString("last_session:${current.endpoint}",lastSessionId)}
         }
-        cancelDisplay();cancelKeyRepeats();resizeJob?.cancel();activation.navigate();resetModifiers();keyboardRequest=""
+        cancelDisplay();cancelKeyRepeats();dropResize();activation.navigate();resetModifiers();keyboardRequest=""
         restoreWorkspace=false;workspace.request(session,block)
         navigationRequest=NavigationRequest(session=session,block=block,id=++navigationSerial)
         command("session","id" to session,"block" to block,"navigationId" to navigationRequest.id)
@@ -407,28 +417,28 @@ internal class RexConnection(application: Application, private val scope: Corout
     }
     fun createSession(label: String): Boolean {
         if(!state.value.connected || state.value.creating || navigationRequest.pending) return false
-        activation.navigate();resizeJob?.cancel();cancelKeyRepeats()
+        activation.navigate();dropResize();cancelKeyRepeats()
         return command("new_session","label" to label)
     }
     fun createTab() {
         val current = state.value
-        if (current.connected && !current.creating && !navigationRequest.pending && current.selectedSession.isNotBlank()) {activation.navigate();resizeJob?.cancel();cancelKeyRepeats();command("new_tab", "session" to current.selectedSession)}
+        if (current.connected && !current.creating && !navigationRequest.pending && current.selectedSession.isNotBlank()) {activation.navigate();dropResize();cancelKeyRepeats();command("new_tab", "session" to current.selectedSession)}
     }
     fun createPane(split: PaneSplit=PaneSplit.RIGHT,anchor: String=state.value.selectedBlock) {
         val current = state.value
-        if (current.connected && !current.creating && !navigationRequest.pending && current.selectedSession.isNotBlank() && current.windows.any {w->w.blocks.any {it.id==anchor}}) {activation.navigate();resizeJob?.cancel();cancelKeyRepeats();command("new_pane", "session" to current.selectedSession, "anchor" to anchor, "direction" to split.direction)}
+        if (current.connected && !current.creating && !navigationRequest.pending && current.selectedSession.isNotBlank() && current.windows.any {w->w.blocks.any {it.id==anchor}}) {activation.navigate();dropResize();cancelKeyRepeats();command("new_pane", "session" to current.selectedSession, "anchor" to anchor, "direction" to split.direction)}
     }
     fun closePane(session: String,id: String) {
         val current=state.value
         if(current.connected && !current.creating && !navigationRequest.pending && session==current.selectedSession) {
-            if(id==current.selectedBlock) {activation.navigate();resizeJob?.cancel();cancelKeyRepeats();controlModifier=false;altModifier=false;shiftState=ShiftKeyState();keyboardRequest=""}
+            if(id==current.selectedBlock) {activation.navigate();dropResize();cancelKeyRepeats();controlModifier=false;altModifier=false;shiftState=ShiftKeyState();keyboardRequest=""}
             command("close_pane","session" to session,"id" to id)
         }
     }
     fun closeTab(session: String,id: String,blocks: List<String>) {
         val current=state.value
         if(current.connected && !current.creating && !navigationRequest.pending && session==current.selectedSession) {
-            if(current.selectedBlock in blocks) {activation.navigate();resizeJob?.cancel();cancelKeyRepeats();controlModifier=false;altModifier=false;shiftState=ShiftKeyState();keyboardRequest=""}
+            if(current.selectedBlock in blocks) {activation.navigate();dropResize();cancelKeyRepeats();controlModifier=false;altModifier=false;shiftState=ShiftKeyState();keyboardRequest=""}
             command("close_tab","session" to session,"id" to id,"blocks" to org.json.JSONArray(blocks))
         }
     }
@@ -437,8 +447,14 @@ internal class RexConnection(application: Application, private val scope: Corout
         val current=state.value
         if(!restoreWorkspace && activation.shouldTake(current,navigationRequest,visible && foreground,lastSize)) sendTake(current)
     }
-    private fun sendTake(current: AppState) = command("take","session" to current.selectedSession,"block" to current.selectedBlock,
-        "navigationId" to current.navigationId,"columns" to lastSize.first,"rows" to lastSize.second)
+    private fun sendTake(current: AppState) {
+        if (!command("take","session" to current.selectedSession,"block" to current.selectedBlock,
+                "navigationId" to current.navigationId,"columns" to lastSize.first,"rows" to lastSize.second)) return
+        // The claim resizes the pane itself, so the deferred resize that follows control must
+        // not repeat it: a second SIGWINCH makes the program repaint (and flash) again.
+        if (lastSize.first > 0 && lastSize.second > 0) sentSize = PaneSize(lastSize.first,lastSize.second,0,0,
+            current.selectedSession,current.selectedBlock,current.navigationId,current.connectionEpoch)
+    }
     fun takeControl() {
         val current=state.value
         if(visible && current.connected && !current.creating && !navigationRequest.pending && current.selectedBlock.isNotBlank()) {
@@ -457,13 +473,13 @@ internal class RexConnection(application: Application, private val scope: Corout
         if(visible && current.connected && !current.creating && !navigationRequest.pending && current.screen!=null)
             command("wheel","session" to current.selectedSession,"block" to current.selectedBlock,"lines" to lines,"col" to col,"row" to row,"cw" to cw,"ch" to ch,"columns" to lastSize.first,"rows" to lastSize.second)
     }
-    fun releaseControl() { activation.release();resizeJob?.cancel();cancelKeyRepeats();controlModifier = false; altModifier = false;shiftState=ShiftKeyState();keyboardRequest=""; if(state.value.selectedBlock.isNotBlank()) command("release") }
+    fun releaseControl() { activation.release();dropResize();cancelKeyRepeats();controlModifier = false; altModifier = false;shiftState=ShiftKeyState();keyboardRequest=""; if(state.value.selectedBlock.isNotBlank()) command("release") }
     fun pause() {
         presentation.flush()
         pendingTabOrder=null;pendingPaneOrder=null
         cancelDisplay();cancelKeyRepeats()
         navigationRequest = NavigationRequest()
-        foreground = false; resizeJob?.cancel(); controlModifier = false; altModifier = false;shiftState=ShiftKeyState();keyboardRequest=""
+        foreground = false; dropResize(); controlModifier = false; altModifier = false;shiftState=ShiftKeyState();keyboardRequest=""
         setState(state.value.copy(controlled = false, phase = if (state.value.connected) "paused" else state.value.phase))
         command("pause")
     }
@@ -490,31 +506,82 @@ internal class RexConnection(application: Application, private val scope: Corout
     fun resize(columns: Int, rows: Int, cellWidthPx: Int = 0, cellHeightPx: Int = 0) {
         val size = columns.coerceIn(1, 512) to rows.coerceIn(1, 256)
         lastSize = size
-        resizeJob?.cancel()
         claimActivePane()
         val current=state.value
-        if (!visible || !foreground || !current.controlled || navigationRequest.pending) return
+        if (!visible || !foreground || !current.controlled || navigationRequest.pending) {
+            // Only the queued size is dropped here: a claim already sent its own resize, so the
+            // record of what the server holds must survive until control arrives.
+            resizeJob?.cancel();resizeJob=null;pendingSize=null
+            return
+        }
+        val request=PaneSize(size.first, size.second, cellWidthPx.coerceAtLeast(0), cellHeightPx.coerceAtLeast(0),
+            current.selectedSession, current.selectedBlock, current.navigationId, current.connectionEpoch)
+        if (unconstrainedSize == null || (request.columns == unconstrainedSize?.columns && request.rows >= (unconstrainedSize?.rows ?: 0))) {
+            unconstrainedSize = request
+        }
+        // Keyboard animations and terminal redraws report the same grid many times.
+        // Restarting the timer for a size that is already queued or already on the
+        // wire would postpone the resize for as long as frames keep arriving.
+        if (request==pendingSize || (request==sentSize && resizeJob==null)) return
+        pendingSize=request
+        resizeJob?.cancel()
+        if (imeSettling) {
+            imeSettling = false
+            sendSize()
+            return
+        }
         resizeJob = scope.launch {
             delay(150)
-            val params = mutableListOf<Pair<String, Any>>(
-                "session" to current.selectedSession,
-                "block" to current.selectedBlock,
-                "navigationId" to current.navigationId,
-                "columns" to size.first,
-                "rows" to size.second
-            )
-            if (cellWidthPx > 0 && cellHeightPx > 0) {
-                params.add("cell_width_px" to cellWidthPx)
-                params.add("cell_height_px" to cellHeightPx)
-            }
-            command("resize", *params.toTypedArray())
+            sendSize()
         }
     }
+    /** Send the deferred size now, ahead of the input that triggered it. */
+    private fun flushSize() {if (resizeJob?.isActive==true) sendSize()}
+    /** The IME started closing: eagerly restore the full-height terminal grid ahead of the animation. */
+    fun onImeClosing() {
+        val target = unconstrainedSize ?: return
+        val current = state.value
+        if (target.session == current.selectedSession && target.block == current.selectedBlock &&
+            target.navigationId == current.navigationId && target.connectionEpoch == current.connectionEpoch &&
+            target.columns == lastSize.first && target.rows > (sentSize?.rows ?: 0)) {
+            pendingSize = target
+            sendSize()
+        }
+    }
+    /** The IME animation settled, so the reported grid no longer needs to wait. */
+    fun flushPendingSize() {
+        imeSettling = true
+        flushSize()
+        scope.launch { delay(100); imeSettling = false }
+    }
+    private fun sendSize() {
+        resizeJob?.cancel();resizeJob=null
+        val request=pendingSize ?: return
+        pendingSize=null
+        val current=state.value
+        // A resize may outlive its pane; navigation or a lost claim drops it.
+        if (!visible || !foreground || !current.controlled || navigationRequest.pending ||
+            current.selectedSession!=request.session || current.selectedBlock!=request.block ||
+            current.navigationId!=request.navigationId) return
+        val params = mutableListOf<Pair<String, Any>>(
+            "session" to request.session,
+            "block" to request.block,
+            "navigationId" to request.navigationId,
+            "columns" to request.columns,
+            "rows" to request.rows
+        )
+        if (request.cellWidthPx > 0 && request.cellHeightPx > 0) {
+            params.add("cell_width_px" to request.cellWidthPx)
+            params.add("cell_height_px" to request.cellHeightPx)
+        }
+        if (command("resize", *params.toTypedArray())) sentSize=request
+    }
+    private fun dropResize() {resizeJob?.cancel();resizeJob=null;pendingSize=null;sentSize=null;unconstrainedSize=null;imeSettling=false}
     fun applySize() = resize(lastSize.first.coerceAtLeast(1), lastSize.second.coerceAtLeast(1))
     fun close() {
         presentation.flush()
         cancelDisplay()
-        closed=true;pollJob?.cancel();resizeJob?.cancel()
+        closed=true;pollJob?.cancel();dropResize()
         if (handle != 0L) NativeBridge.destroy(handle)
         handle = 0
     }

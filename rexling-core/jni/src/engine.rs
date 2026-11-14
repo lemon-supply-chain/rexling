@@ -35,6 +35,10 @@ pub fn android_log(msg: &str) {
 
 /// Shown while a repainting program outruns the device; cleared by the next good chunk.
 const SPEED_NOTICE: &str = "This terminal paints faster than the screen updates; showing the newest frame";
+/// A resize makes the program repaint the whole screen in several writes. Drawing each one
+/// turns a single repaint into a row of flashes, so frames wait for the burst to go quiet.
+const RESIZE_SETTLE_CAP: Duration = Duration::from_millis(130);
+const RESIZE_SETTLE_QUIET: Duration = Duration::from_millis(30);
 
 pub struct Shared {
     pub revision: u64,
@@ -361,6 +365,9 @@ struct Actor {
     retry: Option<tokio::time::Instant>,
     backoff: u64,
     dirty: bool,
+    /// Deadline while a resize repaint burst is still arriving; see [RESIZE_SETTLE_CAP].
+    settle: Option<tokio::time::Instant>,
+    last_data_at: tokio::time::Instant,
     preview_task: Option<PreviewTask>,
     summary_task: Option<SummaryTask>,
     activity_open: bool,
@@ -436,6 +443,8 @@ impl Actor {
             paused: false,
             retry: None,
             backoff: 1,
+            settle: None,
+            last_data_at: tokio::time::Instant::now(),
             data_retries: 0,
             data_retry_at: tokio::time::Instant::now(),
             dirty: false,
@@ -723,7 +732,8 @@ impl Actor {
                     if self.predictor.expire(std::time::Instant::now()) {self.dirty=true;}
                     if self.dirty && self.visible {
                         let is_held = self.screen.is_some() && self.replica.as_mut().filter(|r| r.ready()).and_then(|r| r.terminal().ok()).map_or(false, |t| t.is_held());
-                        if !is_held {
+                        if !is_held && !self.settling() {
+                            self.settle = None;
                             self.dirty=false;
                             // A dirty frame only carries the rows the terminal touched; a reader
                             // with no base, or one that inspects the screen, asks for every row.
@@ -1237,6 +1247,7 @@ impl Actor {
         };
         let events: Vec<_> = replica.events.drain(..).collect();
         let changed = !events.is_empty();
+        let mut resized = false;
         for event in events {
             // Data and control streams have independent delivery order. Resize APCs
             // still update the grid in Replica, but cannot override canonical ownership.
@@ -1244,13 +1255,27 @@ impl Actor {
             if let Some(name) = event["type"].as_str() {
                 self.program_event(&id, name, &event);
             }
+            if event["type"] == "resize" {
+                resized = true;
+            }
             if event["type"] == "child_exited" {
                 self.notice = format!("Program exited ({})", event["exit_code"]);
             }
         }
+        if resized {
+            self.settle = Some(tokio::time::Instant::now() + RESIZE_SETTLE_CAP);
+        }
         if changed {
             self.publish();
         }
+    }
+
+    /// A resize repaint arrives in chunks. Hold the previous frame until the burst stops,
+    /// or until the cap passes so a program that never repaints still shows the reflow.
+    fn settling(&self) -> bool {
+        let now = tokio::time::Instant::now();
+        self.settle.is_some_and(|cap| now < cap)
+            && now.saturating_duration_since(self.last_data_at) < RESIZE_SETTLE_QUIET
     }
 
     fn input_target(&self) -> Target {
@@ -2045,23 +2070,10 @@ impl Actor {
                 {
                     return Ok(());
                 }
-                self.take_selected().await?;
-                if let (Some(columns), Some(rows)) =
-                    (value["columns"].as_u64(), value["rows"].as_u64())
-                    && columns > 0
-                    && rows > 0
-                {
-                    self.control
-                        .as_mut()
-                        .context("not connected")?
-                        .terminal(
-                            &self.selected_session,
-                            &self.selected_block,
-                            "resize",
-                            json!({"columns":columns.clamp(1,512),"rows":rows.clamp(1,256)}),
-                        )
-                        .await?;
-                }
+                let size = value["columns"]
+                    .as_u64()
+                    .zip(value["rows"].as_u64());
+                self.take_selected(size).await?;
             }
             "release" => {
                 if let Some(c) = &mut self.control {
@@ -2116,23 +2128,10 @@ impl Actor {
                 let text = String::from_utf8(bytes.repeat(lines.unsigned_abs() as usize))
                     .context("Legacy mouse coordinates cannot be sent as UTF-8 terminal input")?;
                 if !self.controlled {
-                    self.take_selected().await?;
-                    if let (Some(cols), Some(rows)) =
-                        (value["columns"].as_u64(), value["rows"].as_u64())
-                        && cols > 0
-                        && rows > 0
-                    {
-                        self.control
-                            .as_mut()
-                            .context("not connected")?
-                            .terminal(
-                                &self.selected_session,
-                                &self.selected_block,
-                                "resize",
-                                json!({"columns":cols.clamp(1,512),"rows":rows.clamp(1,256)}),
-                            )
-                            .await?;
-                    }
+                    let size = value["columns"]
+                        .as_u64()
+                        .zip(value["rows"].as_u64());
+                    self.take_selected(size).await?;
                 }
                 if let Err(error) = self
                     .control
@@ -2313,6 +2312,7 @@ impl Actor {
                 };
                 match replica.feed(&bytes) {
                     Ok(()) => {
+                        self.last_data_at = tokio::time::Instant::now();
                         if self.data_retries > 0 {
                             self.data_retries = 0;
                             self.data_retry_at = tokio::time::Instant::now();
@@ -2461,11 +2461,25 @@ impl Actor {
             Err(error) => Err(error),
         }
     }
-    async fn take_selected(&mut self) -> Result<()> {
+    async fn take_selected(&mut self, size: Option<(u64, u64)>) -> Result<()> {
         ensure!(!self.selected_block.is_empty(), "Choose a terminal first");
         self.control.as_mut().context("not connected")?.call("session.own_block",json!({"session_id":self.selected_session,"block_ids":[self.selected_block],"mode":"take"})).await?;
         self.refresh_view().await?;
         self.apply_theme().await?;
+        // Resize before the focus notification: a program that reacts to both would
+        // otherwise repaint once for focus and again for SIGWINCH.
+        if let Some((columns, rows)) = size.filter(|(c, r)| *c > 0 && *r > 0) {
+            self.control
+                .as_mut()
+                .context("not connected")?
+                .terminal(
+                    &self.selected_session,
+                    &self.selected_block,
+                    "resize",
+                    json!({"columns":columns.clamp(1,512),"rows":rows.clamp(1,256)}),
+                )
+                .await?;
+        }
         // A focus notification makes programs re-query even if set_theme was
         // deduplicated because the canonical terminal already had these colors.
         self.control
@@ -4778,6 +4792,47 @@ while True:
             runtime.block_on(actor.command(json!({"type":kind,"session":"s","block":"b","navigationId":2,"columns":40,"rows":30}))).unwrap();
             actor.paused = false;
         }
+    }
+
+    #[test]
+    fn a_resize_holds_frames_until_the_repaint_burst_goes_quiet() {
+        let shared = Arc::new(Mutex::new(Shared {
+            revision: 0,
+            force_full_frame: false,
+            json: String::new(),
+            pending_previews: BTreeMap::new(),
+            frame: None,
+            key: String::new(),
+            wire: crate::updates::WireBase::default(),
+            activity: Arc::default(),
+        }));
+        let mut actor = Actor::new(shared, Arc::new(crate::updates::Updates::default()));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            // Nothing to hold yet.
+            assert!(!actor.settling());
+            actor.replica = Some(Replica::new(1));
+            actor
+                .replica
+                .as_mut()
+                .unwrap()
+                .events
+                .push(json!({"type":"resize"}));
+            actor.update_apcs();
+            // A repaint burst is still arriving, so the previous frame stays on screen.
+            assert!(actor.settling());
+            // A frame is drawn as soon as the chunks stop.
+            actor.last_data_at = tokio::time::Instant::now() - Duration::from_millis(30);
+            assert!(!actor.settling());
+            // A program that never repaints must still show the reflowed screen.
+            actor.last_data_at = tokio::time::Instant::now();
+            assert!(actor.settling());
+            actor.settle = Some(tokio::time::Instant::now() - Duration::from_millis(1));
+            assert!(!actor.settling(), "the cap releases the hold");
+        });
     }
 
     #[test]

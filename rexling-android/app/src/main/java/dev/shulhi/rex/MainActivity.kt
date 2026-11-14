@@ -46,7 +46,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : ComponentActivity() {
     private val model: RexModel by viewModels()
@@ -54,6 +57,29 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         consumeAlert(intent)
         enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
+        // The IME inset animates frame by frame. Its end is the only moment the terminal
+        // grid is settled, so the deferred PTY resize is flushed then instead of waiting
+        // out the rest of its debounce. On closing, the full grid can be restored ahead
+        // of time so content rolls down smoothly instead of leaving a blank gap.
+        ViewCompat.setWindowInsetsAnimationCallback(window.decorView,
+            object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                override fun onStart(
+                    animation: WindowInsetsAnimationCompat,
+                    bounds: WindowInsetsAnimationCompat.BoundsCompat
+                ): WindowInsetsAnimationCompat.BoundsCompat {
+                    if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                        val imeVisible = ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                        if (!imeVisible) model.onImeClosing()
+                    }
+                    return super.onStart(animation, bounds)
+                }
+                override fun onProgress(insets: WindowInsetsCompat,runningAnimations: MutableList<WindowInsetsAnimationCompat>): WindowInsetsCompat = insets
+                override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                    if(animation.typeMask and WindowInsetsCompat.Type.ime()==0) return
+                    // One animation frame later the settled inset has reached layout.
+                    window.decorView.postOnAnimation { model.onImeAnimationEnd() }
+                }
+            })
         setContent {
             val dark=when(model.appearance) {Appearance.SYSTEM->isSystemInDarkTheme();Appearance.DARK->true;Appearance.LIGHT->false}
             SideEffect {WindowCompat.getInsetsController(window,window.decorView).apply {
@@ -182,7 +208,12 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
         photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
     DisposableEffect(client) {onDispose {model.setPaneObscured(true)}}
-    val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
+    // The IME inset changes every animation frame. Reading it directly in composition
+    // recomposed this whole workspace (and the terminal view's update block) per frame,
+    // so observe only the flip between open and closed.
+    val imeInsets=WindowInsets.ime
+    val imeDensity=LocalDensity.current
+    val keyboardVisible by remember(imeInsets,imeDensity) {derivedStateOf {imeInsets.getBottom(imeDensity)>0}}
     val blocks=window?.blocks ?: if(state.phase=="preview") listOf(BlockItem("preview","Terminal")) else emptyList()
     val chosen=displayedBlock.ifBlank {blocks.firstOrNull()?.id.orEmpty()}
     val floating=if(model.minimizeFloatingPanes) window?.floatingPanes().orEmpty() else emptyList()

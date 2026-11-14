@@ -105,6 +105,7 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
                             else if(opened) {if(visible && highlighted>=0) choose(highlighted)}
                             else if(!moved && change.position.x in 0f..size.width.toFloat() && change.position.y in 0f..size.height.toFloat()) {
                                 // Each tap toggles immediately; the second restores the first toggle.
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 toggle()
                                 if(doubleTap && change.uptimeMillis-down.uptimeMillis<configuration.longPressTimeoutMillis) {
                                     visible=true;haptics.performHapticFeedback(HapticFeedbackType.LongPress)

@@ -9,7 +9,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -19,20 +21,24 @@ import kotlin.math.abs
 /** A scrolling drag never sends a key; a stationary hold repeats until cancelled. */
 internal fun Modifier.repeatKey(enabled: Boolean,target: String,repeatIntervalMillis: Long=65,onKey: ()->Unit): Modifier=composed {
     val scope=rememberCoroutineScope();val configuration=LocalViewConfiguration.current
+    val haptics=LocalHapticFeedback.current
     val latest by rememberUpdatedState(onKey)
     var pressed by remember {mutableStateOf(false)}
+    val fire={
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        latest()
+    }
     background(if(pressed) MaterialTheme.colorScheme.primary.copy(alpha=.16f) else Color.Transparent)
-        .semantics {role=Role.Button;if(enabled) onClick {latest();true} else disabled()}
+        .semantics {role=Role.Button;if(enabled) onClick {fire();true} else disabled()}
         .pointerInput(enabled,target,repeatIntervalMillis) {
             if(!enabled) return@pointerInput
             awaitEachGesture {
                 val down=awaitFirstDown();down.consume();pressed=true
-                val send=latest // Freeze this gesture's target even before recomposition cancels it.
-                var repeated=false;var moved=false
+                var moved=false
+                fire()
                 val job=scope.launch {
                     delay(configuration.longPressTimeoutMillis)
-                    repeated=true
-                    while(isActive) {send();delay(repeatIntervalMillis)}
+                    while(isActive) {fire();delay(repeatIntervalMillis)}
                 }
                 try {
                     while(true) {
@@ -43,7 +49,6 @@ internal fun Modifier.repeatKey(enabled: Boolean,target: String,repeatIntervalMi
                         }
                         if(!change.pressed) {
                             job.cancel()
-                            if(!moved && !repeated && change.position.x in 0f..size.width.toFloat() && change.position.y in 0f..size.height.toFloat()) send()
                             change.consume();break
                         }
                         // Leave moves unconsumed so parent gestures can take over.
