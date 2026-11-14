@@ -9,6 +9,6 @@
         <mask id="mask-3" fill="white">
             <use xlink:href="#path-2"></use>
         </mask>
-        <use id="Path" fill="color(display-p3 0.000 0.000 0.000)" fill-rule="evenodd" xlink:href="#path-2"></use>
+        <use id="Path" fill="#000000" fill-rule="evenodd" xlink:href="#path-2"></use>
     </g>
 </svg>

@@ -2,7 +2,7 @@
 <svg width="480px" height="480px" viewBox="0 0 480 480" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <title>bazel</title>
     <g id="bazel" stroke="none" fill="none" fill-rule="evenodd" stroke-width="1">
-        <g id="Group" transform="translate(26.86, 35.63)" fill="color(display-p3 1.000 1.000 1.000)">
+        <g id="Group" transform="translate(26.86, 35.63)" fill="#000000">
             <polygon id="Path" opacity="0.6" points="213.450998 320.274501 213.450998 425.039936 106.725499 318.314437 106.725499 213.549002"></polygon>
             <polygon id="Path" opacity="0.4" points="213.450998 320.274501 320.274501 213.549002 320.274501 318.314437 213.450998 425.039936"></polygon>
             <polygon id="Path" opacity="0.8" points="106.725499 213.549002 106.725499 318.314437 0 211.490934 0 106.725499"></polygon>

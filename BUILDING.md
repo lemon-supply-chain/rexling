@@ -176,6 +176,32 @@ python3 rexling-android/scripts/build_program_vectors.py
 python3 rexling-android/scripts/build_program_vectors.py --check
 ```
 
+The retained sources are the current catalog exports. To pick up a new catalog
+release, open `https://icons.superlogical.com/` in a signed-in Chrome that has a
+remote debugging port, then run:
+
+```sh
+node rexling-android/scripts/sync_superlogical_icons.mjs                             # report drift
+node rexling-android/scripts/sync_superlogical_icons.mjs --write                     # add missing icons
+node rexling-android/scripts/sync_superlogical_icons.mjs --write --overwrite          # refresh every source
+```
+
+The catalog sits behind Discord sign-in, so the script asks that signed-in page
+for its own `icons.json` and `glyphs/<id>.svg` over the DevTools Protocol; it does
+not call a private API. It reports the drift between the retained sources and the
+catalog (background, foreground, glyph art), writes the icons that have no
+retained source yet, and refreshes every hash in `metadata.json`. `--overwrite`
+also rewrites the sources that already exist, which is how the committed snapshot
+was produced from catalog 1.8.44. Tiles are built from
+`artwork/program-icons/rexling/card-template.svg`, the catalog's own card drawing
+with `@title`, `@slug`, `@background`, `@foreground` and `@glyph` placeholders, so
+every tile keeps the same geometry. The seven tiles the catalog no longer ships
+(`bash`, `claude-code`, `fish`, `nushell`, `placeholder`, `shell`, `zsh`) keep
+their retained colors and art and are re-rendered through the same template when
+the card changes. Logos embedded as raster images (`<image>` with a PNG payload)
+cannot be compiled to Canvas paths: they are reported instead of written, which is
+why `cua` stays excluded and keeps the terminal fallback glyph.
+
 Commit `app/src/main/assets/program_tiles.json` under `rexling-android/` with the
 source changes. The converter validates the retained source hashes, compiles both
 tiles and glyphs, and merges the local manifest. Unsupported SVG features fail

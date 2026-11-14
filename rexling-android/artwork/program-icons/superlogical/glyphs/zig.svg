@@ -2,7 +2,7 @@
 <svg width="154px" height="154px" viewBox="0 0 154 154" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <title>zig-mark</title>
     <g id="zig-mark" stroke="none" fill="none" fill-rule="evenodd" stroke-width="1">
-        <g id="Group" transform="translate(0, 6)" fill="color(display-p3 0.000 0.000 0.000)">
+        <g id="Group" transform="translate(0, 6)" fill="#000000">
             <g transform="translate(0, 22.1571)" id="Path">
                 <polygon points="46.3006536 0 28.1830065 22.1571429 19.124183 8.05714286"></polygon>
                 <polygon points="46.3006536 0 33.2156863 11.0785714 28.1830065 22.1571429 22.1437908 22.1571429 22.1437908 73.5214286 31.2026144 73.5214286 20.130719 78.5571429 12.0784314 95.6785714 0 95.6785714 0 0"></polygon>

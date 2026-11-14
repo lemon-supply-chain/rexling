@@ -144,6 +144,8 @@
     "nix-shell": "nix",
     "nixos-rebuild": "nix",
     "gh-copilot": "copilot",
-    "github-copilot": "copilot"
+    "github-copilot": "copilot",
+    "subl": "sublime",
+    "sublime_text": "sublime"
   }
 }

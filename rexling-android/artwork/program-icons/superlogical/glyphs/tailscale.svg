@@ -2,7 +2,7 @@
 <svg width="80px" height="80px" viewBox="0 0 80 80" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <title>Frame 9</title>
     <g id="Frame-9" stroke="none" fill="none" fill-rule="evenodd" stroke-width="1">
-        <g id="Group" transform="translate(8, 8)" fill="color(display-p3 1.000 1.000 1.000)">
+        <g id="Group" transform="translate(8, 8)" fill="#000000">
             <path d="M8,40 C12.4182629,40 15.9999771,36.4182857 15.9999771,32 C15.9999771,27.5817143 12.4182629,24 8,24 C3.58171429,24 0,27.5817143 0,32 C0,36.4182857 3.58171429,40 8,40 Z" id="Path"></path>
             <path d="M32,40 C36.4182857,40 40,36.4182857 40,32 C40,27.5817143 36.4182857,24 32,24 C27.5817143,24 24,27.5817143 24,32 C24,36.4182857 27.5817143,40 32,40 Z" id="Path"></path>
             <path d="M32,64 C36.4182857,64 40,60.4182857 40,56 C40,51.5817143 36.4182857,48 32,48 C27.5817143,48 24,51.5817143 24,56 C24,60.4182857 27.5817143,64 32,64 Z" id="Path"></path>

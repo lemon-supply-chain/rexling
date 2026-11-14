@@ -2,7 +2,7 @@
 <svg width="480px" height="480px" viewBox="0 0 480 480" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <title>minimal</title>
     <g id="minimal" stroke="none" fill="none" fill-rule="evenodd" stroke-width="1">
-        <g id="Avatar-Light" transform="translate(-111, -111)" fill="color(display-p3 0.078 0.078 0.078)">
+        <g id="Avatar-Light" transform="translate(-111, -111)" fill="#000000">
             <g id="Group" transform="translate(122.85, 236.9268)">
                 <g transform="translate(0, 0)" id="Path">
                     <polygon points="273.78 0 349.83117 0 456.3 152.097075 456.3 228.14649 380.250585 228.14649 273.78 76.049415"></polygon>
