@@ -104,7 +104,7 @@ class TerminalView(context: Context) : View(context) {
         set(value) {
             if (field != value) {
                 field = value
-                if (!value) composing = ""
+                if (!value) {composing = "";stopDeleteRepeat()}
                 selectionMode?.invalidate()
                 // The editor is new or gone. Restart the input session once, and only when
                 // it matters: on gaining control with focus, or on losing control while a
@@ -115,6 +115,28 @@ class TerminalView(context: Context) : View(context) {
             }
         }
     private var editorChanged = false
+    private var deleteRepeatInput: String? = null
+    private val deleteRepeat = object : Runnable {
+        override fun run() {
+            val input = deleteRepeatInput ?: return
+            if (controlled) { onInput(input); postDelayed(this, 65L) }
+            else stopDeleteRepeat()
+        }
+    }
+    /** Repeats a held delete key from the long-press timeout; the keyboard's own repeats are dropped. */
+    private fun startDeleteRepeat(input: String) {
+        deleteRepeatInput = input
+        removeCallbacks(deleteRepeat)
+        postDelayed(deleteRepeat, ViewConfiguration.getLongPressTimeout().toLong())
+    }
+    private fun stopDeleteRepeat() {
+        if (deleteRepeatInput != null) {
+            deleteRepeatInput = null
+            removeCallbacks(deleteRepeat)
+        }
+    }
+    private fun isDelete(code: Int): Boolean =
+        code == KeyEvent.KEYCODE_DEL || code == KeyEvent.KEYCODE_FORWARD_DEL
     /** Ask the IME to re-read this view as an editor, once per control change. */
     private fun restartEditor() {
         if (!editorChanged) return
@@ -401,7 +423,7 @@ class TerminalView(context: Context) : View(context) {
             postInvalidateOnAnimation()
         }
     }
-    override fun onDetachedFromWindow() {magnifier?.dismiss();clearRows();clearSelection();scrollFling.abortAnimation();touchVelocity?.recycle();touchVelocity=null;super.onDetachedFromWindow()}
+    override fun onDetachedFromWindow() {stopDeleteRepeat();magnifier?.dismiss();clearRows();clearSelection();scrollFling.abortAnimation();touchVelocity?.recycle();touchVelocity=null;super.onDetachedFromWindow()}
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if(selection!=null && event.actionMasked==MotionEvent.ACTION_SCROLL) return true
         if(interactive && event.actionMasked==MotionEvent.ACTION_SCROLL) {
@@ -708,7 +730,11 @@ class TerminalView(context: Context) : View(context) {
                 repeat(afterLength.coerceAtMost(128)) { onInput("\u001b[3~") }; return true
             }
             override fun sendKeyEvent(event: KeyEvent): Boolean {
-                if (event.action != KeyEvent.ACTION_DOWN) return true
+                if (event.action != KeyEvent.ACTION_DOWN) {
+                    // An input method may swallow key-up, so end a held delete here too.
+                    if (isDelete(event.keyCode)) stopDeleteRepeat()
+                    return true
+                }
                 if (event.keyCode == KeyEvent.KEYCODE_ENTER) finishComposingText()
                 return onKeyDown(event.keyCode, event)
             }
@@ -719,7 +745,8 @@ class TerminalView(context: Context) : View(context) {
         if(event.isShiftPressed && keyCode in listOf(KeyEvent.KEYCODE_PAGE_UP,KeyEvent.KEYCODE_PAGE_DOWN)) {
             onScroll((if(keyCode==KeyEvent.KEYCODE_PAGE_UP) -1 else 1)*(screen?.rows ?: 24));return true
         }
-        if (!controlled) return super.onKeyDown(keyCode, event)
+        if (!controlled) {stopDeleteRepeat();return super.onKeyDown(keyCode, event)}
+        if (!isDelete(keyCode)) stopDeleteRepeat()
         if ((screen?.scroll?.below ?: 0L) > 0L) onBottom?.invoke()
         val named = when (keyCode) {
             KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> "enter"
@@ -731,12 +758,29 @@ class TerminalView(context: Context) : View(context) {
             KeyEvent.KEYCODE_MOVE_HOME -> "home"; KeyEvent.KEYCODE_MOVE_END -> "end"
             else -> null
         }
-        if (named != null) { onInput(TerminalInput.key(named,event.isCtrlPressed,event.isAltPressed,event.isShiftPressed)); return true }
+        if (named != null) {
+            val input=TerminalInput.key(named,event.isCtrlPressed,event.isAltPressed,event.isShiftPressed)
+            // Soft keyboards either autorepeat at their own pace or not at all, so a held
+            // delete repeats here and the keyboard's own repeats are dropped.
+            if (isDelete(keyCode)) {
+                if (event.repeatCount > 0) return true
+                onInput(input); startDeleteRepeat(input); return true
+            }
+            onInput(input); return true
+        }
         val point = event.unicodeChar
         if (point != 0 && point and KeyCharacterMapCompat.COMBINING_ACCENT == 0) {
             onInput(TerminalInput.modified(String(Character.toChars(point)), event.isCtrlPressed, event.isAltPressed)); return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (isDelete(keyCode)) stopDeleteRepeat()
+        return super.onKeyUp(keyCode, event)
+    }
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
+        if (!gainFocus) stopDeleteRepeat()
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
     }
 }
 private object KeyCharacterMapCompat { const val COMBINING_ACCENT: Int = Int.MIN_VALUE }
