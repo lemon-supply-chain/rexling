@@ -1,6 +1,8 @@
 package dev.shulhi.rex
 
 import android.content.res.AssetManager
+import android.graphics.Path
+import androidx.core.graphics.PathParser
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -17,6 +19,7 @@ internal object ProgramCatalog {
     private val fallback = ProgramSkin(null, "terminal", emptyMap(), emptyList(), true)
     private var index: ProgramArtworkIndex? = null
     private var fullCatalog: JSONObject? = null
+    private var plateOutline: Path? = null
     private val artworkCache = ConcurrentHashMap<ProgramIdentity, ProgramArtwork>()
 
     @Synchronized internal fun index(assets: AssetManager): ProgramArtworkIndex = index ?: run {
@@ -68,6 +71,18 @@ internal object ProgramCatalog {
     fun icons(assets: AssetManager): JSONObject = fullCatalog(assets).getJSONObject("icons")
 
     fun glyphs(assets: AssetManager): JSONObject = fullCatalog(assets).getJSONObject("glyphs")
+
+    /** Command index where a tile's plate ends and its logo begins. */
+    fun symbols(assets: AssetManager): JSONObject = fullCatalog(assets).optJSONObject("symbols") ?: JSONObject()
+
+    /** Plate colour of each tile, used to derive tile and symbol shadow tones. */
+    fun accents(assets: AssetManager): JSONObject = fullCatalog(assets).optJSONObject("accents") ?: JSONObject()
+
+    /** Shared plate outline of every tile, cached for contact shadows and grain. */
+    @Synchronized fun plate(assets: AssetManager): Path? = plateOutline ?: fullCatalog(assets).optString("plate")
+        .takeIf(String::isNotEmpty)
+        ?.let {PathParser.createPathFromPathData(it)}
+        ?.also {plateOutline = it}
 
     fun skin(program: ProgramIdentity, assets: AssetManager): ProgramSkin =
         index(assets).skins[program.kind.name] ?: fallback

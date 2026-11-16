@@ -146,6 +146,7 @@
     "gh-copilot": "copilot",
     "github-copilot": "copilot",
     "subl": "sublime",
-    "sublime_text": "sublime"
+    "sublime_text": "sublime",
+    "mo": "mole"
   }
 }

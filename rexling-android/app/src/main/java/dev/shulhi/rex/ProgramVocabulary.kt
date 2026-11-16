@@ -60,7 +60,8 @@ internal class ProgramVocabulary(
                 "buck2" to "buck","bazelisk" to "bazel","ibazel" to "bazel",
                 "gradlew" to "gradle","golang" to "go","nix-shell" to "nix",
                 "nixos-rebuild" to "nix","gh-copilot" to "copilot","github-copilot" to "copilot",
-                "nu" to "nushell"
+                "nu" to "nushell",
+                "mo" to "mole"
             ),
         )
     }

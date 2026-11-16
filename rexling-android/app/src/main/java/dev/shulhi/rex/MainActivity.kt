@@ -265,7 +265,8 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
             SessionHeader(sessionStrip,currentSessionKey,state.connected,model.sessionTargets.isNotEmpty(),
                 blocks.map {state.programs[it.id] ?: ProgramIdentity.Loading},blocks.indexOfFirst {it.id==chosen}.coerceAtLeast(0),state.directories[displayedBlock].orEmpty(),{picker="sessions"},model::selectSessionTarget,model::jumpLastSession,
                 serverIcons=model.sessionTargets.associate {it.key to it.server.icon}+(currentSessionKey to model.activeServer.icon),
-                working=chosen in state.workingBlocks,title=(state.programs[chosen] ?: ProgramIdentity.Loading).paneTitle(blocks.firstOrNull {it.id==chosen}?.label.orEmpty(),state.titles[chosen].orEmpty()),menu={
+                working=chosen in state.workingBlocks,isPaneWorking={index->blocks.getOrNull(index)?.id in state.workingBlocks},
+                title=(state.programs[chosen] ?: ProgramIdentity.Loading).paneTitle(blocks.firstOrNull {it.id==chosen}?.label.orEmpty(),state.titles[chosen].orEmpty()),menu={
                     Box {
                         ChromeButton(ChromeIcon.MORE,stringResource(R.string.terminal_menu)){menu=true}
                         DropdownMenu(menu,{menu=false},modifier=Modifier.drawerFrost(workspaceHaze,RoundedCornerShape(16.dp),workspaceBackdrop),shape=RoundedCornerShape(16.dp),containerColor=Color.Transparent,tonalElevation=0.dp) {
@@ -348,7 +349,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                     }
                     if(state.connected || state.phase=="preview") {
                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart=24.dp,topEnd=24.dp)).background(MaterialTheme.colorScheme.surface)) {
-                            TerminalTabs(windows,window?.id.orEmpty(),state.connected&&!state.creating&&!changingSession,client::selectWindow,panePrograms=client::tabPrograms,selectedPane=client::tabPaneIndex,paneTitle={w,pane->state.titles[w.blocks.getOrNull(pane)?.id].orEmpty()},paneWorking={w->w.blocks.any {it.id in state.workingBlocks}},onClose={closeTarget=closeTabTarget(it)},onMove=client::moveTab,reorderKey=displayedSession,animateWorking=!model.activityVisible,
+                            TerminalTabs(windows,window?.id.orEmpty(),state.connected&&!state.creating&&!changingSession,client::selectWindow,panePrograms=client::tabPrograms,selectedPane=client::tabPaneIndex,paneTitle={w,pane->state.titles[w.blocks.getOrNull(pane)?.id].orEmpty()},isPaneWorking={w,pane->w.blocks.getOrNull(pane)?.id in state.workingBlocks},paneWorking={w->w.blocks.any {it.id in state.workingBlocks}},onClose={closeTarget=closeTabTarget(it)},onMove=client::moveTab,reorderKey=displayedSession,animateWorking=!model.activityVisible,
                                 contentReady=client.hasScreen && !state.creating && !changingSession && windows.isNotEmpty() && windows.all {w->
                                     val block=w.blocks.getOrNull(client.tabPaneIndex(w))
                                     block!=null && state.programs[block.id]?.pending==false

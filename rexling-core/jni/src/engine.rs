@@ -3307,6 +3307,33 @@ mod tests {
         );
     }
     #[test]
+    fn program_candidates_recognize_osc_7501_app_for_shell_scripts() {
+        let process = json!({
+            "foreground":{"pid":37735,"name":"bash","path":"/bin/bash","invoked_path":"/bin/bash","argv0":"/bin/bash"},
+            "ancestors":[{"pid":83641,"name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh"}],
+            "child":{"pid":83640,"name":"login"}
+        });
+        let status = json!({"records":[{"owner":{"pid":37735,"name":"bash"},"app":"mole","state":"working"}]});
+        assert_eq!(
+            program_candidates(&process, &status),
+            json!(["mole", "/bin/bash", "bash"])
+        );
+
+        // Subshell (PID 38000) does not inherit mole status record because owner PID does not match
+        let subshell_process = json!({
+            "foreground":{"pid":38000,"name":"sh","path":"/bin/sh","argv0":"sh"},
+            "ancestors":[
+                {"pid":37735,"name":"bash","path":"/bin/bash","argv0":"/bin/bash"},
+                {"pid":83641,"name":"zsh","path":"/bin/zsh","argv0":"-zsh"}
+            ],
+            "child":{"pid":83640,"name":"login"}
+        });
+        assert_eq!(
+            program_candidates(&subshell_process, &status),
+            json!(["sh", "/bin/sh"])
+        );
+    }
+    #[test]
     fn program_titles_prefer_live_terminal_titles_and_reject_stale_owners() {
         let process = json!({"foreground":{"pid":12,"name":"codex"}});
         let terminal = json!({"owner":{"pid":12,"name":"codex"},"title":"Terminal task"});

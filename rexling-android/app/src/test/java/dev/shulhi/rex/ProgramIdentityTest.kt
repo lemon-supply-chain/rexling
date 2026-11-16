@@ -71,6 +71,24 @@ class ProgramIdentityTest {
         assertTrue(AppState.parse("{}").workingBlocks.isEmpty())
         assertEquals("claude",ProgramIdentity.resolve(listOf("claude-code")).title)
     }
+    @Test fun workingPanelMappingIsSpecificToTheRunningPane() {
+        val window=WindowItem("w","Workspace",listOf(BlockItem("p1","shell"),BlockItem("p2","agent")))
+        val idleState=AppState.parse("""{"working":[]}""")
+        val agentWorkingState=AppState.parse("""{"working":["p2"]}""")
+        val isPaneWorking={w: WindowItem,pane: Int,state: AppState->w.blocks.getOrNull(pane)?.id in state.workingBlocks}
+        val paneWorking={w: WindowItem,state: AppState->w.blocks.any {it.id in state.workingBlocks}}
+
+        assertFalse(isPaneWorking(window,0,idleState))
+        assertFalse(isPaneWorking(window,1,idleState))
+        assertFalse(paneWorking(window,idleState))
+
+        assertFalse(isPaneWorking(window,0,agentWorkingState))
+        assertTrue(isPaneWorking(window,1,agentWorkingState))
+        assertTrue(paneWorking(window,agentWorkingState))
+
+        assertFalse(isPaneWorking(window,2,agentWorkingState))
+        assertFalse(isPaneWorking(window,-1,agentWorkingState))
+    }
     @Test fun programMetadataSurvivesAnOrdinaryStateUpdateWithoutInventingPrograms() {
         val state=AppState.parse("""{"programs":{"a":["nvim"],"b":["claude-code","node"]},"windows":[{"id":"w","label":"codex","blocks":[{"id":"a","label":"shell"},{"id":"c","label":"claude"}]}]}""")
         assertEquals(ProgramKind.NEOVIM,state.programs["a"]?.kind)
@@ -154,7 +172,8 @@ class ProgramIdentityTest {
             "kubectl" to "kube","helm" to "kube","k9s" to "k9s","gh" to "github","glab" to "gitlab",
             "cargo" to "rust","go" to "go","brew.rb" to "brew","psql" to "postgres","sqlite3" to "sqlite",
             "ollama" to "ollama","opencode" to "opencode","gemini" to "gemini","agy" to "antigravity","rex-server" to "rex",
-            "bun" to "bun","pnpm" to "pnpm","uv" to "uv","batcat" to "bat","hx" to "hx","nu" to "nushell")
+            "bun" to "bun","pnpm" to "pnpm","uv" to "uv","batcat" to "bat","hx" to "hx","nu" to "nushell",
+            "mo" to "mole","mole" to "mole")
         for((executable,tile) in programs) {
             val resolved=ProgramIdentity.resolve(if(executable=="nu") listOf("/opt/bin/$executable") else listOf("/bin/fish","/opt/bin/$executable"))
             assertEquals(executable,resolved.executable)
@@ -174,5 +193,14 @@ class ProgramIdentityTest {
         assertEquals(ProgramKind.NODE,ProgramIdentity.resolve(listOf("node","shell")).kind)
         assertEquals(ProgramKind.PYTHON,ProgramIdentity.resolve(listOf("python3","custom-script.py")).kind)
         assertEquals("custom-task",ProgramIdentity.resolve(listOf("fish","custom-task")).label)
+
+        // Subshells and commands running inside mo/mole keep mo/mole identity
+        val moWithSubshell = ProgramIdentity.resolve(listOf("mo", "sh", "/bin/sh"))
+        assertEquals("mo", moWithSubshell.executable)
+        assertEquals("mole", ProgramVocabulary.Default.mapping(moWithSubshell.executable))
+
+        val moleWithUtil = ProgramIdentity.resolve(listOf("mole", "perl", "/usr/bin/perl"))
+        assertEquals("mole", moleWithUtil.executable)
+        assertEquals("mole", ProgramVocabulary.Default.mapping(moleWithUtil.executable))
     }
 }

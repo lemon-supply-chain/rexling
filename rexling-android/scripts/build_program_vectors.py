@@ -68,10 +68,53 @@ def viewport(root):
     return 0.0, 0.0, number(root.get("width", 24)), number(root.get("height", 24))
 
 
+def mix(first, second, amount):
+    """Blend two #RRGGBB colours."""
+    a = [int(first[i:i+2], 16) for i in (1, 3, 5)]
+    b = [int(second[i:i+2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(x*(1-amount)+y*amount):02X}" for x, y in zip(a, b))
+
+
+SURFACE_ATTRIBUTES = {"x1": "0", "y1": "0", "x2": "0", "y2": "1"}
+
+
+def surface(plate, accent):
+    """Body ramp, keel shadow, top sheen and rim light, all shaped by the plate path."""
+    top = mix(accent, "#FFFFFF", .14)
+    bottom = mix(mix(accent, "#050A14", .14), "#123A66", .063)
+    dark = mix(mix(accent, "#000000", .35), "#0B1220", .45)
+
+    def fill(stops):
+        return {"op": "path", "path": plate, "evenOdd": False,
+                "paint": {"gradient": "linearGradient", "attributes": dict(SURFACE_ATTRIBUTES),
+                          "stops": stops, "alpha": 1.0}}
+
+    body = fill([{"offset": "0", "stop-color": top},
+                 {"offset": ".55", "stop-color": accent},
+                 {"offset": "1", "stop-color": bottom}])
+    keel = fill([{"offset": "0", "stop-color": dark, "stop-opacity": "0"},
+                 {"offset": ".74", "stop-color": dark, "stop-opacity": "0"},
+                 {"offset": "1", "stop-color": dark, "stop-opacity": ".22"}])
+    sheen = fill([{"offset": "0", "stop-color": "#FFFFFF", "stop-opacity": ".10"},
+                  {"offset": ".25", "stop-color": "#FFFFFF", "stop-opacity": ".06"},
+                  {"offset": ".42", "stop-color": "#FFFFFF", "stop-opacity": "0"}])
+    rim = {"op": "path", "path": plate, "evenOdd": False,
+           "paint": {"gradient": "linearGradient", "attributes": dict(SURFACE_ATTRIBUTES),
+                     "stops": [{"offset": "0", "stop-color": "#FFFFFF", "stop-opacity": ".45"},
+                               {"offset": ".40", "stop-color": "#FFFFFF", "stop-opacity": ".14"},
+                               {"offset": "1", "stop-color": "#FFFFFF", "stop-opacity": "0"}],
+                     "alpha": 1.0, "stroke": True, "strokeWidth": 1.0,
+                     "strokeCap": "round", "strokeJoin": "round"}}
+    # The rim is clipped so its outer half cannot bleed past the plate edge.
+    return [{"op": "save"}, body, keel, sheen, {"op": "restore"},
+            {"op": "save"}, {"op": "clip", "path": plate}, rim, {"op": "restore"}]
+
+
 def compile_icon(root, ink=None, crop=True):
     commands = [{"op": "translate", "x": -6, "y": -6}] if crop else []
+    state = {"symbol": None, "plate": None, "plate_ink": None, "clipped": False}
 
-    def draw(node, inherited, definitions, tint=None, opacity=1):
+    def draw(node, inherited, definitions, tint=None, opacity=1, depth=0):
         ink_color = tint or ink
         kind = tag(node)
         assert node.get("filter") is None, "SVG filters are not supported"
@@ -87,6 +130,11 @@ def compile_icon(root, ink=None, crop=True):
                         style[k] = v
         style.update({k: node.attrib[k] for k in ("fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin") if k in node.attrib})
         opacity *= float(node.get("opacity", 1))
+        # The logo of a tile is the single masked group at the top level; everything
+        # before it is the plate, so the split index lets the client restyle the
+        # symbol (gradient sheen and drop shadow) while keeping the plate baked.
+        if depth == 1 and kind == "g" and node.get("mask") and state["symbol"] is None:
+            state["symbol"] = len(commands)
         commands.append({"op": "save"})
         if node.get("transform"):
             commands.append({"op": "transform", "value": node.get("transform")})
@@ -94,6 +142,10 @@ def compile_icon(root, ink=None, crop=True):
             clip = definitions[reference(node.get("clip-path"))]
             assert len(clip) == 1
             commands.append({"op": "clip", "path": shapes(clip[0])})
+            if state["symbol"] is None:
+                state["clipped"] = True
+                if state["plate"] is None:
+                    state["plate"] = shapes(clip[0])
         if node.get("mask"):
             mask = definitions[reference(node.get("mask"))]
             image = next(x for x in mask if tag(x) == "image")
@@ -107,7 +159,7 @@ def compile_icon(root, ink=None, crop=True):
             commands.extend([{"op": "translate", "x": x+(w-vw*scale)/2, "y": y+(h-vh*scale)/2},
                              {"op": "scale", "x": scale, "y": scale},
                              {"op": "translate", "x": -vx, "y": -vy}])
-            draw(logo, {}, {x.get("id"): x for x in logo.iter() if x.get("id")}, color, opacity)
+            draw(logo, {}, {x.get("id"): x for x in logo.iter() if x.get("id")}, color, opacity, depth + 1)
         elif kind == "image":
             href = node.get("href", node.get("{http://www.w3.org/1999/xlink}href", ""))
             assert href.startswith("data:image/svg+xml;base64,"), "Only embedded vector images are supported"
@@ -118,16 +170,16 @@ def compile_icon(root, ink=None, crop=True):
             commands.extend([{"op": "translate", "x": x+(w-vw*scale)/2, "y": y+(h-vh*scale)/2},
                              {"op": "scale", "x": scale, "y": scale},
                              {"op": "translate", "x": -vx, "y": -vy}])
-            draw(logo, {}, {x.get("id"): x for x in logo.iter() if x.get("id")}, ink_color, opacity)
+            draw(logo, {}, {x.get("id"): x for x in logo.iter() if x.get("id")}, ink_color, opacity, depth + 1)
         elif kind in ("defs", "title", "desc", "mask"):
             return
         elif kind == "use":
             href = node.attrib.get("{http://www.w3.org/1999/xlink}href") or node.attrib.get("href") or node.attrib.get("xlink:href", "")
             if href.startswith("#") and href[1:] in definitions:
-                draw(definitions[href[1:]], style, definitions, tint, opacity)
+                draw(definitions[href[1:]], style, definitions, tint, opacity, depth + 1)
         elif kind in ("svg", "g"):
             for child in node:
-                draw(child, style, definitions, tint, opacity)
+                draw(child, style, definitions, tint, opacity, depth + 1)
         elif kind in ("path", "rect", "polygon", "polyline", "circle", "ellipse", "line"):
             fill = style.get("fill", "black")
             stroke = style.get("stroke")
@@ -139,6 +191,8 @@ def compile_icon(root, ink=None, crop=True):
                     paint = {"gradient": tag(gradient), "attributes": gradient.attrib,
                              "stops": [dict(s.attrib, **{"stop-color": ink_color or s.get("stop-color", "black")}) for s in gradient],
                              "alpha": paint["alpha"]}
+                if state["clipped"] and state["symbol"] is None and state["plate_ink"] is None:
+                    state["plate_ink"] = paint.get("color") or paint["stops"][0].get("stop-color")
                 commands.append({"op": "path", "path": shapes(node), "evenOdd": style.get("fill-rule") == "evenodd", "paint": paint})
             if stroke and stroke not in ("none", "transparent"):
                 paint = {"color": ink_color or stroke, "alpha": opacity*float(style.get("stroke-opacity", 1)),
@@ -150,12 +204,57 @@ def compile_icon(root, ink=None, crop=True):
         commands.append({"op": "restore"})
 
     draw(root, {}, {x.get("id"): x for x in root.iter() if x.get("id")})
-    return commands
+    if ink is None:
+        assert state["symbol"] is not None, "Tile artwork needs one masked logo group"
+        assert state["plate_ink"] is not None, "Tile artwork needs a plate fill"
+        assert state["plate"] is not None, "Tile artwork needs a plate outline"
+        accent = normalised(state["plate_ink"])
+        prelude = leading(commands)
+        symbol = balanced(commands[state["symbol"]:])
+        surface_commands = surface(state["plate"], accent)
+        # The plate half is rebuilt from the derived material; the artwork keeps
+        # ownership of the logo only, so no baked shadow or plate gradient survives.
+        return prelude + surface_commands + symbol, {
+            "symbol": len(prelude) + len(surface_commands),
+            "accent": accent,
+        }
+    return commands, {"symbol": None, "accent": None}
+
+
+def leading(commands):
+    """Global transforms that precede the first save; both halves replay them."""
+    end = 0
+    while end < len(commands) and commands[end]["op"] not in ("save", "restore"):
+        end += 1
+    return commands[:end]
+
+
+def balanced(commands):
+    """Trim unmatched restores so the logo half replays standalone."""
+    tail = list(commands)
+    depth = sum(1 if c["op"] == "save" else -1 if c["op"] == "restore" else 0 for c in tail)
+    while depth < 0 and tail and tail[-1]["op"] == "restore":
+        tail.pop(); depth += 1
+    return tail
+
+
+def normalised(value):
+    """Plate colour as #RRGGBB so the client can derive sheen and shadow tones."""
+    if value.startswith("#"):
+        digits = value[1:]
+        if len(digits) == 3:
+            digits = "".join(c * 2 for c in digits)
+        return "#" + digits[:6].upper()
+    match = re.fullmatch(r"rgba?\(([^)]*)\)", value)
+    if match:
+        parts = [float(p) for p in re.split(r"[,\s/]+", match.group(1).strip()) if p]
+        return "#" + "".join(f"{max(0, min(255, round(c))):02X}" for c in parts[:3])
+    raise ValueError(f"Unsupported plate colour: {value}")
 
 
 def compile_glyph(root):
     x, y, width, height = viewport(root)
-    commands = compile_icon(root, ink="#FFFFFF", crop=False)
+    commands, _ = compile_icon(root, ink="#FFFFFF", crop=False)
     if x or y:
         commands.insert(0, {"op": "translate", "x": -x, "y": -y})
     return {"width": width, "height": height, "commands": commands}
@@ -195,14 +294,24 @@ def validate(manifest, icons, glyphs):
 
 def build():
     check_sources()
-    icons = {p.stem.replace("-", "_"): compile_icon(ET.parse(p).getroot()) for p in sorted(SOURCE.glob("*.svg"))}
-    icons.update({p.stem.replace("-", "_"): compile_icon(ET.parse(p).getroot())
-                  for p in sorted((OVERLAY / "tiles").glob("*.svg"))})
+    compiled = {path.stem.replace("-", "_"): compile_icon(ET.parse(path).getroot())
+                for path in sorted(SOURCE.glob("*.svg"))}
+    compiled.update({path.stem.replace("-", "_"): compile_icon(ET.parse(path).getroot())
+                    for path in sorted((OVERLAY / "tiles").glob("*.svg"))})
+    icons = {name: commands for name, (commands, _) in compiled.items()}
+    symbols = {name: meta["symbol"] for name, (_, meta) in compiled.items()}
+    accents = {name: meta["accent"] for name, (_, meta) in compiled.items()}
     glyphs = {p.stem.replace("-", "_"): compile_glyph(ET.parse(p).getroot())
               for folder in (SOURCE / "glyphs", OVERLAY / "glyphs") for p in sorted(folder.glob("*.svg"))}
     manifest = json.loads((OVERLAY / "manifest.json").read_text())
     validate(manifest, icons, glyphs)
-    payload = {"width": 61, "height": 48, "icons": icons, "glyphs": glyphs,
+    for name, index in symbols.items():
+        assert 0 < index < len(icons[name]), f"Symbol split of {name} is out of range"
+    outlines = {icons[name][next(i for i, c in enumerate(icons[name]) if c["op"] == "path")]["path"]
+                for name in icons}
+    assert len(outlines) == 1, "Every tile must share one plate outline"
+    payload = {"width": 61, "height": 48, "plate": outlines.pop(), "icons": icons, "glyphs": glyphs,
+               "symbols": symbols, "accents": accents,
                "skins": manifest["skins"], "aliases": manifest["aliases"]}
     index_payload = {
         "icons": list(icons.keys()),

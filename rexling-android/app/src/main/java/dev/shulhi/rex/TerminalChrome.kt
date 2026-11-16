@@ -201,8 +201,12 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
 @Composable internal fun SessionHeader(sessions: List<SessionItem>, selectedId: String,
     connected: Boolean, enabled: Boolean,
     programs: List<ProgramIdentity>, paneIndex: Int, directory: String,
-    onSessions: ()->Unit, onSelect: (String)->Unit, onLast: ()->Unit, title: String="", working: Boolean=false, expanded: Boolean=false, serverIcons: Map<String,ServerIcon> = emptyMap(), menu: @Composable ()->Unit) {
+    onSessions: ()->Unit, onSelect: (String)->Unit, onLast: ()->Unit, title: String="", working: Boolean=false,
+    isPaneWorking: (Int)->Boolean={if(it==paneIndex) working else false},
+    expanded: Boolean=false, serverIcons: Map<String,ServerIcon> = emptyMap(), menu: @Composable ()->Unit) {
     val program=programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
+    val anyWorking=working || programs.indices.any(isPaneWorking)
+    val marquee=rememberRainbowMarquee(anyWorking)
     val titleHeight=with(LocalDensity.current) {16.sp.toDp()}
     val directoryHeight=with(LocalDensity.current) {12.sp.toDp()}
     val sessionHeight=maxOf(17.dp,directoryHeight)
@@ -260,7 +264,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
     Row(Modifier.fillMaxWidth().heightIn(min=50.dp).padding(horizontal=9.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
         if(!expanded) {
             Box(Modifier.height(45.dp).clipToBounds().semantics(mergeDescendants=true) {
-                contentDescription="Session program icon";stateDescription=if(working) "Working" else "Idle"
+                contentDescription="Session program icon";stateDescription=if(anyWorking) "Working" else "Idle"
                 if(enabled && looping) customActions=listOf(CustomAccessibilityAction("Next session") {selectNeighbour(1)},CustomAccessibilityAction("Previous session") {selectNeighbour(-1)})
             }.pointerInput(enabled,sessionIds,selectedId) {
                 if(enabled && looping) {
@@ -275,7 +279,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
                     val y=if(iconDragging) iconDragY else iconSettle.value
                     val progress=(abs(y)/iconTravel).coerceIn(0f,1f)
                     translationY=y;scaleX=1f-.06f*progress;scaleY=scaleX;alpha=1f-.25f*progress
-                }) {ProgramStack(programs,paneIndex,framed=true,fixedSlot=true)}
+                }) {ProgramStack(programs,paneIndex,framed=true,fixedSlot=true,marquee=marquee,isPaneWorking=isPaneWorking)}
             }
             Spacer(Modifier.width(7.dp))
         }
@@ -366,7 +370,10 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable internal fun TerminalTabs(windows: List<WindowItem>,selectedId: String,enabled: Boolean,
-    onSelect: (String)->Unit,panePrograms: (WindowItem)->List<ProgramIdentity>,selectedPane: (WindowItem)->Int,paneTitle: (WindowItem,Int)->String={_,_->""},paneWorking: (WindowItem)->Boolean={false},onClose: (WindowItem)->Unit={},onMove: (String,String?)->Boolean={_,_->false},reorderKey: String="",animateWorking: Boolean=true,contentReady: Boolean=true,actions: @Composable ()->Unit) {
+    onSelect: (String)->Unit,panePrograms: (WindowItem)->List<ProgramIdentity>,selectedPane: (WindowItem)->Int,paneTitle: (WindowItem,Int)->String={_,_->""},
+    isPaneWorking: (WindowItem,Int)->Boolean={_,_->false},
+    paneWorking: (WindowItem)->Boolean={w->w.blocks.indices.any {isPaneWorking(w,it)}},
+    onClose: (WindowItem)->Unit={},onMove: (String,String?)->Boolean={_,_->false},reorderKey: String="",animateWorking: Boolean=true,contentReady: Boolean=true,actions: @Composable ()->Unit) {
     var revealed by remember(reorderKey) {mutableStateOf(false)}
     LaunchedEffect(reorderKey,contentReady) {if(contentReady) revealed=true}
     if(!contentReady && !revealed) {
@@ -378,6 +385,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
         return
     }
     val list=rememberLazyListState()
+    val marquee=rememberRainbowMarquee(animateWorking && windows.any(paneWorking))
     val drag=remember(reorderKey) {TabDrag()}
     var menuId by remember(reorderKey) {mutableStateOf<String?>(null)}
     val ids=windows.map {it.id}
@@ -497,7 +505,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
                         .clickable(enabled=enabled,role=Role.Tab,onClick={onSelect(w.id)}),horizontalAlignment=Alignment.CenterHorizontally) {
                         Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal=6.dp),
                             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(showTitle) Arrangement.spacedBy(2.dp) else Arrangement.Center) {
-                            ProgramStack(programs,pane,fixedSlot=true)
+                            ProgramStack(programs,pane,fixedSlot=true,marquee=marquee,isPaneWorking={isPaneWorking(w,it)})
                             if(showTitle) Text(title,Modifier.weight(1f),fontSize=12.sp,lineHeight=18.sp,
                                 style=androidx.compose.ui.text.TextStyle(platformStyle=androidx.compose.ui.text.PlatformTextStyle(includeFontPadding=false)),fontWeight=if(active) FontWeight.Bold else FontWeight.Normal,
                                 color=if(active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
