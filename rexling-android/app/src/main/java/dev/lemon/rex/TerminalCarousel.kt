@@ -29,7 +29,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 
@@ -144,6 +143,7 @@ import dev.chrisbanes.haze.hazeSource
                                 view.interactive=center
                                 view.keyboardSuggestions=programs[block.id]?.kind!=ProgramKind.NEOVIM
                                 view.imeAnchor=TerminalImeAnchors.anchor(programs[block.id])
+                                view.edgePolicy=TerminalEdgePolicies.policy(programs[block.id])
                                 view.controlled=center && controlled && block.id==liveBlock
                                 view.imageInputTarget=imageTarget
                                 view.onImage=if(center && block.id==liveBlock) onImage else {_,release->release();false}

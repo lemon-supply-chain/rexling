@@ -18,8 +18,12 @@ internal enum class ShortcutEnter(val label: String,val detail: String) {
  * [prefix] is key notation sent before every shortcut, such as Neovim's `<C-\><C-n>`.
  */
 internal data class ShortcutProfile(val id: String,val name: String,val match: List<String>,val prefix: String="",
-    val enter: ShortcutEnter=ShortcutEnter.TEXT,val enabled: Boolean=true,val items: List<NeovimShortcut> = emptyList()) {
+    val enter: ShortcutEnter=ShortcutEnter.TEXT,val enabled: Boolean=true,val items: List<NeovimShortcut> = emptyList(),
+    /** Exactly what the user saved, so reopening the editor never rewrites it. */
+    val text: String="") {
     val matchText: String get()=match.joinToString(", ")
+    /** Profiles stored before the text was kept fall back to the text their items describe. */
+    val editorText: String get()=if(text.isNotBlank() || items.isEmpty()) text else NeovimShortcuts.editorText(items)
 }
 
 internal object ShortcutProfiles {
@@ -28,7 +32,7 @@ internal object ShortcutProfiles {
     private const val MAX_PROFILES=32
 
     fun neovim(items: List<NeovimShortcut> = NeovimShortcuts.defaults,enabled: Boolean=true)=
-        ShortcutProfile(NEOVIM,"Neovim",listOf("nvim","neovim"),"<C-\\><C-n>",ShortcutEnter.EX_COMMANDS,enabled,items)
+        ShortcutProfile(NEOVIM,"Neovim",listOf("nvim","neovim"),"<C-\\><C-n>",ShortcutEnter.EX_COMMANDS,enabled,items,NeovimShortcuts.editorText(items))
 
     val shellDefaults: List<NeovimShortcut> = NeovimShortcuts.parse("""
         gs = git status
@@ -41,7 +45,7 @@ internal object ShortcutProfiles {
 
     /** Matches a shell only while it is the foreground program, which means it is at its prompt. */
     fun shell(items: List<NeovimShortcut> = shellDefaults,enabled: Boolean=true)=
-        ShortcutProfile(SHELL,"Shell",listOf("fish","zsh","bash","sh"),"",ShortcutEnter.TEXT,enabled,items)
+        ShortcutProfile(SHELL,"Shell",listOf("fish","zsh","bash","sh"),"",ShortcutEnter.TEXT,enabled,items,NeovimShortcuts.editorText(items))
 
     fun defaults(legacyItems: List<NeovimShortcut> = NeovimShortcuts.defaults,legacyEnabled: Boolean=true)=
         listOf(neovim(legacyItems,legacyEnabled),shell())
@@ -92,12 +96,14 @@ internal object ShortcutProfiles {
         val cleanPrefix=prefix.trim()
         require(cleanPrefix.length<=64) {"Use at most 64 characters for keys sent first."}
         NeovimShortcuts.decodeKeys(cleanPrefix)
-        return ShortcutProfile(id,cleanName,parseMatch(match),cleanPrefix,enter,enabled,NeovimShortcuts.parse(shortcuts))
+        // Validation happens here, before saving; the saved text is then kept exactly as written.
+        return ShortcutProfile(id,cleanName,parseMatch(match),cleanPrefix,enter,enabled,NeovimShortcuts.parse(shortcuts),shortcuts)
     }
 
     fun encode(profiles: List<ShortcutProfile>)=JSONArray().apply {profiles.forEach {p->
         put(JSONObject().put("id",p.id).put("name",p.name).put("match",JSONArray(p.match)).put("prefix",p.prefix)
-            .put("enter",p.enter.name).put("enabled",p.enabled).put("items",JSONArray(NeovimShortcuts.encode(p.items))))
+            .put("enter",p.enter.name).put("enabled",p.enabled).put("items",JSONArray(NeovimShortcuts.encode(p.items)))
+            .put("text",p.text))
     }}.toString()
 
     /** Invalid profiles are dropped one by one, so a single bad entry cannot erase the rest. */
@@ -110,7 +116,10 @@ internal object ShortcutProfiles {
             val items=(0 until stored.length()).map {j->NeovimShortcuts.item(stored.getJSONObject(j))}
             val enter=runCatching {ShortcutEnter.valueOf(o.getString("enter"))}.getOrDefault(ShortcutEnter.TEXT)
             val match=o.getJSONArray("match").let {m->(0 until m.length()).map {m.getString(it)}}
-            build(o.getString("id"),o.getString("name"),match.joinToString(","),o.optString("prefix"),enter,o.optBoolean("enabled",true),NeovimShortcuts.editorText(items),emptyList())
+            // The saved text wins, even when it is empty; a profile stored without one is
+            // described by its items instead.
+            val text=if(o.has("text")) o.optString("text") else NeovimShortcuts.editorText(items)
+            build(o.getString("id"),o.getString("name"),match.joinToString(","),o.optString("prefix"),enter,o.optBoolean("enabled",true),text,emptyList())
         }.getOrNull()}.distinctBy {it.id}.distinctBy {it.name.lowercase(Locale.ROOT)}.take(MAX_PROFILES)
         return profiles.ifEmpty(fallback)
     }
@@ -121,6 +130,8 @@ internal object ShortcutProfiles {
     fun input(state: AppState,profile: ShortcutProfile,item: NeovimShortcut,target: String,currentTarget: String,active: Boolean,pending: Boolean): String? {
         if(!active || pending || target!=currentTarget || !state.connected || !state.controlled || state.creating || state.screen==null ||
             state.selectedBlock.isBlank() || state.selectedBlock in state.cachedPrograms || item !in profile.items) return null
+        // Rex actions run through the connection; they are never typed into the terminal.
+        if(item.isAction) return null
         val program=state.programs[state.selectedBlock] ?: return null
         if(program.pending || !matches(profile,program)) return null
         return runCatching {

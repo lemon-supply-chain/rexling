@@ -156,12 +156,21 @@ internal class RexConnection(application: Application, private val scope: Corout
     internal fun shortcut(profiles: List<ShortcutProfile>,profile: ShortcutProfile,item: NeovimShortcut,target: String): Boolean {
         val current=state.value
         val live=ShortcutProfiles.active(profiles,current.programs[current.selectedBlock])?.takeIf {it==profile} ?: return false
+        item.action?.let {return runRexAction(it,current,target)}
         val input=ShortcutProfiles.input(current,live,item,target,keyTarget(),visible && foreground,navigationRequest.pending) ?: return false
         resetModifiers()
         if(!command("input","text" to input,"session" to current.selectedSession,"block" to current.selectedBlock,
                 "navigationId" to current.navigationId,"connectionEpoch" to current.connectionEpoch)) return false
         keyboardRequest=""
         return true
+    }
+    /** Forward a shortcut's `:=` custom action name to Rex, which runs it and reports any refusal. */
+    private fun runRexAction(action: String,current: AppState,target: String): Boolean {
+        if(!visible || !foreground || !current.connected || current.creating || navigationRequest.pending || !current.controlled) return false
+        if(target.isBlank() || target!=keyTarget()) return false
+        val success=command("action","session" to current.selectedSession,"block" to current.selectedBlock,"action" to action.trim())
+        if(success) keyboardRequest=""
+        return success
     }
     fun activity(open: Boolean) = command("activity","open" to open)
     private var seen=runCatching {JSONObject(preferences.getString("activity_seen:$savedEndpoint","{}").orEmpty())}.getOrDefault(JSONObject())
@@ -392,18 +401,6 @@ internal class RexConnection(application: Application, private val scope: Corout
         }
     }
     val floatingNavigation=FloatingPaneNavigation()
-    fun swipePane(step: Int) {
-        val current = state.value
-        val windows=orderedWindows(current).map {window->
-            if(preferences.getBoolean("minimize_floating_panes",false)) window.copy(blocks=window.tiledPanes()) else window
-        }
-        if (current.connected && !current.creating) navigation.neighbour(windows, navigationRequest.block ?: current.selectedBlock, step)?.let(::selectBlock)
-    }
-    fun swipeSession(step: Int) {
-        val current = state.value
-        if (current.connected && !current.creating) navigation.neighbourSession(current.sessions,
-            navigationRequest.session ?: current.selectedSession, step)?.let(::selectSession)
-    }
     fun updateTerminalTheme(palette: TerminalPalette) {
         fun hex(color: Int) = "#%06x".format(java.util.Locale.ROOT, color and 0xffffff)
         command("theme", "args" to JSONObject()

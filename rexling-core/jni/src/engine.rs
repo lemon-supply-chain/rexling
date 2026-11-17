@@ -156,6 +156,58 @@ fn new_split_arguments(session: &str,anchor: &str,command: &Value)->Result<Value
     Ok(json!({"session_id":session,"anchor_id":anchor,"direction":direction,"side":"after",
         "layout":{"block":{"flavor":"com.superlogical.terminal.shell"}},"focus":false}))
 }
+fn parse_action_arg_value(v: &str) -> Value {
+    let clean = v.trim_matches('"').trim_matches('\'');
+    if clean == "true" {
+        Value::Bool(true)
+    } else if clean == "false" {
+        Value::Bool(false)
+    } else if clean == "null" {
+        Value::Null
+    } else if let Ok(i) = clean.parse::<i64>() {
+        json!(i)
+    } else if let Ok(f) = clean.parse::<f64>() {
+        json!(f)
+    } else if (clean.starts_with('{') && clean.ends_with('}')) || (clean.starts_with('[') && clean.ends_with(']')) {
+        serde_json::from_str(clean).unwrap_or_else(|_| Value::String(clean.to_string()))
+    } else {
+        Value::String(clean.to_string())
+    }
+}
+
+/// A shortcut's `:=` names a custom Rex action and optional key=value arguments:
+/// e.g. `dev_layout` or `rex do dev_layout ratio=0.6`.
+fn action_call(session: &str,block: &str,text: &str)->Result<(&'static str,Value)> {
+    let raw = text.trim();
+    let tokens: Vec<&str> = raw.split_whitespace().collect();
+    let action_tokens = if tokens.len() >= 2 && tokens[0].eq_ignore_ascii_case("rex") && tokens[1].eq_ignore_ascii_case("do") {
+        &tokens[2..]
+    } else {
+        &tokens[..]
+    };
+    ensure!(!action_tokens.is_empty(),"Write the custom action after :=");
+
+    let name = action_tokens[0];
+    ensure!(!name.is_empty(),"Write the custom action after :=");
+
+    let mut args_map = serde_json::Map::new();
+    for token in &action_tokens[1..] {
+        if let Some((k, v)) = token.split_once('=').filter(|(k, _)| !k.is_empty()) {
+            args_map.insert(k.to_string(), parse_action_arg_value(v));
+        }
+    }
+
+    let mut req = json!({
+        "action": name,
+        "session_id": session,
+        "block_id": block,
+        "origin": "palette"
+    });
+    if !args_map.is_empty() {
+        req["args"] = Value::Object(args_map);
+    }
+    Ok(("client.action", req))
+}
 fn split_anchor<'a>(windows: &Value,command: &'a Value)->Result<&'a str> {
     let anchor=command["anchor"].as_str().filter(|id|!id.is_empty()).context("Choose a pane first")?;
     ensure!(windows.as_array().into_iter().flatten().any(|w|w["blocks"].as_array().into_iter().flatten().any(|b|b["id"]==anchor)),
@@ -846,7 +898,7 @@ impl Actor {
         let Some(replica) = self.replica.as_mut() else {
             return;
         };
-        let events: Vec<_>=replica.events.drain(..).collect();
+        let events = std::mem::take(&mut replica.events);
         let clipboard=replica.clipboard_write.take();
         let changed=!events.is_empty() || clipboard.is_some();
         if let Some(text)=clipboard {
@@ -1483,6 +1535,17 @@ impl Actor {
                 self.refresh_view().await?;
                 self.publish();
             }
+            "action" => {
+                ensure!(self.phase=="connected" && !self.paused && !self.creating,"Connect before running an action");
+                ensure!(self.controlled,"Take control before running an action");
+                ensure!(value["session"].as_str()==Some(self.selected_session.as_str()),"The selected session changed; try again");
+                ensure!(value["block"].as_str()==Some(self.selected_block.as_str()),"The pane changed; try again");
+                let action_input = value["action"].as_str().or_else(|| value["text"].as_str()).unwrap_or_default();
+                let (method,args)=action_call(&self.selected_session,&self.selected_block,action_input)?;
+                self.control.as_mut().context("not connected")?.call(method,args).await?;
+                self.refresh_view().await?;
+                self.publish();
+            }
             "preview" => {
                 self.disconnect().await;
                 self.endpoint = None;
@@ -1984,6 +2047,18 @@ mod tests {
         assert_eq!(actor.windows[0]["layout"][0]["rect"],json!([0,0,0.5,1]));
         assert_eq!(actor.selected_block,"a");assert_eq!(actor.programs,json!({"a":["codex"]}));
         assert_eq!(actor.titles["a"],"Task");assert_eq!(actor.working,json!(["a"]));
+    }
+    #[test]
+    fn a_shortcut_runs_a_named_action_from_the_palette() {
+        assert_eq!(action_call("session:one","block:one","dev_layout").unwrap(),
+            ("client.action",json!({"action":"dev_layout","session_id":"session:one","block_id":"block:one","origin":"palette"})));
+        assert_eq!(action_call("s","b","  git_diff  ").unwrap().1,
+            json!({"action":"git_diff","session_id":"s","block_id":"b","origin":"palette"}));
+        assert_eq!(action_call("s","b","rex do dev_layout ratio=0.6").unwrap().1,
+            json!({"action":"dev_layout","args":{"ratio":0.6},"session_id":"s","block_id":"b","origin":"palette"}));
+        assert_eq!(action_call("s","b","dev_layout ratio=0.6 branch=main").unwrap().1,
+            json!({"action":"dev_layout","args":{"ratio":0.6,"branch":"main"},"session_id":"s","block_id":"b","origin":"palette"}));
+        for invalid in ["","   ","rex do ","rex do   "] {assert!(action_call("s","b",invalid).is_err());}
     }
     #[test]
     fn split_arguments_keep_the_anchor_side_shell_and_desktop_focus_for_both_directions() {

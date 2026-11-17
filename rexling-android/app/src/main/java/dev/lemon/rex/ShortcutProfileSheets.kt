@@ -90,7 +90,7 @@ internal fun shortcutCount(items: List<NeovimShortcut>): String {
     var match by rememberSaveable {mutableStateOf(profile?.matchText.orEmpty())}
     var prefix by rememberSaveable {mutableStateOf(profile?.prefix.orEmpty())}
     var enter by rememberSaveable {mutableStateOf(profile?.enter ?: ShortcutEnter.TEXT)}
-    var draft by rememberSaveable {mutableStateOf(NeovimShortcuts.editorText(profile?.items.orEmpty()))}
+    var draft by rememberSaveable {mutableStateOf(profile?.editorText.orEmpty())}
     var error by remember {mutableStateOf<String?>(null)}
     var deleting by remember {mutableStateOf(false)}
     val defaultTitle=stringResource(R.string.new_profile)

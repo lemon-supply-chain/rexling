@@ -152,6 +152,14 @@ To minimize typing latency over mobile high-latency connections, Rexling impleme
 - **Engine Coordination**: Typed characters are drawn optimistically and confirmed or dropped upon server frames.
 - **Defensive Server Lifecycle**: Predictive echo commands (`command("prediction", ...)`) are guarded so that unconfigured or empty server profiles (`endpoint.isBlank()`) do not send premature RPCs to the engine, and error banners are suppressed on empty workspaces where no active servers exist.
 
+### 3.9 Edge Padding Strategy Pattern (Non-Editor vs Editor)
+
+Terminal padding (`insetTop`, `insetBottom`, `insetHorizontal`) provides comfortable margins and accommodates floating carousel pager dots. However, full-screen editors and segmented status-bar TUIs have opposing requirements:
+- **`TerminalEdgePolicy.NON_EDITOR` (Default)**: Strictly constrains drawing within the content box `clipRect(0f, insetTop, width, height - insetBottom)`. Tools with multi-colored status badges (e.g. `yazi`, `tmux`) never leak color stripes or icons into bottom insets or pager dots.
+- **`TerminalEdgePolicy.EDITOR`**: Enabled for full-screen editors (`vim`, `neovim`, `helix`, `nano`, `micro`, `emacs`). When `extendPadding` is true, the top row background seamlessly extends upward to `0f` and the last row background extends downward to `height`, eliminating letterbox blank borders while keeping text safely within the content padding.
+
+`TerminalEdgePolicies.policy(identity)` resolves the policy from `ProgramIdentity`, strictly defaulting to `NON_EDITOR` for shells, CLI utilities, and unclassified programs.
+
 ---
 
 ## 4. Verification & Testing
@@ -165,4 +173,5 @@ To minimize typing latency over mobile high-latency connections, Rexling impleme
 - **Android unit tests**:
   - `TerminalRowWindowTest`: Verifies top/bottom clipping, origin offsets, continuity across height transitions, and touch coordinate inversion.
   - `TerminalImePanTest` / `TerminalImeAnchorTest`: Verifies that editor cursor moves do not recenter a settled viewport, that hidden-caret programs (pi, cursor-agent) anchor on the last painted row, that `yazi` selects the resize policy, and that every other program keeps the cursor anchor.
+  - `TerminalEdgePolicyTest`: Verifies that `null`, shells, tools (`yazi`, `btop`, `git`), and unknown programs strictly default to `NON_EDITOR`, while `vim`, `neovim`, and modern CLI editors resolve to `EDITOR`.
   - Run via: `cd rexling-android && ./gradlew testDebugUnitTest`

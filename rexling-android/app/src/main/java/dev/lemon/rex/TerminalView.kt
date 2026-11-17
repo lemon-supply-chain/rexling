@@ -109,6 +109,9 @@ class TerminalView(context: Context) : View(context) {
     /** Chosen by program identity: pan to a hidden caret, or resize a full-screen TUI. */
     internal var imeAnchor: ImeAnchor = ImeAnchor.CURSOR
         set(value) {if(field!=value) {field=value;reportCursorViewport()}}
+    /** Chosen by program identity: strictly isolate bounds for general CLI/TUIs, or extend seamlessly for full-screen editors. */
+    internal var edgePolicy: TerminalEdgePolicy = TerminalEdgePolicy.NON_EDITOR
+        set(value) {if(field!=value) {field=value;clearRows();invalidate()}}
     internal val keyboardFocus: TerminalKeyboardFocus? get() {
         val frame=screen ?: return null
         val row=frame.imeAnchorRow(imeAnchor) ?: return null
@@ -238,7 +241,8 @@ class TerminalView(context: Context) : View(context) {
         android.os.Trace.beginSection("Rexlet.drawTerminal")
         val token=frameTraceToken.takeIf {selection==null}
         if(token!=null) android.os.Trace.beginSection("Rexlink.draw.$token")
-        val geometry="$width:$height:${frame.columns}:$visibleColumns:$visibleRows:$insetHorizontal:$insetTop:$insetBottom:$extendPadding:${canvas.isHardwareAccelerated}"
+        val isEditor=extendPadding && edgePolicy==TerminalEdgePolicy.EDITOR
+        val geometry="$width:$height:${frame.columns}:$visibleColumns:$visibleRows:$insetHorizontal:$insetTop:$insetBottom:$extendPadding:$edgePolicy:${canvas.isHardwareAccelerated}"
         if(geometry!=rowGeometry) {clearRows();recorded=arrayOfNulls(visibleRows);rowGeometry=geometry}
         android.os.Trace.beginSection("Rexlink.linkIndex")
         val rowLinks=try {linkIndex.update(frame)} finally {android.os.Trace.endSection()}
@@ -247,7 +251,8 @@ class TerminalView(context: Context) : View(context) {
         reuseShiftedRows(frame,visibleRows)
         val slide=slideFor(frame)
         val saveClip=canvas.save()
-        canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
+        if(isEditor) canvas.clipRect(0f,0f,width.toFloat(),height.toFloat())
+        else canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
         if(slide!=0f) canvas.translate(0f,-slide)
         if(frame.images.isEmpty()) {
         if(slide<0f) frame.above.forEachIndexed {i,row->drawLooseRow(canvas,row,visibleColumns,insetTop-(frame.above.size-i)*cellHeight)}
@@ -256,33 +261,37 @@ class TerminalView(context: Context) : View(context) {
             val cells=frame.lines[y]
             var row=recorded[y]
             val links=rowLinks[y]
+            val origin=if(isEditor && y==0) 0f else insetTop+y*cellHeight
+            val top=if(isEditor && y==0) insetTop else 0f
+            val bottom=if(isEditor && y==visibleRows-1) height-origin else top+cellHeight
             if(row==null || !row.recording.valid || !sameCells(row.cells,cells) || row.links!=links) {
-                val origin=insetTop+y*cellHeight
                 val recording=row?.recording ?: TerminalRowRecording.create(canvas.isHardwareAccelerated)
-                recording.record(width,cellHeight.toInt().coerceAtLeast(1)) { target ->
-                    drawRow(target,cells,visibleColumns,0f,cellHeight)
-                    target.save();target.clipRect(insetHorizontal,0f,width-insetHorizontal,cellHeight)
+                recording.record(width,bottom.toInt().coerceAtLeast(1)) { target ->
+                    drawRow(target,cells,visibleColumns,top,bottom)
+                    target.save();target.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
                     backgroundPaint.color=palette.accent;backgroundPaint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
-                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,baseline+2,
-                        insetHorizontal+link.end*cellWidth,baseline+2,backgroundPaint)
+                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,top+baseline+2,
+                        insetHorizontal+link.end*cellWidth,top+baseline+2,backgroundPaint)
                     target.restore()
                 }
                 row=RecordedRow(cells,recording,links);recorded[y]=row;recordedRowCount++
             }
-            canvas.save();canvas.translate(0f,insetTop+y*cellHeight)
+            canvas.save();canvas.translate(0f,origin)
             row.recording.draw(canvas);canvas.restore()
         }
         } else {
             fun images(layer: Int)=terminalImages.draw(canvas,frame,layer,insetHorizontal,insetTop,width-insetHorizontal,height-insetBottom,cellWidth,cellHeight)
             fun rows(pass: Int) {
                 for(y in 0 until visibleRows) {
-                    val origin=insetTop+y*cellHeight
+                    val origin=if(isEditor && y==0) 0f else insetTop+y*cellHeight
+                    val top=if(isEditor && y==0) insetTop else 0f
+                    val bottom=if(isEditor && y==visibleRows-1) height-origin else top+cellHeight
                     val save=canvas.save();canvas.translate(0f,origin)
-                    drawRow(canvas,frame.lines[y],visibleColumns,0f,cellHeight,pass)
+                    drawRow(canvas,frame.lines[y],visibleColumns,top,bottom,pass)
                     if(pass==2) {
-                        canvas.save();canvas.clipRect(insetHorizontal,0f,width-insetHorizontal,cellHeight)
+                        canvas.save();canvas.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
                         backgroundPaint.color=palette.accent;backgroundPaint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
-                        for(link in rowLinks[y]) canvas.drawLine(insetHorizontal+link.start*cellWidth,baseline+2,insetHorizontal+link.end*cellWidth,baseline+2,backgroundPaint)
+                        for(link in rowLinks[y]) canvas.drawLine(insetHorizontal+link.start*cellWidth,top+baseline+2,insetHorizontal+link.end*cellWidth,top+baseline+2,backgroundPaint)
                         canvas.restore()
                     }
                     canvas.restoreToCount(save)
