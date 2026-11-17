@@ -5,9 +5,6 @@ import android.content.*
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.util.UUID

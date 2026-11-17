@@ -25,7 +25,12 @@ async fn exercise(reject_second:bool,stale:bool) {
         ws.send(Message::Text(json!({"type":"welcome","protocol":"rex.control.v1","api_revision":8,"limits":{"max_message_bytes":1_048_576},"client":{"id":"client:test","resumed":false}}).to_string().into())).await.unwrap();
         let mut ids=vec!["a".to_owned(),"b".to_owned(),"c".to_owned()];let mut swaps=0;
         while let Some(Ok(message))=ws.next().await {
-            if message.is_close(){break;}if !message.is_text(){continue;}
+            if message.is_close() {
+                break;
+            }
+            if !message.is_text() {
+                continue;
+            }
             let request:Value=serde_json::from_str(message.to_text().unwrap()).unwrap();
             captured.lock().unwrap().push(request.clone());
             let mut response=json!({"type":"response","id":request["id"],"payload":{}});

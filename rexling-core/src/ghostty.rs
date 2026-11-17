@@ -200,6 +200,8 @@ impl Drop for Terminal {
         }
     }
 }
+type ApcEvent = (u8, Vec<u8>);
+
 impl Terminal {
     pub fn new(columns: u16, rows: u16) -> Result<Self> {
         ensure!(
@@ -230,18 +232,19 @@ impl Terminal {
             offset,
         ))
     }
-    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<(u8,Vec<u8>)>)> {
+
+    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<ApcEvent>)> {
         unsafe extern "C" fn apc(userdata: *mut c_void, kind: u8, bytes: *const u8, len: usize) {
             // Synchronous callback, borrowed bytes copied before native code returns.
             unsafe {
-                let events=&mut *userdata.cast::<Vec<(u8,Vec<u8>)>>();
+                let events=&mut *userdata.cast::<Vec<ApcEvent>>();
                 if kind==1 {events.retain(|(kind,_)|*kind!=1);}
                 let data=if len==0 {Vec::new()} else {std::slice::from_raw_parts(bytes,len).to_vec()};
                 events.push((kind,data));
             }
         }
         let mut consumed = 0;
-        let mut events = Vec::<(u8,Vec<u8>)>::new();
+        let mut events = Vec::<ApcEvent>::new();
         check(
             unsafe {
                 rp_write(

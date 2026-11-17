@@ -212,7 +212,7 @@ impl Images {
                 return;
             }
             let key = (r.id, r.generation);
-            if !this.cache.contains_key(&key) {
+            if let std::collections::hash_map::Entry::Vacant(entry) = this.cache.entry(key) {
                 let Some(rgba) = rgba(
                     unsafe { std::slice::from_raw_parts(data, len) },
                     r.format,
@@ -221,8 +221,7 @@ impl Images {
                 ) else {
                     return;
                 };
-                this.cache.insert(
-                    key,
+                entry.insert(
                     Arc::new(Image {
                         id: r.id,
                         generation: r.generation,
@@ -274,6 +273,16 @@ impl Images {
         self.placements.sort_by_key(|p| (p.layer, p.z));
         Ok((cw.max(1), ch.max(1), self.placements.clone()))
     }
+}
+
+pub(crate) fn animation_delay(terminal: *mut c_void, now: u64) -> Result<Option<u64>> {
+    let mut next = 0;
+    let mut playing = 0;
+    super::ghostty::check(
+        unsafe { rp_animation_tick(terminal, now, &mut next, &mut playing) },
+        "image animation tick",
+    )?;
+    Ok((playing != 0).then(|| next.saturating_sub(now).max(16)))
 }
 
 #[cfg(test)]
@@ -446,12 +455,3 @@ mod tests {
     }
 }
 
-pub(crate) fn animation_delay(terminal: *mut c_void, now: u64) -> Result<Option<u64>> {
-    let mut next = 0;
-    let mut playing = 0;
-    super::ghostty::check(
-        unsafe { rp_animation_tick(terminal, now, &mut next, &mut playing) },
-        "image animation tick",
-    )?;
-    Ok((playing != 0).then(|| next.saturating_sub(now).max(16)))
-}

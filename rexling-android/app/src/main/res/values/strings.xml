@@ -7,7 +7,6 @@
     <string name="save">Save</string>
     <string name="done">Done</string>
     <string name="close">Close</string>
-    <string name="retry">Retry</string>
     <string name="connect">Connect</string>
     <string name="disconnect">Disconnect</string>
     <string name="delete">Delete</string>
@@ -87,7 +86,6 @@
     <string name="font_size">Font size</string>
     <string name="font_size_detail">Terminal text size</string>
     <string name="language">Language</string>
-    <string name="language_detail">System default, English or Chinese</string>
     <string name="language_system">System default</string>
     <string name="language_en">English</string>
     <string name="language_zh">简体中文</string>
@@ -145,13 +143,11 @@
 
     <!-- Servers -->
     <string name="count_connected_format">%d connected</string>
-    <string name="add_server">+ Add server</string>
     <string name="add_server_title">Add server</string>
     <string name="edit_server_title">Edit server</string>
     <string name="add_rex_server_started">Add a Rex server to get started.</string>
     <string name="switch_servers_hint">Switch servers without closing their connections.</string>
     <string name="server_url">Server URL</string>
-    <string name="tailscale_address_hint">Use the server\'s authenticated Tailscale address.</string>
     <string name="save_and_connect">Save &amp; connect</string>
     <string name="forget_server">Forget server</string>
     <string name="status_connected_viewing">Connected · viewing</string>
@@ -161,7 +157,6 @@
     <string name="status_paused">Paused</string>
     <string name="status_failed">Connection failed</string>
     <string name="status_disconnected">Disconnected</string>
-    <string name="choose_server_icon">Choose server icon</string>
     <string name="server_icon_globe">Globe</string>
     <string name="server_icon_server">Server</string>
     <string name="server_icon_cloud">Cloud</string>
@@ -192,7 +187,6 @@
     <string name="filter_finished">Finished</string>
 
     <!-- Neovim Shortcuts -->
-    <string name="enable_neovim_shortcuts">Enable Neovim shortcuts</string>
     <string name="menu_layout">Menu layout</string>
     <string name="layout_grid">Grid</string>
     <string name="layout_circular">Circular</string>
@@ -222,7 +216,6 @@
     <string name="predictive_echo_always_detail">Always shows typing immediately in shells and pi.</string>
 
     <!-- Shortcut Profiles -->
-    <string name="shortcuts_detail">Floating key menus for Neovim, the shell and other programs</string>
     <string name="close_shortcuts">Close shortcuts</string>
     <string name="shortcuts_subtitle">The floating menu shows the profile that matches the program in the pane.</string>
     <string name="shortcut_profiles">Profiles</string>
@@ -251,7 +244,7 @@
     <string name="enter_text_detail">Plain text gets Enter; key sequences such as &lt;C-c&gt; do not.</string>
     <string name="enter_ex_commands">: commands</string>
     <string name="enter_ex_commands_detail">Only plain : commands get Enter, as in Neovim.</string>
-    <string name="shortcut_syntax_hint">One shortcut per line, optionally named: Name = keys. [Group] headers put the following shortcuts in a submenu; [] ends the group. Add :blue, :green, :orange or :purple to colour a group, as in [Git:green]. Start a line with ! to ask before sending it. Key notation: &lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, arrows and F1–F12.</string>
+    <string name="shortcut_syntax_hint">One shortcut per line, optionally named: Name = keys. Write Name := action to run a custom Rex action instead of keys; Rex runs it from the palette and shows any error it reports. [Group] headers put the following shortcuts in a submenu; [] ends the group. Add :blue, :green, :orange or :purple to colour a group, as in [Git:green]. Start a line with ! to ask before sending it. Key notation: &lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, arrows and F1–F12.</string>
     <string name="reset_shortcuts">Reset shortcuts</string>
     <string name="delete_profile_title">Delete %s?</string>
     <string name="delete_profile_confirm">Its shortcuts will be removed from this phone.</string>
