@@ -3377,3 +3377,14 @@ Build 91 installation follow-up: installed over USB on S22+ `RFCT21390SD`; verif
 - Re-synced the program catalog to `v1.8.44` (published 2026-11-09) instead of keeping the 1.8.30 exports. The data was read out of the signed-in `icons.superlogical.com` page over the Chrome DevTools Protocol (`icons.json` plus `glyphs/<id>.svg`), not from an anonymous download.
 - Added `kimi`, `nanoc`, `notion`, `sublime`, `tart`, `tessl` and `tilt`; `subl` and `sublime_text` alias the sublime tile. All catalog tiles are now rendered from the catalog's own card drawing (`artwork/program-icons/rexling/card-template.svg`), so the continuous-corner card, the darker backgrounds/foregrounds and the glyph art match the site. The 136 tiles whose palette moved and the seven tiles the catalog no longer ships (`bash`, `claude-code`, `fish`, `nushell`, `placeholder`, `shell`, `zsh`) were re-rendered through the same card, keeping their retained colors and art. `cua` stays excluded: its logo ships as an embedded PNG that the vector-only renderer cannot draw, so it keeps the terminal fallback.
 - `metadata.json` records 162 tiles and 160 glyphs; `build_program_vectors.py --check` verifies 162 compiled tiles and 162 glyphs, two local overlay glyphs included. JVM: 213 passed, 1 optional skipped, covering catalog/index pairing, skin coverage and alias targets. Sail, shell, codex, bash, sublime, tart and cloudflare were rendered to PNG with `render_program_icons.swift` and reviewed for the palette, the continuous corners and the legacy tiles. `sync_superlogical_icons.mjs` reports `retained 155, missing 0, drift 0, excluded 1`. Release build, lint and emulator rendering were not re-run.
+
+### 2026-11-16 — Superlogical Rex official launcher icon
+
+- Replaced dinosaur launcher artwork with the official Superlogical Rex brand icon.
+- Full-bleed sunset rainbow 2D mesh gradient background (`rex_launcher_background.png`) ensures seamless edge-to-edge coverage across all launcher shapes (circle, squircle, pebble) without white borders or black gaps.
+- Foreground (`rex_launcher_foreground.png`) centers the crisp white Rex ammonite spiral shell logo (Rexie) with ample whitespace (~45% of canvas, 230 px in 512 px) inside the 72 dp safe zone.
+- Clean release artwork without Beta badges or text overlays.
+- Status bar notification and Android 13+ monochrome adaptive icon (`ic_notification.xml`) updated to vector Rex ammonite spiral path.
+- Updated `AboutSheet.kt` and `README.md` to reference the new Rex app icon (`rex_app_icon.png`).
+- Unit tests and debug assembly passed.
+

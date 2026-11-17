@@ -75,32 +75,29 @@ class TerminalInteractionTest {
         var colored=0
         for(y in 0 until 192) for(x in 0 until 192) {
             val pixel=bitmap.getPixel(x,y)
-            if(android.graphics.Color.alpha(pixel)>200 && android.graphics.Color.blue(pixel)>android.graphics.Color.red(pixel)+30) colored++
+            if(android.graphics.Color.alpha(pixel)>200 && (android.graphics.Color.red(pixel)>100 || android.graphics.Color.blue(pixel)>100)) colored++
         }
-        assertTrue("Dinosaur artwork missing from launcher icon",colored>1000)
-        File(context.cacheDir,"rexlet-launcher-preview.png").outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        assertTrue("Rex artwork missing from launcher icon",colored>1000)
+        File(context.cacheDir,"rex-launcher-preview.png").outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
     }
     @Test fun launcherPortraitReachesTheBottomOfTheMaskWithoutAWhiteGap() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val icon=context.applicationInfo.loadIcon(context.packageManager) as AdaptiveIconDrawable
         val size=384;icon.setBounds(0,0,size,size)
-        val foreground=Bitmap.createBitmap(size,size,Bitmap.Config.ARGB_8888)
-        val canvas=Canvas(foreground);val bounds=icon.foreground.bounds
-        canvas.translate((size-bounds.width())/2f-bounds.left,(size-bounds.height())/2f-bounds.top)
-        icon.foreground.draw(canvas)
+        val rendered=Bitmap.createBitmap(size,size,Bitmap.Config.ARGB_8888)
+        icon.draw(Canvas(rendered))
         val mask=Bitmap.createBitmap(size,size,Bitmap.Config.ARGB_8888)
         Canvas(mask).drawPath(icon.iconMask,android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {color=android.graphics.Color.WHITE})
         var checked=0;var gaps=0
         for(y in size-8 until size-2) for(x in size/2-12..size/2+12) {
             if(android.graphics.Color.alpha(mask.getPixel(x,y))>250) {
                 checked++
-                if(android.graphics.Color.alpha(foreground.getPixel(x,y))<200) gaps++
+                if(android.graphics.Color.alpha(rendered.getPixel(x,y))<200) gaps++
             }
         }
-        val rendered=Bitmap.createBitmap(size,size,Bitmap.Config.ARGB_8888);icon.draw(Canvas(rendered))
-        File(context.cacheDir,"rexlink-portrait-launcher.png").outputStream().use {rendered.compress(Bitmap.CompressFormat.PNG,100,it)}
+        File(context.cacheDir,"rex-portrait-launcher.png").outputStream().use {rendered.compress(Bitmap.CompressFormat.PNG,100,it)}
         assertTrue("No bottom mask pixels checked",checked>100)
-        assertEquals("White gap below dinosaur: $gaps of $checked bottom pixels",0,gaps)
+        assertEquals("Gap below launcher artwork: $gaps of $checked bottom pixels",0,gaps)
     }
 
 }

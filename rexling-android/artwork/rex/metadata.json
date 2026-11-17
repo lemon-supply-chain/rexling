@@ -1,0 +1,9 @@
+{
+  "source": "Superlogical Rex official application artwork and glyph",
+  "preparation": "Full-bleed sunset rainbow 2D gradient mesh background layer and white Rex spiral ammonite shell (Rexie) glyph extracted and composited for Android Adaptive Icon safe zone (108dp canvas, 72dp safe zone). Clean release version without Beta badge.",
+  "background": "app/src/main/res/drawable-nodpi/rex_launcher_background.png",
+  "foreground": "app/src/main/res/drawable-nodpi/rex_launcher_foreground.png",
+  "app_icon": "app/src/main/res/drawable-nodpi/rex_app_icon.png",
+  "notification": "app/src/main/res/drawable/ic_notification.xml",
+  "supersedes": "artwork/rexlink/metadata.json"
+}

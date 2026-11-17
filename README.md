@@ -1,4 +1,4 @@
-# <img src="rexling-android/app/src/main/res/drawable-nodpi/rexlink_dinosaur.png" alt="Rexling app icon" width="40" height="40" align="absmiddle"> Rexling
+# <img src="rexling-android/app/src/main/res/drawable-nodpi/rex_app_icon.png" alt="Rexling app icon" width="40" height="40" align="absmiddle"> Rexling
 
 Unofficial native Android client for Superlogical Rex.
 Connect directly to your authenticated Rex server over your private Tailscale network.
