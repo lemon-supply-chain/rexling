@@ -180,21 +180,14 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     var picker by remember {mutableStateOf("")}
     var newSession by remember {mutableStateOf(false)}
     var menu by remember {mutableStateOf(false)}
-    var appearance by remember {mutableStateOf(false)}
-    var about by remember {mutableStateOf(false)}
-    var preferencesOpen by remember {mutableStateOf(false)}
-    var languageDialog by remember {mutableStateOf(false)}
-    var shortcutSettings by remember {mutableStateOf(false)}
-    var toolbarSettings by remember {mutableStateOf(false)}
-    var networkSettings by remember {mutableStateOf(false)}
-    // null when closed; "" for a new profile.
-    var editingProfile by remember {mutableStateOf<String?>(null)}
+    // Settings drawers stack, so Cancel, swipe-down and Back return to the level above.
+    val settings=remember {mutableStateListOf<SettingsRoute>()}
+    fun openSettings(route: SettingsRoute) {SettingsNav.open(settings,route)}
+    fun closeSettings() {SettingsNav.close(settings)}
     var pendingShortcut by remember {mutableStateOf<Triple<ShortcutProfile,NeovimShortcut,String>?>(null)}
-    var alerts by remember {mutableStateOf(false)}
     var forwards by remember {mutableStateOf(false)}
     var closeTarget by remember {mutableStateOf<TerminalCloseTarget?>(null)}
     val fontSize=model.fontSize
-    var fontPicker by remember {mutableStateOf(false)}
     var terminalView by remember {mutableStateOf<TerminalView?>(null)}
     val context=LocalContext.current
     var networkAction by remember {mutableStateOf<(() ->Unit)?>(null)}
@@ -242,7 +235,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     val floatingActive=floating.any {it.id==chosen}
     var hiddenFloating by rememberSaveable(displayedSession,window?.id) {mutableStateOf("")}
     val controlled=state.controlled && ready && client.hasScreen && (!floatingActive || hiddenFloating!=chosen)
-    SideEffect {model.setPaneObscured((floatingActive && hiddenFloating==chosen) || model.activityVisible || picker.isNotEmpty() || preferencesOpen || languageDialog || networkSettings || servers || addServer || forwards || newSession || appearance || about || shortcutSettings || editingProfile!=null || pendingShortcut!=null || toolbarSettings || alerts || fontPicker || closeTarget!=null)}
+    SideEffect {model.setPaneObscured((floatingActive && hiddenFloating==chosen) || model.activityVisible || picker.isNotEmpty() || settings.isNotEmpty() || servers || addServer || forwards || newSession || pendingShortcut!=null || closeTarget!=null)}
     fun openPane(id: String) {hiddenFloating="";client.selectBlock(id)}
     fun minimizeFloating() {
         hiddenFloating=chosen
@@ -251,7 +244,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     LaunchedEffect(navigation.id) {if(navigation.pending) hiddenFloating=""}
     LaunchedEffect(model.minimizeFloatingPanes) {if(model.minimizeFloatingPanes && floatingActive) minimizeFloating()}
     SideEffect {window?.let {client.floatingNavigation.remember(displayedSession,it,chosen)}}
-    BackHandler(enabled=ready && model.minimizeFloatingPanes && !newSession && !appearance && !about && !shortcutSettings && editingProfile==null && pendingShortcut==null && !toolbarSettings && !networkSettings && !forwards && !addServer && !alerts && !fontPicker && !languageDialog && closeTarget==null && floatingActive && hiddenFloating!=chosen && picker.isEmpty() && !preferencesOpen && !model.activityVisible) {minimizeFloating()}
+    BackHandler(enabled=ready && model.minimizeFloatingPanes && !newSession && settings.isEmpty() && pendingShortcut==null && !forwards && !addServer && closeTarget==null && floatingActive && hiddenFloating!=chosen && picker.isEmpty() && !model.activityVisible) {minimizeFloating()}
     val liveBlock=state.selectedBlock.ifBlank {if(state.phase=="preview") "preview" else ""}
     fun closePaneTarget(block: BlockItem)=TerminalCloseTarget(state.selectedSession,block.id,
         (state.programs[block.id] ?: ProgramIdentity.Loading).paneTitle(block.label,state.titles[block.id].orEmpty()),false,listOf(block.id))
@@ -280,7 +273,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
         }
     }
     LaunchedEffect(picker) {if(picker=="sessions") model.refreshSessionDetails()}
-    val workspaceBackdrop=rememberBackdropCapture(menu || forwards || preferencesOpen || servers || addServer || networkSettings || appearance || about || shortcutSettings || editingProfile!=null || toolbarSettings || fontPicker || languageDialog || alerts || picker in setOf("tabs","panes","sessions") || model.activityVisible)
+    val workspaceBackdrop=rememberBackdropCapture(menu || forwards || settings.isNotEmpty() || servers || addServer || picker in setOf("tabs","panes","sessions") || model.activityVisible)
     Surface(Modifier.fillMaxSize().then(if(workspaceBackdrop) Modifier.hazeSource(workspaceHaze) else Modifier),color=MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
             SessionHeader(sessionStrip,currentSessionKey,state.connected,model.sessionTargets.isNotEmpty(),
@@ -299,7 +292,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                             TerminalMenuItem(stringResource(R.string.new_session),ChromeIcon.ADD,enabled=ready,onClick={menu=false;newSession=true})
                             OwnershipMenuItem(controlled,ready&&client.hasScreen) {menu=false;if(controlled) client.releaseControl() else client.takeControl()}
                             QuickThemeMenuItem(palette.dark) {dark->menu=false;model.changeAppearance(if(dark) Appearance.DARK else Appearance.LIGHT)}
-                            TerminalMenuItem(stringResource(R.string.preferences),ChromeIcon.SETTINGS,enabled=true,onClick={menu=false;preferencesOpen=true})
+                            TerminalMenuItem(stringResource(R.string.preferences),ChromeIcon.SETTINGS,enabled=true,onClick={menu=false;openSettings(SettingsRoute.Preferences)})
                             TerminalMenuItem(stringResource(R.string.copy_viewport),ChromeIcon.COPY,enabled=client.hasScreen,onClick={
                                 menu=false;client.terminal.value?.let {screen->(getClipboard(model.getApplication()) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Rex terminal",screen.plainText()))}
                             })
@@ -369,7 +362,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                 onChoose={item,target->
                                     if(item.confirm) pendingShortcut=Triple(shortcutProfile,item,target)
                                     else client.shortcut(model.shortcutProfiles,shortcutProfile,item,target)
-                                },onCustomize={editingProfile=shortcutProfile.id},layout=model.neovimShortcutLayout,effect=model.neovimShortcutEffect,hapticsEnabled=model.neovimShortcutHaptics,
+                                },onCustomize={openSettings(SettingsRoute.ShortcutEditor(shortcutProfile.id))},layout=model.neovimShortcutLayout,effect=model.neovimShortcutEffect,hapticsEnabled=model.neovimShortcutHaptics,
                                 name=shortcutProfile.name,
                                 modifier=Modifier.fillMaxSize(),position=model.neovimShortcutPosition,onPosition=model::moveNeovimShortcut,bottomInset=if(floating.isNotEmpty() || carouselBlocks.size>1) 64.dp else 10.dp)
                         }
@@ -412,39 +405,47 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
                     onSelect={picker="";model.selectSessionTarget(it)},onClose={picker=""},onNew={picker="";newSession=true},hazeState=workspaceHaze)
     if(model.activityVisible) ActivitySheet(model.activitySources,model::refreshActivity,model::openActivity,onClose={model.showActivity(false)},onSeen=model::markActivitySeen,onMarkAll=model::markAllActivitySeen,hazeState=workspaceHaze)
     NetworkPrompts()
-    if(networkSettings) NetworkSheet(model.activeServer,state.connected,hazeState=workspaceHaze) {networkSettings=false}
-    if(preferencesOpen) PreferencesSheet({preferencesOpen=false;appearance=true},{preferencesOpen=false;fontPicker=true},{preferencesOpen=false;alerts=true},{preferencesOpen=false;about=true},
-        onClose={preferencesOpen=false},shortcutGesture=model.shortcutGesture,onShortcutGesture=model::changeShortcutGesture,
-        onNeovim={preferencesOpen=false;shortcutSettings=true},arrowJoystickEnabled=model.arrowJoystickEnabled,onArrowJoystick=model::changeArrowJoystick,
-        codexTitleAttention=model.experimentalCodexAttention,onCodexTitleAttention=model::changeCodexAttention,
-        minimizeFloatingPanes=model.minimizeFloatingPanes,onMinimizeFloatingPanes=model::changeMinimizeFloatingPanes,
-        onNetwork={preferencesOpen=false;networkSettings=true},
-        keepScreenAwake=model.keepScreenAwake,onKeepScreenAwake=model::changeKeepScreenAwake,onToolbar={preferencesOpen=false;toolbarSettings=true},
-        language=model.language,onLanguage={languageDialog=true},
-        terminalPadding=model.terminalPadding,onTerminalPadding=model::changeTerminalPadding,extendPadding=model.extendPadding,onExtendPadding=model::changeExtendPadding,
-        predictiveEcho=model.predictiveEcho,onPredictiveEcho=model::changePredictiveEcho,hazeState=workspaceHaze)
-    if(languageDialog) LanguageDialog(model.language,model::changeLanguage){languageDialog=false}
-    if(toolbarSettings) KeyboardToolbarSheet(model.toolbarKeys,model::changeToolbar,onClose={toolbarSettings=false},hazeState=workspaceHaze)
-    if(shortcutSettings && editingProfile==null) ShortcutProfilesSheet(model.shortcutProfiles,onEdit={editingProfile=it},onNew={editingProfile=""},
-        onEnabled=model::enableShortcutProfile,onClose={shortcutSettings=false},
-        layout=model.neovimShortcutLayout,onLayout=model::changeNeovimShortcutLayout,effect=model.neovimShortcutEffect,onEffect=model::changeNeovimShortcutEffect,
-        hapticsEnabled=model.neovimShortcutHaptics,onHaptics=model::changeNeovimShortcutHaptics)
-    editingProfile?.let {id->
-        val profile=model.shortcutProfiles.firstOrNull {it.id==id}
-        // A new profile gets its id once, so a failed save keeps the same draft.
-        val saveId=remember(id) {profile?.id ?: ShortcutProfiles.newId()}
-        key(id) {
-            ShortcutProfileSheet(profile,onSave={name,match,prefix,enter,text->model.saveShortcutProfile(saveId,name,match,prefix,enter,text)},
-                onClose={editingProfile=null},onDelete=profile?.let {{model.deleteShortcutProfile(it.id)}},
-                defaults=when(id) {ShortcutProfiles.NEOVIM->NeovimShortcuts.defaults;ShortcutProfiles.SHELL->ShortcutProfiles.shellDefaults;else->null})
+    // Only the top of the stack renders; closing it reveals the level it was opened from.
+    when(val route=settings.lastOrNull()) {
+        null->Unit
+        SettingsRoute.Preferences->PreferencesSheet({openSettings(SettingsRoute.Appearance)},{openSettings(SettingsRoute.FontSize)},
+            {openSettings(SettingsRoute.BackgroundAlerts)},{openSettings(SettingsRoute.About)},
+            onClose={closeSettings()},shortcutGesture=model.shortcutGesture,onShortcutGesture=model::changeShortcutGesture,
+            onNeovim={openSettings(SettingsRoute.Shortcuts)},arrowJoystickEnabled=model.arrowJoystickEnabled,onArrowJoystick=model::changeArrowJoystick,
+            codexTitleAttention=model.experimentalCodexAttention,onCodexTitleAttention=model::changeCodexAttention,
+            minimizeFloatingPanes=model.minimizeFloatingPanes,onMinimizeFloatingPanes=model::changeMinimizeFloatingPanes,
+            onNetwork={openSettings(SettingsRoute.Network)},
+            keepScreenAwake=model.keepScreenAwake,onKeepScreenAwake=model::changeKeepScreenAwake,onToolbar={openSettings(SettingsRoute.KeyboardToolbar)},
+            language=model.language,onLanguage={openSettings(SettingsRoute.Language)},
+            terminalPadding=model.terminalPadding,onTerminalPadding=model::changeTerminalPadding,extendPadding=model.extendPadding,onExtendPadding=model::changeExtendPadding,
+            predictiveEcho=model.predictiveEcho,onPredictiveEcho=model::changePredictiveEcho,hazeState=workspaceHaze)
+        SettingsRoute.Appearance->AppearanceSheet(model.appearance,model.themes,model.theme(false),model.theme(true),model::changeAppearance,model::chooseTheme,hazeState=workspaceHaze) {closeSettings()}
+        SettingsRoute.FontSize->FontSizeDialog(fontSize,model::changeFontSize,hazeState=workspaceHaze) {closeSettings()}
+        SettingsRoute.Language->LanguageDialog(model.language,model::changeLanguage){closeSettings()}
+        SettingsRoute.BackgroundAlerts->BackgroundAlertsDialog(model,hazeState=workspaceHaze) {closeSettings()}
+        SettingsRoute.About->AboutSheet(hazeState=workspaceHaze) {closeSettings()}
+        SettingsRoute.KeyboardToolbar->KeyboardToolbarSheet(model.toolbarKeys,model::changeToolbar,onClose={closeSettings()},hazeState=workspaceHaze)
+        SettingsRoute.Network->NetworkSheet(model.activeServer,state.connected,hazeState=workspaceHaze) {closeSettings()}
+        SettingsRoute.Shortcuts->ShortcutProfilesSheet(model.shortcutProfiles,onEdit={openSettings(SettingsRoute.ShortcutEditor(it))},onNew={openSettings(SettingsRoute.ShortcutEditor(""))},
+            onEnabled=model::enableShortcutProfile,onClose={closeSettings()},
+            layout=model.neovimShortcutLayout,onLayout=model::changeNeovimShortcutLayout,effect=model.neovimShortcutEffect,onEffect=model::changeNeovimShortcutEffect,
+            hapticsEnabled=model.neovimShortcutHaptics,onHaptics=model::changeNeovimShortcutHaptics)
+        is SettingsRoute.ShortcutEditor->{
+            val id=route.id
+            val profile=model.shortcutProfiles.firstOrNull {it.id==id}
+            // A new profile gets its id once, so a failed save keeps the same draft.
+            val saveId=remember(id) {profile?.id ?: ShortcutProfiles.newId()}
+            key(id) {
+                ShortcutProfileSheet(profile,onSave={name,match,prefix,enter,text->model.saveShortcutProfile(saveId,name,match,prefix,enter,text)},
+                    onClose={closeSettings()},onDelete=profile?.let {{model.deleteShortcutProfile(it.id)}},
+                    defaults=when(id) {ShortcutProfiles.NEOVIM->NeovimShortcuts.defaults;ShortcutProfiles.SHELL->ShortcutProfiles.shellDefaults;else->null})
+            }
         }
     }
     pendingShortcut?.let {(profile,item,target)->
         ShortcutConfirmDialog(profile,item,onConfirm={pendingShortcut=null;client.shortcut(model.shortcutProfiles,profile,item,target)},onDismiss={pendingShortcut=null})
     }
     if(model.images.notice.isNotEmpty()) AlertDialog(onDismissRequest={model.images.notice=""},title={Text("Image upload")},text={Text(model.images.notice)},confirmButton={TextButton(onClick={model.images.notice=""}) {Text("OK")}})
-    if(about) AboutSheet(hazeState=workspaceHaze) {about=false}
-    if(alerts) BackgroundAlertsDialog(model,hazeState=workspaceHaze) {alerts=false}
     if(forwards) PortForwardSheet(model.forwardServers(),model.activeServerId,workspaceHaze,onClose={forwards=false},onStart={id->
         val saved=PortForwards.items.firstOrNull {it.id==id}
         val target=model.forwardServers().firstOrNull {it.profile.id==saved?.serverId && it.profile.endpoint==saved.endpoint}
@@ -475,8 +476,6 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
             }) {Text(stringResource(R.string.close),color=MaterialTheme.colorScheme.error)}},
             dismissButton={TextButton(onClick={closeTarget=null}) {Text(stringResource(R.string.cancel))}})
     }
-    if(appearance) AppearanceSheet(model.appearance,model.themes,model.theme(false),model.theme(true),model::changeAppearance,model::chooseTheme,hazeState=workspaceHaze) {appearance=false}
-    if(fontPicker) FontSizeDialog(fontSize,model::changeFontSize,hazeState=workspaceHaze) {fontPicker=false}
     if(newSession) NewSessionDialog(model.activeServer.label,ready,client::createSession) {newSession=false}
 
 }

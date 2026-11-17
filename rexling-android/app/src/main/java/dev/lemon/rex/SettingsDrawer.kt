@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -31,7 +32,7 @@ import dev.chrisbanes.haze.HazeState
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
                 DrawerHandle()
                 Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                    onBack?.let {ChromeButton(ChromeIcon.LEFT,"Back to appearance",onClick=it)}
+                    onBack?.let {ChromeButton(ChromeIcon.LEFT,stringResource(R.string.back_to_appearance),onClick=it)}
                     Text(title,Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
                     ChromeButton(ChromeIcon.CLOSE,closeDescription,onClick=onClose)
                 }
