@@ -1,11 +1,13 @@
 package dev.lemon.rex
 
-/** The line the keyboard viewport reveals once the IME covers the bottom of the grid. */
+/** How the keyboard viewport reacts when the IME covers the bottom of the grid. */
 internal enum class ImeAnchor(val id: String) {
     /** Only the reported hardware cursor moves the window; a program that hides it never pans. */
     CURSOR("cursor"),
     /** Fall back to the last painted row while no hardware cursor is reported. */
     CONTENT("content"),
+    /** Let the view shrink and the PTY take SIGWINCH instead of panning a full-height grid. */
+    RESIZE("resize"),
 }
 
 /** One program family and the anchor its terminal needs. The first matching rule wins. */
@@ -23,9 +25,9 @@ internal data class ImeAnchorRule(
 }
 
 /**
- * Programs whose TUI hides the hardware cursor and paints its own caret. Their snapshots carry
- * no cursor, so the IME viewport anchors on the last painted row instead of staying put.
- * Adding a program stays data: append a rule, no new code path.
+ * Program-specific IME viewport policies. Hidden-caret inline prompts pan to their last painted
+ * row; full-screen TUIs shrink the view and let the PTY resize repaint them. Adding a program
+ * stays data: append a rule, no new code path.
  */
 internal object TerminalImeAnchors {
     internal val rules=listOf(
@@ -35,6 +37,8 @@ internal object TerminalImeAnchors {
         ImeAnchorRule("cursor-agent",ImeAnchor.CONTENT,
             names=setOf("cursor-agent"),
             pathFragments=setOf("/cursor-agent/")),
+        ImeAnchorRule("yazi",ImeAnchor.RESIZE,
+            names=setOf("yazi")),
     )
     /** Pending or unknown programs keep the cursor-only behavior, which never moves a viewport on its own. */
     fun anchor(identity: ProgramIdentity?): ImeAnchor {
@@ -54,6 +58,7 @@ internal fun TerminalScreen.lastPaintedRow(): Int =
  */
 internal fun TerminalScreen.imeAnchorRow(anchor: ImeAnchor): Int? {
     if(scroll.below>0) return null
+    if(anchor==ImeAnchor.RESIZE) return null
     val cursor=cursorY?.takeIf {it in 0 until rows}
     if(anchor==ImeAnchor.CURSOR) return cursor
     return cursor ?: lastPaintedRow().takeIf {it>=0}

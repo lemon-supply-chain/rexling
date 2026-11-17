@@ -35,12 +35,16 @@ internal class TerminalImePanState {
     }
 }
 
-/** Only the visible window shrinks for the IME; the PTY keeps its full-height grid. */
+/** Panning policies keep the full-height grid; RESIZE programs let the view and PTY shrink. */
 @Composable
-internal fun Modifier.terminalImeViewport(ime: WindowInsets,navigation: WindowInsets,focus: ()->TerminalKeyboardFocus?): Modifier {
+internal fun Modifier.terminalImeViewport(ime: WindowInsets,navigation: WindowInsets,anchor: ImeAnchor,focus: ()->TerminalKeyboardFocus?): Modifier {
     val pan=remember {TerminalImePanState()}
     return layout {measurable,constraints->
-        if(!constraints.hasBoundedHeight) {
+        if(anchor==ImeAnchor.RESIZE) {
+            // Full-screen TUIs repaint on SIGWINCH; shrinking the view is their resize signal.
+            val child=measurable.measure(constraints)
+            layout(child.width,child.height) {child.placeRelative(0,0)}
+        } else if(!constraints.hasBoundedHeight) {
             val child=measurable.measure(constraints)
             layout(child.width,child.height) {child.placeRelative(0,0)}
         } else {

@@ -129,7 +129,7 @@ import dev.chrisbanes.haze.hazeSource
                     .then(if(center || retiring) Modifier else Modifier.clickable(role=Role.Button){latestSelect(block.id)})) {
                     Box(Modifier.fillMaxSize()) {
                         if(frame!=null) AndroidView(
-                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets) {keyboardFocus}.clipToBounds(),
+                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets,TerminalImeAnchors.anchor(programs[block.id])) {keyboardFocus}.clipToBounds(),
                             update={view ->
                                 view.keepAwakeMode=if(center) keepAwake else KeepScreenAwake.SYSTEM
                                 imeHandoff.mount(block,view)
@@ -138,6 +138,7 @@ import dev.chrisbanes.haze.hazeSource
                                 keyboardFocus=view.keyboardFocus
                                 view.onDimensions=if(center && block.id==liveBlock) onDimensions else {_,_->}
                                 view.setTerminalPaddingDp(padding.horizontal,padding.top,if(bottomControlsInset>0.dp) 36 else if(blocks.size>1) padding.pagedBottom else padding.bottom)
+                                view.extendPadding=extendPadding
                                 view.palette=palette;view.textSp=fontSize
                                 if(retiring || block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
                                 view.interactive=center

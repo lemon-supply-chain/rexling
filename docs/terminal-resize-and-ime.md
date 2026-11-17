@@ -114,27 +114,35 @@ Tests and verification ensure that:
 4. **Haptic Feedback**:
    - Standardized `HapticFeedbackType.TextHandleMove` and `LongPress` across dock keys, repeat keys, joystick interactions, and shortcut selections.
 
-### 3.7 Program-Driven IME Anchor
+### 3.7 Program-Driven IME Viewport Policy
 
-Because the PTY keeps its full-height grid, the keyboard viewport is positioned entirely by
-`TerminalKeyboardFocus` (`TerminalView.keyboardFocus`) and `terminalImePan`. That anchor used to
-require a reported hardware cursor, so programs that hide the cursor (`?25` DECSET/DECRST) left
-the viewport anchored at the top of the grid and their prompt or composer stayed behind the IME.
-Neither `pi` (which paints a reverse-video fake caret with `\x1B[7m` and always writes
-`\x1B[?25l`) nor `cursor-agent` ever reports a cursor, and neither emits OSC 133 semantic prompt
-metadata, so the semantic-zone fallbacks cannot help.
+The keyboard changes which part of the terminal is usable, but not every program wants the same
+reaction. Inline prompts should stay visible without reflowing the PTY, while full-screen TUIs
+have to receive the new grid size and repaint themselves. `TerminalImeAnchor.kt` resolves that
+policy per program from a data table.
 
-`TerminalImeAnchor.kt` resolves the anchor per program from a data table:
+`ImeAnchor.CURSOR` and `ImeAnchor.CONTENT` keep the PTY's full-height grid and position the
+viewport with `TerminalKeyboardFocus` (`TerminalView.keyboardFocus`) and `terminalImePan`:
 
-- `ImeAnchor.CURSOR`: only the reported cursor moves the viewport (shells, editors, monitors).
+- `ImeAnchor.CURSOR`: only the reported hardware cursor moves the viewport (shells, editors,
+  monitors).
 - `ImeAnchor.CONTENT`: the reported cursor still wins; without one the last painted row anchors
-  the viewport, so a hidden caret reveals its own editor above the keyboard.
+  the viewport, so a hidden caret reveals its own editor above the keyboard. Registered programs
+  are `pi` and `cursor-agent`; neither reports a hardware cursor nor emits OSC 133 semantic
+  prompt metadata, so the semantic-zone fallbacks cannot help.
+
+`ImeAnchor.RESIZE` is the opposite trade: the view shrinks to the visible area and
+`TerminalView.onSizeChanged` reports the smaller grid. The existing resize debounce and
+IME-animation flush then send SIGWINCH, so the program redraws into the space above the keyboard.
+`yazi` is registered here because it is a full-screen file manager rather than an inline agent
+with a fixed composer; its own layout must reflow instead of having the whole grid pushed up and
+clipped at the top.
+
 - `ImeAnchorRule` matches executable base names and install-path fragments against
   `ProgramIdentity.matchNames`. Adding a program is one entry in `TerminalImeAnchors.rules`;
   unknown or pending programs keep `CURSOR`, which never moves a viewport on its own.
-- Scrollback (`scroll.below > 0`) keeps the current view for both anchors, and content whose last
-  painted row is already visible does not pan (`terminalImePan` caps the shift at `covered` and at
-  the anchor row height).
+- Scrollback (`scroll.below > 0`) and the last-painted-row cap apply only to panning policies.
+  `RESIZE` programs always reflow; they never call `terminalImePan`.
 
 ### 3.8 Predictive Local Echo & Cursor Coordinates
 
@@ -156,5 +164,5 @@ To minimize typing latency over mobile high-latency connections, Rexling impleme
   - Run via: `cd rexling-core && cargo test`
 - **Android unit tests**:
   - `TerminalRowWindowTest`: Verifies top/bottom clipping, origin offsets, continuity across height transitions, and touch coordinate inversion.
-  - `TerminalImePanTest` / `TerminalImeAnchorTest`: Verifies that editor cursor moves do not recenter a settled viewport, that hidden-caret programs (pi, cursor-agent) anchor on the last painted row, and that every other program keeps the cursor anchor.
+  - `TerminalImePanTest` / `TerminalImeAnchorTest`: Verifies that editor cursor moves do not recenter a settled viewport, that hidden-caret programs (pi, cursor-agent) anchor on the last painted row, that `yazi` selects the resize policy, and that every other program keeps the cursor anchor.
   - Run via: `cd rexling-android && ./gradlew testDebugUnitTest`

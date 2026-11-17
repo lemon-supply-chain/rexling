@@ -25,6 +25,11 @@ class TerminalImeAnchorTest {
         assertEquals(ImeAnchor.CONTENT,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("/usr/local/bin/cursor-agent"))))
     }
 
+    @Test fun yaziResizesByNameAndInstallPath() {
+        assertEquals(ImeAnchor.RESIZE,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("yazi"))))
+        assertEquals(ImeAnchor.RESIZE,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("/opt/homebrew/bin/yazi"))))
+    }
+
     @Test fun everyOtherProgramKeepsTheCursorAnchor() {
         assertEquals(ImeAnchor.CURSOR,TerminalImeAnchors.anchor(null))
         assertEquals(ImeAnchor.CURSOR,TerminalImeAnchors.anchor(ProgramIdentity.Loading))
@@ -70,6 +75,11 @@ class TerminalImeAnchorTest {
         assertNull(scrolled.imeAnchorRow(ImeAnchor.CONTENT))
         assertNull(scrolled.imeAnchorRow(ImeAnchor.CURSOR))
         assertEquals(5,screen(cursor=null,painted=listOf(0,5)).imeAnchorRow(ImeAnchor.CONTENT))
+    }
+
+    @Test fun resizeProgramsNeverPan() {
+        assertNull(screen(cursor=1 to 2,painted=listOf(0,1,2,4)).imeAnchorRow(ImeAnchor.RESIZE))
+        assertNull(screen(cursor=null,painted=listOf(0,1,2,4)).imeAnchorRow(ImeAnchor.RESIZE))
     }
 
     @Test fun aHiddenCaretRevealsTheLastRowJustAboveTheKeyboard() {

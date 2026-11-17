@@ -106,7 +106,7 @@ class TerminalView(context: Context) : View(context) {
         get()=currentScreen
         set(value) {setScreen(value,false)}
     internal var onKeyboardFocus: (TerminalKeyboardFocus?)->Unit={}
-    /** Chosen by program identity: a hidden caret still has to reveal its editor above the IME. */
+    /** Chosen by program identity: pan to a hidden caret, or resize a full-screen TUI. */
     internal var imeAnchor: ImeAnchor = ImeAnchor.CURSOR
         set(value) {if(field!=value) {field=value;reportCursorViewport()}}
     internal val keyboardFocus: TerminalKeyboardFocus? get() {
@@ -188,6 +188,8 @@ class TerminalView(context: Context) : View(context) {
     private var insetBottom = 0f
     private val contentWidth: Float get() = (width - insetHorizontal * 2).coerceAtLeast(1f)
     private val contentHeight: Float get() = (height - insetTop - insetBottom).coerceAtLeast(1f)
+    var extendPadding: Boolean = true
+        set(value) {if(field==value) return;field=value;clearRows();invalidate()}
     fun setTerminalPaddingDp(horizontal: Int, top: Int, bottom: Int) {
         val density = resources.displayMetrics.density
         val h = (horizontal * density).roundToInt().toFloat()
@@ -231,12 +233,12 @@ class TerminalView(context: Context) : View(context) {
         val saved = canvas.save()
         canvas.clipRect(0, 0, width, height)
         canvas.drawColor(palette.background)
-        val visibleColumns = minOf(frame.columns, max(1, ceil(contentWidth / cellWidth).toInt()))
-        val visibleRows = minOf(frame.rows, max(1, ceil(contentHeight / cellHeight).toInt()))
+        val visibleColumns = minOf(frame.columns, max(1, floor(contentWidth / cellWidth).toInt()))
+        val visibleRows = minOf(frame.rows, max(1, floor(contentHeight / cellHeight).toInt()))
         android.os.Trace.beginSection("Rexlet.drawTerminal")
         val token=frameTraceToken.takeIf {selection==null}
         if(token!=null) android.os.Trace.beginSection("Rexlink.draw.$token")
-        val geometry="$width:$height:${frame.columns}:$visibleColumns:$visibleRows:$insetHorizontal:$insetTop:$insetBottom:${canvas.isHardwareAccelerated}"
+        val geometry="$width:$height:${frame.columns}:$visibleColumns:$visibleRows:$insetHorizontal:$insetTop:$insetBottom:$extendPadding:${canvas.isHardwareAccelerated}"
         if(geometry!=rowGeometry) {clearRows();recorded=arrayOfNulls(visibleRows);rowGeometry=geometry}
         android.os.Trace.beginSection("Rexlink.linkIndex")
         val rowLinks=try {linkIndex.update(frame)} finally {android.os.Trace.endSection()}
@@ -244,7 +246,9 @@ class TerminalView(context: Context) : View(context) {
         // when the whole screen shifted, so only edge and uncovered rows need recording.
         reuseShiftedRows(frame,visibleRows)
         val slide=slideFor(frame)
-        if(slide!=0f) {canvas.save();canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom);canvas.translate(0f,-slide)}
+        val saveClip=canvas.save()
+        canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
+        if(slide!=0f) canvas.translate(0f,-slide)
         if(frame.images.isEmpty()) {
         if(slide<0f) frame.above.forEachIndexed {i,row->drawLooseRow(canvas,row,visibleColumns,insetTop-(frame.above.size-i)*cellHeight)}
         if(slide>0f) frame.below.forEachIndexed {i,row->drawLooseRow(canvas,row,visibleColumns,insetTop+(visibleRows+i)*cellHeight)}
@@ -253,36 +257,32 @@ class TerminalView(context: Context) : View(context) {
             var row=recorded[y]
             val links=rowLinks[y]
             if(row==null || !row.recording.valid || !sameCells(row.cells,cells) || row.links!=links) {
-                val origin=if(y==0) 0f else insetTop+y*cellHeight
-                val top=if(y==0) insetTop else 0f
-                val bottom=if(y==visibleRows-1) height-origin else top+cellHeight
+                val origin=insetTop+y*cellHeight
                 val recording=row?.recording ?: TerminalRowRecording.create(canvas.isHardwareAccelerated)
-                recording.record(width,bottom.toInt().coerceAtLeast(1)) { target ->
-                    drawRow(target,cells,visibleColumns,top,bottom)
-                    target.save();target.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
+                recording.record(width,cellHeight.toInt().coerceAtLeast(1)) { target ->
+                    drawRow(target,cells,visibleColumns,0f,cellHeight)
+                    target.save();target.clipRect(insetHorizontal,0f,width-insetHorizontal,cellHeight)
                     backgroundPaint.color=palette.accent;backgroundPaint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
-                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,top+baseline+2,
-                        insetHorizontal+link.end*cellWidth,top+baseline+2,backgroundPaint)
+                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,baseline+2,
+                        insetHorizontal+link.end*cellWidth,baseline+2,backgroundPaint)
                     target.restore()
                 }
                 row=RecordedRow(cells,recording,links);recorded[y]=row;recordedRowCount++
             }
-            canvas.save();canvas.translate(0f,if(y==0) 0f else insetTop+y*cellHeight)
+            canvas.save();canvas.translate(0f,insetTop+y*cellHeight)
             row.recording.draw(canvas);canvas.restore()
         }
         } else {
             fun images(layer: Int)=terminalImages.draw(canvas,frame,layer,insetHorizontal,insetTop,width-insetHorizontal,height-insetBottom,cellWidth,cellHeight)
             fun rows(pass: Int) {
                 for(y in 0 until visibleRows) {
-                    val origin=if(y==0) 0f else insetTop+y*cellHeight
-                    val top=if(y==0) insetTop else 0f
-                    val bottom=if(y==visibleRows-1) height-origin else top+cellHeight
+                    val origin=insetTop+y*cellHeight
                     val save=canvas.save();canvas.translate(0f,origin)
-                    drawRow(canvas,frame.lines[y],visibleColumns,top,bottom,pass)
+                    drawRow(canvas,frame.lines[y],visibleColumns,0f,cellHeight,pass)
                     if(pass==2) {
-                        canvas.save();canvas.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
+                        canvas.save();canvas.clipRect(insetHorizontal,0f,width-insetHorizontal,cellHeight)
                         backgroundPaint.color=palette.accent;backgroundPaint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
-                        for(link in rowLinks[y]) canvas.drawLine(insetHorizontal+link.start*cellWidth,top+baseline+2,insetHorizontal+link.end*cellWidth,top+baseline+2,backgroundPaint)
+                        for(link in rowLinks[y]) canvas.drawLine(insetHorizontal+link.start*cellWidth,baseline+2,insetHorizontal+link.end*cellWidth,baseline+2,backgroundPaint)
                         canvas.restore()
                     }
                     canvas.restoreToCount(save)
@@ -290,7 +290,7 @@ class TerminalView(context: Context) : View(context) {
             }
             images(0);rows(1);images(1);rows(2);images(2)
         }
-        if(slide!=0f) canvas.restore()
+        canvas.restoreToCount(saveClip)
         canvas.save()
         canvas.clipRect(insetHorizontal,insetTop,width-insetHorizontal,height-insetBottom)
         canvas.translate(insetHorizontal,insetTop-slide)
@@ -382,8 +382,13 @@ class TerminalView(context: Context) : View(context) {
         fun flush() {
             if(pass==2 || end<=start || start>=columns || color==palette.background) return
             backgroundPaint.color=color
-            canvas.drawRect(if(start==0) 0f else insetHorizontal+start*cellWidth,0f,
-                if(end>=columns) width.toFloat() else insetHorizontal+end*cellWidth,bottom,backgroundPaint)
+            if(extendPadding) {
+                canvas.drawRect(if(start==0) 0f else insetHorizontal+start*cellWidth,0f,
+                    if(end>=columns) width.toFloat() else insetHorizontal+end*cellWidth,bottom,backgroundPaint)
+            } else {
+                canvas.drawRect(insetHorizontal+start*cellWidth,0f,
+                    insetHorizontal+minOf(end,columns)*cellWidth,bottom,backgroundPaint)
+            }
         }
         for(cell in cells) {
             if(cell.width==0 && cell.x<end) continue
