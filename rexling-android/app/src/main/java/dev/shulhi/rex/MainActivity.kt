@@ -138,6 +138,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun RexWorkspace(model: RexModel,client: RexConnection) {
     val state by client.chromeState.collectAsState()
+    val forwardStates by PortForwardRegistry.states.collectAsState()
     val navigation=client.navigationRequest
     val displayedSession=navigation.session ?: state.selectedSession
     val currentSessionKey=sessionKey(model.activeServerId,displayedSession)
@@ -171,6 +172,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     var editingProfile by remember {mutableStateOf<String?>(null)}
     var pendingShortcut by remember {mutableStateOf<Triple<ShortcutProfile,NeovimShortcut,String>?>(null)}
     var alerts by remember {mutableStateOf(false)}
+    var portForwards by remember {mutableStateOf(false)}
     var closeTarget by remember {mutableStateOf<TerminalCloseTarget?>(null)}
     val fontSize=model.fontSize
     var fontPicker by remember {mutableStateOf(false)}
@@ -287,6 +289,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                             })
                             TerminalMenuItem(stringResource(R.string.attach_image),ChromeIcon.IMAGE,enabled=controlled && model.images.state==null,onClick={menu=false;chooseImage()})
                             TerminalMenuItem(stringResource(R.string.servers_connected_format,model.connectedCount),ChromeIcon.SERVER,enabled=true,onClick={menu=false;servers=true})
+                            TerminalMenuItem("Port forwards",ChromeIcon.SERVER,enabled=forwardStates.isNotEmpty(),onClick={menu=false;portForwards=true})
                             TerminalMenuItem(stringResource(R.string.refresh_sessions),ChromeIcon.REFRESH,enabled=state.connected,onClick={menu=false;client.refresh()})
                         }
                     }
@@ -405,7 +408,26 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
     if(model.images.notice.isNotEmpty()) AlertDialog(onDismissRequest={model.images.notice=""},title={Text("Image upload")},text={Text(model.images.notice)},confirmButton={TextButton(onClick={model.images.notice=""}) {Text("OK")}})
     if(about) AboutSheet {about=false}
     if(alerts) BackgroundAlertsDialog(model) {alerts=false}
+    val portSelection by PortForwardRegistry.selection.collectAsState()
+    portSelection?.let {selection->
+        AlertDialog(onDismissRequest={PortForwardRegistry.cancelSelection(selection)},
+            title={Text("Choose a port")},
+            text={
+                Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                    selection.state.choices.forEach {choice->
+                        TextButton(onClick={PortForwardRegistry.select(selection,choice.port)},modifier=Modifier.fillMaxWidth()) {
+                            Column {
+                                Text(":${choice.port}")
+                                if(choice.label.isNotBlank()) Text(choice.label,style=MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton={TextButton(onClick={PortForwardRegistry.cancelSelection(selection)}) {Text("Cancel")}})
+    }
     if(servers) ServersSheet(model){servers=false}
+    if(portForwards) PortForwardsSheet {portForwards=false}
     if(picker=="tabs" || picker=="panes") TabPaneSwitcher(windows,window?.id.orEmpty(),chosen,
         state.programs,state.titles,state.directories,client::tabPaneIndex,ready,
         canCreateTab=ready && state.selectedSession.isNotBlank(),canCreatePane=ready && state.selectedSession.isNotBlank(),

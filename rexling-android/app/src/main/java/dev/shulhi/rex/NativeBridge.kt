@@ -10,5 +10,11 @@ object NativeBridge {
     @JvmStatic external fun uploadCreate(request: String): Long
     @JvmStatic external fun uploadPoll(handle: Long): String
     @JvmStatic external fun uploadDestroy(handle: Long)
+    @JvmStatic external fun forwardCreate(request: String): Long
+    @JvmStatic external fun forwardPoll(handle: Long): String
+    @JvmStatic external fun forwardSelect(handle: Long, port: Long)
+    @JvmStatic external fun forwardClose(handle: Long)
+    @JvmStatic external fun forwardDestroy(handle: Long)
+    @JvmStatic external fun forwardCloseAll()
     @JvmStatic external fun destroy(handle: Long)
 }

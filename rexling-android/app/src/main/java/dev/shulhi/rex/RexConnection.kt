@@ -108,6 +108,17 @@ internal class RexConnection(application: Application, private val scope: Corout
             if(visible && foreground && active.connected && active.controlled && !active.creating && !navigationRequest.pending &&
                 active.selectedBlock==block && (kind==ProgramKind.CODEX || kind==ProgramKind.CLAUDE || kind==ProgramKind.ANTIGRAVITY)) view.keyboard()
         }
+        view.onOpenLink = {url->
+            val active=state.value
+            val target=TerminalLinks.webUrl(url)?.let {PortForwardLinks.target(it,savedEndpoint)}
+            if(target==null || !active.connected || active.creating || active.selectedSession.isBlank()) {
+                view.openWebLink(url)
+            } else {
+                PortForwardRegistry.launch(view.context,PortForwardRequest(
+                    savedEndpoint,active.selectedSession,block,target.host,target.explicitPort,target.defaultPort,url
+                ))
+            }
+        }
         boundTarget=frameTarget(current);boundView=java.lang.ref.WeakReference(view)
         view.onCellDimensions = { cols, rows, cw, ch -> resize(cols, rows, cw, ch) }
         val latest=mutableTerminal.value.takeIf {displayedTarget==boundTarget} ?: return false

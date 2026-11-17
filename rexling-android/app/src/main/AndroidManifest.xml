@@ -14,6 +14,7 @@
         android:localeConfig="@xml/locales_config"
         android:supportsRtl="true" android:usesCleartextTraffic="true">
         <service android:name=".BackgroundMonitorService" android:exported="false" android:stopWithTask="true" android:foregroundServiceType="connectedDevice" />
+        <service android:name=".PortForwardService" android:exported="false" android:stopWithTask="true" android:foregroundServiceType="connectedDevice" />
         <activity android:name=".MainActivity" android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

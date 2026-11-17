@@ -1,5 +1,6 @@
 mod activity;
 mod engine;
+mod forwards;
 mod updates;
 mod uploads;
 use engine::Session;
@@ -205,4 +206,69 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadDestroy(
     handle: jlong,
 ) {
     uploads::destroy(handle as u64);
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardCreate(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jlong {
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<u64> {
+            let request: String = env.get_string(&request)?.into();
+            forwards::create(serde_json::from_str(&request)?)
+        }));
+    match result {
+        Ok(Ok(id)) => id as jlong,
+        _ => {
+            let _ = env.throw_new(
+                "java/lang/IllegalStateException",
+                "Could not start port forwarding",
+            );
+            0
+        }
+    }
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardPoll(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    string(&mut env, forwards::poll(handle as u64).to_string())
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardSelect(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    port: jlong,
+) {
+    if (1..=65535).contains(&port) {
+        forwards::select(handle as u64, port as u16);
+    }
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardClose(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    forwards::close(handle as u64);
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardDestroy(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    forwards::destroy(handle as u64);
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardCloseAll(
+    _env: JNIEnv,
+    _class: JClass,
+) {
+    forwards::close_all();
 }

@@ -6,6 +6,7 @@ pub mod snapshot;
 pub mod transport;
 
 pub mod upload;
+pub mod forward;
 
 #[cfg(target_os = "android")]
 pub fn android_log(msg: &str) {

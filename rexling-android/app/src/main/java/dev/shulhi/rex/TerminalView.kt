@@ -465,7 +465,7 @@ class TerminalView(context: Context) : View(context) {
         val links=linkIndex.update(frame).getOrNull(row) ?: return null
         return links.firstOrNull {it.contains(column)}
     }
-    private fun openWebLink(url: String) {
+    internal fun openWebLink(url: String) {
         val safe=TerminalLinks.webUrl(url) ?: return
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(safe)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
