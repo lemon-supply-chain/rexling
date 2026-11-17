@@ -12,37 +12,13 @@ data class TerminalScroll(val total: Long=0,val offset: Long=0,val visible: Long
     val below: Long get()=(available-offset).coerceAtLeast(0)
 }
 data class TerminalCell(val x: Int, val y: Int, val text: String, val foreground: Int, val background: Int, val attributes: Int, val width: Int, val hyperlink: String?=null)
-data class TerminalImagePayload(
-    val imageId: Int,
-    val generation: Long,
-    val width: Int,
-    val height: Int,
-    val pixels: ByteArray
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is TerminalImagePayload) return false
-        return imageId == other.imageId && generation == other.generation
-    }
-    override fun hashCode(): Int = imageId.hashCode() * 31 + generation.hashCode()
-}
-data class TerminalImagePlacement(
-    val imageId: Int,
-    val col: Int,
-    val row: Int,
-    val cols: Int,
-    val rows: Int,
-    val offsetX: Int,
-    val offsetY: Int,
-    val width: Int,
-    val height: Int,
-    val srcX: Int,
-    val srcY: Int,
-    val srcWidth: Int,
-    val srcHeight: Int,
-    val z: Int
-)
-data class TerminalScreen(val columns: Int, val rows: Int, val cursorX: Int?, val cursorY: Int?, val foreground: Int, val background: Int, val cells: List<TerminalCell>, val scroll: TerminalScroll = TerminalScroll(), val lines: List<List<TerminalCell>> = cells.groupBy {it.y}.let {groups->List(rows){groups[it].orEmpty()}}, val inputFlags: Int=0, val imagePayloads: List<TerminalImagePayload> = emptyList(), val imagePlacements: List<TerminalImagePlacement> = emptyList()) {
+class TerminalImage(val id: Long,val generation: Long,val width: Int,val height: Int,val rgba: ByteArray)
+data class TerminalImagePlacement(val image: TerminalImage,val layer: Int,val z: Int,val col: Int,val row: Int,
+    val offsetX: Int,val offsetY: Int,val width: Int,val height: Int,val sourceX: Int,val sourceY: Int,val sourceWidth: Int,val sourceHeight: Int)
+data class TerminalScreen(val columns: Int, val rows: Int, val cursorX: Int?, val cursorY: Int?, val foreground: Int, val background: Int, val cells: List<TerminalCell>, val scroll: TerminalScroll = TerminalScroll(), val lines: List<List<TerminalCell>> = cells.groupBy {it.y}.let {groups->List(rows){groups[it].orEmpty()}}, val inputFlags: Int=0,val images: List<TerminalImagePlacement> = emptyList(),val imageCellWidth: Int=8,val imageCellHeight: Int=16,val above: List<List<TerminalCell>> = emptyList(),val below: List<List<TerminalCell>> = emptyList(),val cursorStyle: Int=1,val cursorBlinking: Boolean=false) {
+    val hasSemanticPrompt: Boolean get()=inputFlags and 32!=0
+    fun isSemanticInputRow(row: Int): Boolean = inputFlags and 16!=0 && scroll.below==0L &&
+        row in lines.indices && lines[row].any {it.attributes and (1 shl 30)!=0}
     val mouseTracking: Boolean get()=inputFlags and 1!=0
     val applicationScroll: Boolean get()=inputFlags and 1!=0 || inputFlags and 6==6
     fun plainText(): String = (0 until rows).joinToString("\n") { y ->
@@ -63,7 +39,10 @@ data class TerminalScreen(val columns: Int, val rows: Int, val cursorX: Int?, va
         }
     }
 }
+data class TerminalClipboardWrite(val serial: Long,val text: String,val block: String,val connection: Long,val navigation: Long,val local: Boolean=false)
+
 data class AppState(
+    val terminalProgress: Map<String,TerminalProgress> = emptyMap(),
     val programs: Map<String, ProgramIdentity> = emptyMap(),
     val workingBlocks: Set<String> = emptySet(),
     internal val activity: List<ActivityRecord> = emptyList(),
@@ -72,6 +51,7 @@ data class AppState(
     val directories: Map<String, String> = emptyMap(),
     val previewFrames: Map<String, TerminalScreen> = emptyMap(), val sessionDetails: Map<String, SessionDetail> = emptyMap(),
     val revision: Long = 0, val phase: String = "disconnected", val endpoint: String = "",
+    internal val clipboardWrite: TerminalClipboardWrite?=null,
     val identity: String = "", val error: String = "", val notice: String = "",
     val sessions: List<SessionItem> = emptyList(), val windows: List<WindowItem> = emptyList(),
     val selectedSession: String = "", val selectedBlock: String = "", val controlled: Boolean = false,
@@ -92,6 +72,7 @@ data class AppState(
                 directories = root.optJSONObject("directories")?.let { directories -> directories.keys().asSequence().associateWith { id ->
                     directories.optString(id).filterNot { it.isISOControl() || Character.getType(it)==Character.FORMAT.toInt() }.take(1024)
                 } } ?: emptyMap(),
+                terminalProgress=root.optJSONObject("terminalProgress")?.let {reports->reports.keys().asSequence().mapNotNull {id->TerminalProgress.parse(reports.optJSONObject(id))?.let {id to it}}.toMap()} ?: emptyMap(),
                 programs = root.optJSONObject("programs")?.let { programs -> programs.keys().asSequence().associateWith { id ->
                     ProgramIdentity.resolve(programs.optJSONArray(id).objects { it as String })
                 } } ?: emptyMap(),
@@ -99,6 +80,7 @@ data class AppState(
                 sessionDetails = root.optJSONObject("sessionDetails")?.let { details -> details.keys().asSequence().associateWith { key ->
                     val d=details.getJSONObject(key);SessionDetail(d.optString("attachment"),d.optInt("tabs"),d.optInt("panes")) } } ?: emptyMap(),
                 revision = root.optLong("revision"), navigationId = root.optLong("navigationId"),tabMoveId=root.optLong("tabMoveId"),paneMoveId=root.optLong("paneMoveId"),connectionEpoch=root.optLong("connectionEpoch"),otherOwner=root.optBoolean("otherOwner"),attentionCount=root.optInt("attentionCount").coerceIn(0,1024), phase = root.optString("phase", "disconnected"),
+                clipboardWrite=root.optJSONObject("clipboard")?.let {TerminalClipboardWrite(it.optLong("serial"),it.optString("text"),it.optString("block"),it.optLong("connection"),it.optLong("navigation"),it.optBoolean("local"))},
                 endpoint = root.optString("endpoint"), identity = root.optString("identity"),
                 error = root.optString("error"), notice = root.optString("notice"),
                 sessions = root.optJSONArray("sessions").objects { value ->

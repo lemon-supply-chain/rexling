@@ -7,12 +7,8 @@ import android.widget.Toast
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Rect
-import android.graphics.RectF
-import java.nio.ByteBuffer
 import android.text.InputType
 import android.view.ActionMode
 import android.view.Menu
@@ -35,8 +31,29 @@ import kotlin.math.max
 internal enum class TerminalLinkAction { OPEN, COPY_ADDRESS, SHARE }
 
 class TerminalView(context: Context) : View(context) {
+    private var cursorLit=true
+    private fun cursorCanBlink(): Boolean = screen?.let {it.cursorBlinking && it.cursorX!=null && it.cursorY!=null && it.scroll.below==0L}==true && interactive && isAttachedToWindow && isShown && hasWindowFocus()
+    private val cursorTick=object: Runnable {
+        override fun run() {
+            if(!cursorCanBlink()) {cursorLit=true;return}
+            cursorLit=!cursorLit;invalidate();postDelayed(this,500)
+        }
+    }
+    private fun refreshCursorBlink() {
+        removeCallbacks(cursorTick);cursorLit=true
+        if(cursorCanBlink()) postDelayed(cursorTick,500)
+        invalidate()
+    }
+    private val awake=TerminalAwake(this)
+    internal var keepAwakeMode: KeepScreenAwake
+        get()=awake.mode
+        set(value) {awake.mode=value}
+    override fun onAttachedToWindow() {super.onAttachedToWindow();awake.update();refreshCursorBlink()}
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {super.onWindowFocusChanged(hasWindowFocus);awake.update();refreshCursorBlink()}
+    override fun onWindowVisibilityChanged(visibility: Int) {super.onWindowVisibilityChanged(visibility);awake.update();refreshCursorBlink()}
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {if(event.actionMasked==MotionEvent.ACTION_DOWN) awake.activity();return super.dispatchTouchEvent(event)}
     var interactive = true
-        set(value) {if(field!=value) {field=value;if(!value) clearSelection()}}
+        set(value) {if(field!=value) {field=value;if(!value) clearSelection();refreshCursorBlink()}}
     private var selection: TerminalSelection?=null
     private var selectionMode: ActionMode?=null
     private var selectionLink: TerminalLink?=null
@@ -62,20 +79,17 @@ class TerminalView(context: Context) : View(context) {
     private var scrollPixels=0f
     private var lastFlingY=0
     private val scrollFling=OverScroller(context)
-    private var touchWasFlinging=false
-    private val magnifier by lazy {
-        if (android.os.Build.VERSION.SDK_INT >= 28) runCatching { android.widget.Magnifier(this) }.getOrNull() else null
-    }
     private var touchVelocity: VelocityTracker?=null
     internal var imageInputTarget: ()->String = {mouseTarget()}
     internal var onImage: (Uri,()->Unit)->Boolean = {_,release->release();false}
     internal var onPaste: ()->Boolean = {false}
     var onInput: (String) -> Unit = {}
+    internal var onInputConnectionReady: ()->Unit = {}
     var onScroll: (Int) -> Unit = {}
-    var onBottom: (() -> Unit)? = null
     var onWheel: (Int,Int,Int,Int,Int) -> Unit = {lines,_,_,_,_->onScroll(lines)}
     var onActivate: () -> Unit = {}
     var onMouseClick: (Int,Int,Int,Int) -> Unit = {_,_,_,_->}
+    internal var onSemanticCopy: ((TerminalScreen,Int,Int,Boolean)->Boolean)?=null
     internal var onCursorTap: ()->Unit = {}
     var mouseTarget: ()->String={""}
     private var pressedMouseTarget=""
@@ -86,87 +100,79 @@ class TerminalView(context: Context) : View(context) {
     private var wheelRow=0
     var onPaneSwipe: (Int) -> Unit = {}
     var onDimensions: (Int, Int) -> Unit = { _, _ -> }
-        set(value) {val changed=field!=value;field=value;if(changed && width>0 && height>0) reportDimensions()}
-    var onCellDimensions: ((Int, Int, Int, Int) -> Unit)? = null
+        set(value) {val changed=field!=value;field=value;if(changed && width>0 && height>0) reportDimensions(force=true)}
     private var currentScreen: TerminalScreen?=null
     var screen: TerminalScreen?
         get()=currentScreen
         set(value) {setScreen(value,false)}
+    internal var onKeyboardFocus: (TerminalKeyboardFocus?)->Unit={}
+    /** Chosen by program identity: pan to a hidden caret, or resize a full-screen TUI. */
+    internal var imeAnchor: ImeAnchor = ImeAnchor.CURSOR
+        set(value) {if(field!=value) {field=value;reportCursorViewport()}}
+    /** Chosen by program identity: strictly isolate bounds for general CLI/TUIs, or extend seamlessly for full-screen editors. */
+    internal var edgePolicy: TerminalEdgePolicy = TerminalEdgePolicy.NON_EDITOR
+        set(value) {if(field!=value) {field=value;clearRows();invalidate()}}
+    internal val keyboardFocus: TerminalKeyboardFocus? get() {
+        val frame=screen ?: return null
+        val row=frame.imeAnchorRow(imeAnchor) ?: return null
+        val lastText=frame.lastPaintedRow()
+        val bottom=insetTop+(row+1)*cellHeight+insetBottom
+        return TerminalKeyboardFocus(insetTop+row*cellHeight,bottom,
+            max(bottom,insetTop+(lastText+1)*cellHeight+insetBottom))
+    }
+    private fun reportCursorViewport() {onKeyboardFocus(keyboardFocus)}
     private var frameTraceToken: String?=null
     internal fun presentFrame(value: TerminalScreen?,token: String?=null) {setScreen(value,true);frameTraceToken=token}
     private fun setScreen(value: TerminalScreen?,onDisplayFrame: Boolean) {
         if(currentScreen===value) return
-        val columns=currentScreen?.columns;currentScreen=value;frameTraceToken=null
-        if(columns!=value?.columns) configureRendering()
+        if(value!=null && value!=currentScreen) awake.activity()
+        val resetCursor=currentScreen?.let {it.cursorX!=value?.cursorX || it.cursorY!=value?.cursorY || it.cursorStyle!=value?.cursorStyle || it.cursorBlinking!=value?.cursorBlinking || it.scroll.below!=value?.scroll?.below} ?: true
+        val columns=currentScreen?.columns;val rows=currentScreen?.rows;currentScreen=value;frameTraceToken=null
+        if(columns!=value?.columns || rows!=value?.rows) {scrollMotion.reset();configureRendering()}
+        reportCursorViewport()
+        if(resetCursor) refreshCursorBlink()
         if(onDisplayFrame) invalidate() else postInvalidateOnAnimation()
     }
+    var keyboardSuggestions: Boolean = true
+        set(value) {
+            if(field!=value) {field=value;if(controlled && hasFocus()) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)}
+        }
     var controlled: Boolean = false
         set(value) {
             if (field != value) {
                 field = value
-                if (!value) {composing = "";stopDeleteRepeat()}
+                if (!value) {composing="";imeEditable?.clear();imeEditable=null}
                 selectionMode?.invalidate()
-                // The editor is new or gone. Restart the input session once, and only when
-                // it matters: on gaining control with focus, or on losing control while a
-                // keyboard is open (otherwise the old session keeps swallowing keys).
-                editorChanged = true
-                if (value) {if (hasFocus()) restartEditor()}
-                else if (imeVisible()) restartEditor()
+                // Losing control invalidates active() immediately. Restarting the old
+                // editor here makes Gboard show a fallback layout during pane handoff.
+                // The incoming focused editor supplies its own connection instead.
+                if(value && hasFocus()) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)
             }
         }
-    private var editorChanged = false
-    private var deleteRepeatInput: String? = null
-    private val deleteRepeat = object : Runnable {
-        override fun run() {
-            val input = deleteRepeatInput ?: return
-            if (controlled) { onInput(input); postDelayed(this, 65L) }
-            else stopDeleteRepeat()
-        }
-    }
-    /** Repeats a held delete key from the long-press timeout; the keyboard's own repeats are dropped. */
-    private fun startDeleteRepeat(input: String) {
-        deleteRepeatInput = input
-        removeCallbacks(deleteRepeat)
-        postDelayed(deleteRepeat, ViewConfiguration.getLongPressTimeout().toLong())
-    }
-    private fun stopDeleteRepeat() {
-        if (deleteRepeatInput != null) {
-            deleteRepeatInput = null
-            removeCallbacks(deleteRepeat)
-        }
-    }
-    private fun isDelete(code: Int): Boolean =
-        code == KeyEvent.KEYCODE_DEL || code == KeyEvent.KEYCODE_FORWARD_DEL
-    /** Ask the IME to re-read this view as an editor, once per control change. */
-    private fun restartEditor() {
-        if (!editorChanged) return
-        editorChanged = false
-        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)
-    }
-    private fun imeVisible(): Boolean =
-        androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())==true
     var textSp: Float = 10f
         set(value) { if (field != value) { field = value; metrics(); invalidate() } }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val backgroundPaint = Paint() // Cell fills must meet without antialiased seams.
     private val fonts = TerminalFonts(context)
+    private val terminalImages=TerminalImages()
     private data class RecordedRow(val cells: List<TerminalCell>,val recording: TerminalRowRecording,val links: List<TerminalLink>)
+    /**
+     * Smooth scrolling: pixels scrolled past the last whole line that the
+     * canvas slides by. Positive means content moves up (scrolling forward).
+     * Whole lines go to the replica; the remainder is only drawn here, using
+     * the overscan rows at the edges.
+     */
+    private val scrollMotion=TerminalScrollMotion()
+    private var recordedOffset: Long?=null
+    private var suppressScrollTap=false
     private val linkIndex=TerminalLinks.Index()
     private var recorded= arrayOfNulls<RecordedRow>(0)
-    private var recordedOffset: Long?=null
     private var rowGeometry=""
-    /** Where frame rows sit for the frame being drawn; see [terminalRowWindow]. */
-    private var rowWindow=TerminalRowWindow(0,0f)
-    private fun rowWindowOf(frame: TerminalScreen)=terminalRowWindow(frame.rows,
-        max(1, floor(contentHeight / cellHeight).toInt()),insetTop,contentHeight,cellHeight)
     private val advances=object: LinkedHashMap<Pair<Int,String>,Float>(256,.75f,true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Int,String>,Float>?)=size>4096
     }
-    private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG)
-    private val imageSrcRect = Rect()
-    private val imageDstRect = RectF()
     internal var recordedRowCount=0;private set
-    private fun clearRows() {recorded.forEach {it?.recording?.release()};recorded=arrayOfNulls(0);rowGeometry="";recordedOffset=null}
+    private fun clearRows() {recordedOffset=null;recorded.forEach {it?.recording?.release()};recorded=arrayOfNulls(0);rowGeometry=""}
     private fun advance(text: String,style: Int): Float=advances.getOrPut(style to text){paint.measureText(text)}
     private var cellWidth = 1f
     private var cellHeight = 1f
@@ -176,14 +182,15 @@ class TerminalView(context: Context) : View(context) {
     private var desiredTextSize=1f
     private var dimensions = 0 to 0
     private var composing = ""
+    private var imeEditable: android.text.Editable?=null
+    private var composingCursor=0
+    private var flushImeEditor: (() -> Unit)?=null
+    private var deliveringImeInput=false
     private var insetHorizontal = 0f
     private var insetTop = 0f
     private var insetBottom = 0f
     private val contentWidth: Float get() = (width - insetHorizontal * 2).coerceAtLeast(1f)
     private val contentHeight: Float get() = (height - insetTop - insetBottom).coerceAtLeast(1f)
-    // Cell backgrounds on the grid's edges fill the padding beside them, like
-    // Ghostty's window-padding-color=extend; off, the padding keeps the theme
-    // background.
     var extendPadding: Boolean = true
         set(value) {if(field==value) return;field=value;clearRows();invalidate()}
     fun setTerminalPaddingDp(horizontal: Int, top: Int, bottom: Int) {
@@ -193,7 +200,7 @@ class TerminalView(context: Context) : View(context) {
         val b = (bottom * density).roundToInt().toFloat()
         if (h == insetHorizontal && t == insetTop && b == insetBottom) return
         insetHorizontal = h; insetTop = t; insetBottom = b
-        configureRendering();clearRows();reportDimensions(); invalidate()
+        configureRendering();clearRows();reportDimensions();reportCursorViewport(); invalidate()
     }
     private val paneGesture = PaneGesture(ViewConfiguration.get(context).scaledTouchSlop.toFloat(), 48f * resources.displayMetrics.density)
 
@@ -206,7 +213,7 @@ class TerminalView(context: Context) : View(context) {
         clearRows();advances.clear()
         val grid = fonts.configure(paint, textSp)
         desiredCellWidth=grid.cellWidth;desiredCellHeight=grid.cellHeight;desiredTextSize=paint.textSize
-        configureRendering();reportDimensions()
+        configureRendering();reportDimensions();reportCursorViewport()
     }
     private fun configureRendering() {
         // Keep the user's font fixed. Reflow comes from the canonical PTY resize.
@@ -218,73 +225,103 @@ class TerminalView(context: Context) : View(context) {
         val metrics=paint.fontMetrics;cellHeight=ceil(metrics.descent-metrics.ascent).coerceAtLeast(1f);baseline=-metrics.ascent
         clearRows();advances.clear()
     }
-    private fun reportDimensions() {
+    private fun reportDimensions(force: Boolean=false) {
         // Resize uses the requested font grid, never the temporary read-only fit.
         val next = max(1, floor(contentWidth / desiredCellWidth).toInt()) to max(1, floor(contentHeight / desiredCellHeight).toInt())
-        if (width > 0 && height > 0 && next != dimensions) {
-            dimensions = next; onDimensions(next.first, next.second)
-            onCellDimensions?.invoke(next.first, next.second, desiredCellWidth.roundToInt().coerceAtLeast(1), desiredCellHeight.roundToInt().coerceAtLeast(1))
-        }
+        if (width > 0 && height > 0 && (force || next != dimensions)) { dimensions = next; onDimensions(next.first, next.second) }
     }
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {clearSelection();configureRendering();reportDimensions()}
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {scrollMotion.reset();clearSelection();configureRendering();reportDimensions();reportCursorViewport()}
     override fun onDraw(canvas: Canvas) {
         val frame = selection?.frame ?: screen ?: return
         val saved = canvas.save()
         canvas.clipRect(0, 0, width, height)
         canvas.drawColor(palette.background)
         val visibleColumns = minOf(frame.columns, max(1, floor(contentWidth / cellWidth).toInt()))
-        val window = terminalRowWindow(frame.rows, max(1, floor(contentHeight / cellHeight).toInt()), insetTop, contentHeight, cellHeight)
-        rowWindow = window
+        val visibleRows = minOf(frame.rows, max(1, floor(contentHeight / cellHeight).toInt()))
         android.os.Trace.beginSection("Rexlet.drawTerminal")
         val token=frameTraceToken.takeIf {selection==null}
         if(token!=null) android.os.Trace.beginSection("Rexlink.draw.$token")
-        // Row pixels depend on the width, the column count and the padding, never on the
-        // view height: an IME animation changes the height every frame, and re-recording
-        // the whole screen for it is the most expensive thing this view can do.
-        val geometry="$width:${frame.columns}:$visibleColumns:$insetHorizontal:$insetTop:$insetBottom:$extendPadding:${canvas.isHardwareAccelerated}"
-        // Recorded rows are keyed by frame row, so neither the height nor which rows are
-        // visible invalidates them; only the grid width, the padding or the columns do.
-        if(geometry!=rowGeometry || recorded.size!=frame.rows) {clearRows();recorded=arrayOfNulls(frame.rows);rowGeometry=geometry}
+        val isEditor=extendPadding && edgePolicy==TerminalEdgePolicy.EDITOR
+        val geometry="$width:$height:${frame.columns}:$visibleColumns:$visibleRows:$insetHorizontal:$insetTop:$insetBottom:$extendPadding:$edgePolicy:${canvas.isHardwareAccelerated}"
+        if(geometry!=rowGeometry) {clearRows();recorded=arrayOfNulls(visibleRows);rowGeometry=geometry}
         android.os.Trace.beginSection("Rexlink.linkIndex")
         val rowLinks=try {linkIndex.update(frame)} finally {android.os.Trace.endSection()}
-        reuseShiftedRows(frame,frame.rows)
-        // Pixels are cached by the poll thread; a draw only records what is on screen.
-        if (frame.imagePlacements.isNotEmpty()) {
-            TerminalImageCache.prune(frame.imagePlacements.mapTo(HashSet()) { it.imageId })
-        }
-        drawImages(canvas, frame.imagePlacements, underText = true)
-        canvas.save();canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
-        for(y in window.firstRow until frame.rows) {
+        // Content that only moved keeps its recording: reuse rows by content
+        // when the whole screen shifted, so only edge and uncovered rows need recording.
+        reuseShiftedRows(frame,visibleRows)
+        val slide=slideFor(frame)
+        val saveClip=canvas.save()
+        if(isEditor) canvas.clipRect(0f,0f,width.toFloat(),height.toFloat())
+        else canvas.clipRect(0f,insetTop,width.toFloat(),height-insetBottom)
+        if(slide!=0f) canvas.translate(0f,-slide)
+        if(frame.images.isEmpty()) {
+        if(slide<0f) frame.above.forEachIndexed {i,row->drawLooseRow(canvas,row,visibleColumns,insetTop-(frame.above.size-i)*cellHeight)}
+        if(slide>0f) frame.below.forEachIndexed {i,row->drawLooseRow(canvas,row,visibleColumns,insetTop+(visibleRows+i)*cellHeight)}
+        for(y in 0 until visibleRows) {
             val cells=frame.lines[y]
             var row=recorded[y]
             val links=rowLinks[y]
-            if(row==null || !row.recording.valid || !sameRowCells(row.cells,cells) || !sameRowLinks(row.links,links)) {
+            val origin=if(isEditor && y==0) 0f else insetTop+y*cellHeight
+            val top=if(isEditor && y==0) insetTop else 0f
+            val bottom=if(isEditor && y==visibleRows-1) height-origin else top+cellHeight
+            if(row==null || !row.recording.valid || !sameCells(row.cells,cells) || row.links!=links) {
                 val recording=row?.recording ?: TerminalRowRecording.create(canvas.isHardwareAccelerated)
-                recording.record(width,cellHeight.toInt().coerceAtLeast(1)) { target ->
-                    drawRow(target,cells,visibleColumns,0f,cellHeight)
-                    target.save();target.clipRect(insetHorizontal,0f,width-insetHorizontal,cellHeight)
+                recording.record(width,bottom.toInt().coerceAtLeast(1)) { target ->
+                    drawRow(target,cells,visibleColumns,top,bottom)
+                    target.save();target.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
                     backgroundPaint.color=palette.accent;backgroundPaint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
-                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,baseline+2,
-                        insetHorizontal+link.end*cellWidth,baseline+2,backgroundPaint)
+                    for(link in links) target.drawLine(insetHorizontal+link.start*cellWidth,top+baseline+2,
+                        insetHorizontal+link.end*cellWidth,top+baseline+2,backgroundPaint)
                     target.restore()
                 }
                 row=RecordedRow(cells,recording,links);recorded[y]=row;recordedRowCount++
             }
-            canvas.save();canvas.translate(0f,window.top(y,cellHeight))
+            canvas.save();canvas.translate(0f,origin)
             row.recording.draw(canvas);canvas.restore()
         }
-        canvas.restore()
-        drawImages(canvas, frame.imagePlacements, underText = false)
+        } else {
+            fun images(layer: Int)=terminalImages.draw(canvas,frame,layer,insetHorizontal,insetTop,width-insetHorizontal,height-insetBottom,cellWidth,cellHeight)
+            fun rows(pass: Int) {
+                for(y in 0 until visibleRows) {
+                    val origin=if(isEditor && y==0) 0f else insetTop+y*cellHeight
+                    val top=if(isEditor && y==0) insetTop else 0f
+                    val bottom=if(isEditor && y==visibleRows-1) height-origin else top+cellHeight
+                    val save=canvas.save();canvas.translate(0f,origin)
+                    drawRow(canvas,frame.lines[y],visibleColumns,top,bottom,pass)
+                    if(pass==2) {
+                        canvas.save();canvas.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
+                        backgroundPaint.color=palette.accent;backgroundPaint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
+                        for(link in rowLinks[y]) canvas.drawLine(insetHorizontal+link.start*cellWidth,top+baseline+2,insetHorizontal+link.end*cellWidth,top+baseline+2,backgroundPaint)
+                        canvas.restore()
+                    }
+                    canvas.restoreToCount(save)
+                }
+            }
+            images(0);rows(1);images(1);rows(2);images(2)
+        }
+        canvas.restoreToCount(saveClip)
         canvas.save()
         canvas.clipRect(insetHorizontal,insetTop,width-insetHorizontal,height-insetBottom)
-        canvas.translate(insetHorizontal,window.origin)
+        canvas.translate(insetHorizontal,insetTop-slide)
         if (selection==null && frame.cursorX != null && frame.cursorY != null) {
             val cell=frame.lines.getOrNull(frame.cursorY)?.firstOrNull {it.x==frame.cursorX && it.width>0}
             val x = frame.cursorX * cellWidth; val y = frame.cursorY * cellHeight
             val cursorWidth=max(1,cell?.width ?: 1)*cellWidth
             backgroundPaint.color=palette.accent
-            canvas.drawRect(x,y,x+cursorWidth,y+cellHeight,backgroundPaint)
-            if(cell!=null && cell.text.isNotEmpty() && cell.attributes and 16==0) {
+            if(cursorLit) {
+                val thickness=max(1f,resources.displayMetrics.density*1.5f)
+                when(frame.cursorStyle) {
+                    0->canvas.drawRect(x,y,x+thickness,y+cellHeight,backgroundPaint)
+                    2->canvas.drawRect(x,y+cellHeight-thickness,x+cursorWidth,y+cellHeight,backgroundPaint)
+                    3->{
+                        backgroundPaint.style=Paint.Style.STROKE;backgroundPaint.strokeWidth=thickness
+                        canvas.drawRect(x+thickness/2,y+thickness/2,x+cursorWidth-thickness/2,y+cellHeight-thickness/2,backgroundPaint)
+                        backgroundPaint.style=Paint.Style.FILL
+                    }
+                    else->canvas.drawRect(x,y,x+cursorWidth,y+cellHeight,backgroundPaint)
+                }
+            }
+            if(cursorLit && frame.cursorStyle==1 && cell!=null && cell.text.isNotEmpty() && cell.attributes and 16==0) {
                 paint.color=palette.cursorText;paint.alpha=255
                 paint.typeface=fonts.typefaceFor(cell.attributes and 3,cell.text)
                 val advance=advance(cell.text,cell.attributes and 3)
@@ -294,14 +331,15 @@ class TerminalView(context: Context) : View(context) {
                 canvas.restore()
             }
             if (composing.isNotEmpty()) {
-                paint.typeface = fonts.typefaceFor(0,composing);paint.color=palette.cursorText
+                paint.typeface = fonts.typefaceFor(0,composing);paint.color=android.graphics.Color.WHITE
                 val composingWidth=max(cellWidth,paint.measureText(composing))
-                val maxRight=width-insetHorizontal
-                val composingX=if(x+composingWidth>maxRight) (maxRight-composingWidth).coerceAtLeast(insetHorizontal) else x
-                backgroundPaint.color=palette.accent
-                canvas.drawRect(composingX,y,composingX+composingWidth,y+cellHeight,backgroundPaint)
-                canvas.drawText(composing, composingX, y + baseline, paint)
-                canvas.drawLine(composingX, y + baseline + 2, composingX + composingWidth, y + baseline + 2, paint)
+                canvas.drawRect(x,y,x+composingWidth,y+cellHeight,backgroundPaint)
+                canvas.drawText(composing, x, y + baseline, paint)
+                canvas.drawLine(x, y + baseline + 2, x + composingWidth, y + baseline + 2, paint)
+                if(composingCursor<composing.length) {
+                    val caret=x+paint.measureText(composing,0,composingCursor.coerceIn(0,composing.length))
+                    canvas.drawLine(caret,y+2,caret,y+cellHeight-2,paint)
+                }
             }
         }
         canvas.restore()
@@ -310,25 +348,56 @@ class TerminalView(context: Context) : View(context) {
         if(token!=null) android.os.Trace.endSection()
         android.os.Trace.endSection()
     }
-    private fun reuseShiftedRows(frame: TerminalScreen,rows: Int) {
-        val previous=recordedOffset;recordedOffset=frame.scroll.offset
-        if(previous==null || recorded.size!=rows) return
-        val moved=frame.scroll.offset-previous
-        if(moved==0L || moved<=-rows || moved>=rows) return
-        val shift=moved.toInt()
-        val next=arrayOfNulls<RecordedRow>(rows)
-        for(row in next.indices) next[row]=recorded.getOrNull(row+shift)
-        for(row in recorded.indices) if(row-shift !in next.indices) recorded[row]?.recording?.release()
+    /** Rows compare by content only; a row that moved is the same drawing. */
+    private fun sameCells(a: List<TerminalCell>,b: List<TerminalCell>): Boolean {
+        if(a===b) return true
+        if(a.size!=b.size) return false
+        for(i in a.indices) {val x=a[i];val y=b[i]
+            if(x.x!=y.x || x.width!=y.width || x.attributes!=y.attributes || x.foreground!=y.foreground ||
+                x.background!=y.background || x.text!=y.text || x.hyperlink!=y.hyperlink) return false}
+        return true
+    }
+    /**
+     * When the grid scrolled, move recordings with their content instead of
+     * re-recording every row. Only interior rows (same height) are moved; the
+     * first and last rows carry padding and are re-recorded if they changed.
+     */
+    private fun reuseShiftedRows(frame: TerminalScreen,visibleRows: Int) {
+        val previous=recordedOffset
+        recordedOffset=frame.scroll.offset
+        if(previous==null || recorded.size!=visibleRows || visibleRows<4) return
+        val distance=frame.scroll.offset-previous
+        if(distance==0L || kotlin.math.abs(distance)>=visibleRows-2) return
+        val shift=distance.toInt()
+        val next=arrayOfNulls<RecordedRow>(visibleRows)
+        val used=BooleanArray(visibleRows)
+        for(y in 1 until visibleRows-1) {
+            val from=y+shift
+            if(from in 1 until visibleRows-1) {next[y]=recorded[from]?.let {it.copy(links=it.links.map {link->link.copy(row=y)})};used[from]=true}
+        }
+        // Keep edge rows in place; release recordings that fell off.
+        next[0]=recorded[0];next[visibleRows-1]=recorded[visibleRows-1];used[0]=true;used[visibleRows-1]=true
+        for(y in recorded.indices) if(!used[y]) recorded[y]?.recording?.release()
         recorded=next
     }
-    private fun drawRow(canvas: Canvas,cells: List<TerminalCell>,columns: Int,top: Float,bottom: Float) {
+    /** An overscan row, drawn directly (it only shows mid-scroll). */
+    private fun drawLooseRow(canvas: Canvas,cells: List<TerminalCell>,columns: Int,origin: Float) {
+        val save=canvas.save();canvas.translate(0f,origin)
+        drawRow(canvas,cells,columns,0f,cellHeight)
+        canvas.restoreToCount(save)
+    }
+    private fun drawRow(canvas: Canvas,cells: List<TerminalCell>,columns: Int,top: Float,bottom: Float,pass: Int=0) {
         var start=0;var end=0;var color=0
         fun flush() {
-            if(end<=start || start>=columns || color==palette.background) return
+            if(pass==2 || end<=start || start>=columns || color==palette.background) return
             backgroundPaint.color=color
-            if(extendPadding) canvas.drawRect(if(start==0) 0f else insetHorizontal+start*cellWidth,0f,
-                if(end>=columns) width.toFloat() else insetHorizontal+end*cellWidth,bottom,backgroundPaint)
-            else canvas.drawRect(insetHorizontal+start*cellWidth,top,insetHorizontal+minOf(end,columns)*cellWidth,top+cellHeight,backgroundPaint)
+            if(extendPadding) {
+                canvas.drawRect(if(start==0) 0f else insetHorizontal+start*cellWidth,0f,
+                    if(end>=columns) width.toFloat() else insetHorizontal+end*cellWidth,bottom,backgroundPaint)
+            } else {
+                canvas.drawRect(insetHorizontal+start*cellWidth,0f,
+                    insetHorizontal+minOf(end,columns)*cellWidth,bottom,backgroundPaint)
+            }
         }
         for(cell in cells) {
             if(cell.width==0 && cell.x<end) continue
@@ -337,12 +406,13 @@ class TerminalView(context: Context) : View(context) {
             end=cell.x+max(1,cell.width)
         }
         flush()
+        if(pass==1) return
         canvas.save();canvas.clipRect(insetHorizontal,top,width-insetHorizontal,top+cellHeight)
         canvas.translate(insetHorizontal,top)
         var index=0
         while(index<cells.size) {
             val cell=cells[index++]
-            if(cell.x>=columns || cell.width==0 || cell.text.isEmpty() || cell.attributes and 16!=0) continue
+            if(cell.x>=columns || cell.width==0 || cell.text.isEmpty() || cell.text.codePointAt(0)==0x10eeee || cell.attributes and 16!=0) continue
             val style=cell.attributes and 3
             paint.typeface=fonts.typefaceFor(style,cell.text)
             paint.color=if(cell.attributes and 8!=0) palette.background(cell) else palette.foreground(cell)
@@ -370,69 +440,53 @@ class TerminalView(context: Context) : View(context) {
                 }
             }
             paint.strokeWidth=resources.displayMetrics.density.coerceAtLeast(1f)
-            if(cell.attributes and 64!=0 || cell.attributes and PredictiveEcho.PREDICTED_CELL!=0) canvas.drawLine(x,baseline+2,x+allocated,baseline+2,paint)
+            if(cell.attributes and 64!=0) canvas.drawLine(x,baseline+2,x+allocated,baseline+2,paint)
             if(cell.attributes and 32!=0) canvas.drawLine(x,cellHeight/2,x+allocated,cellHeight/2,paint)
             paint.alpha=255
         }
         canvas.restore()
     }
-    private fun drawImages(canvas: Canvas, placements: List<TerminalImagePlacement>, underText: Boolean) {
-        if (placements.isEmpty()) return
-        val saved = canvas.save()
-        canvas.clipRect(insetHorizontal, insetTop, width - insetHorizontal, height - insetBottom)
-        for (img in placements) {
-            if ((img.z < 0) != underText) continue
-            val bitmap = TerminalImageCache.get(img.imageId) ?: continue
-            val left = insetHorizontal + img.col * cellWidth + img.offsetX
-            val top = rowWindow.top(img.row, cellHeight) + img.offsetY
-            val drawW = if (img.cols > 0) img.cols * cellWidth else img.width.toFloat()
-            val drawH = if (img.rows > 0) img.rows * cellHeight else img.height.toFloat()
-            if (drawW <= 0f || drawH <= 0f) continue
-
-            if (img.srcWidth > 0 && img.srcHeight > 0 &&
-                img.srcX < bitmap.width && img.srcY < bitmap.height) {
-                // Coordinates are image pixels; a stale payload must never hide the image.
-                val sx = img.srcX.coerceIn(0, bitmap.width - 1)
-                val sy = img.srcY.coerceIn(0, bitmap.height - 1)
-                val sw = img.srcWidth.coerceIn(1, bitmap.width - sx)
-                val sh = img.srcHeight.coerceIn(1, bitmap.height - sy)
-                imageSrcRect.set(sx, sy, sx + sw, sy + sh)
-            } else {
-                imageSrcRect.set(0, 0, bitmap.width, bitmap.height)
-            }
-            imageDstRect.set(left, top, left + drawW, top + drawH)
-            try {
-                canvas.drawBitmap(bitmap, imageSrcRect, imageDstRect, imagePaint)
-            } catch (_: Throwable) {
-            }
+    internal fun scrollByPixels(pixels: Float) {
+        val frame=screen ?: return
+        if(frame.applicationScroll && frame.scroll.below==0L) {
+            scrollMotion.reset()
+            scrollPixels+=pixels
+            val lines=(scrollPixels/cellHeight).toInt()
+            if(lines!=0) {scrollPixels-=lines*cellHeight;onWheel(lines,wheelCol,wheelRow,desiredCellWidth.roundToInt(),desiredCellHeight.roundToInt())}
+        } else {
+            val lines=scrollMotion.drag(pixels,frame.scroll,cellHeight)
+            if(lines!=0) onScroll(lines)
+            invalidate()
         }
-        canvas.restoreToCount(saved)
     }
-    private fun scrollByPixels(pixels: Float) {
-        scrollPixels+=pixels
-        val lines=(scrollPixels/cellHeight).toInt()
-        if(lines!=0) {
-            scrollPixels-=lines*cellHeight
-            if(screen?.applicationScroll==true && screen?.scroll?.below==0L) onWheel(lines,wheelCol,wheelRow,desiredCellWidth.roundToInt(),desiredCellHeight.roundToInt())
-            else if((screen?.scroll?.available ?: 0)>0) onScroll(lines)
-        }
+    internal val scrollTranslation: Float get()=screen?.let {slideFor(it)} ?: 0f
+    private fun slideFor(frame: TerminalScreen): Float {
+        // Image placements outside the viewport are not yet available. Keep their
+        // existing whole-row rendering rather than expose an incomplete image edge.
+        if(selection!=null || frame.images.isNotEmpty()) return 0f
+        return scrollMotion.slide(frame.scroll,cellHeight,frame.above.size,frame.below.size,scrolling || !scrollFling.isFinished)
     }
     override fun computeScroll() {
         if(scrollFling.computeScrollOffset()) {
             val y=scrollFling.currY;scrollByPixels((y-lastFlingY).toFloat());lastFlingY=y
             postInvalidateOnAnimation()
+            if(scrollFling.isFinished) settleScroll()
         }
     }
-    override fun onDetachedFromWindow() {stopDeleteRepeat();magnifier?.dismiss();clearRows();clearSelection();scrollFling.abortAnimation();touchVelocity?.recycle();touchVelocity=null;super.onDetachedFromWindow()}
+    /** At rest the grid snaps to whole lines; lines still in flight finish sliding in. */
+    private fun settleScroll() {
+        if(scrollMotion.remainder!=0f || scrollPixels!=0f) {scrollPixels=0f;scrollMotion.settle();invalidate()}
+    }
+    override fun onDetachedFromWindow() {removeCallbacks(cursorTick);awake.detach();terminalImages.clear();clearRows();clearSelection();scrollFling.abortAnimation();touchVelocity?.recycle();touchVelocity=null;super.onDetachedFromWindow()}
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if(selection!=null && event.actionMasked==MotionEvent.ACTION_SCROLL) return true
         if(interactive && event.actionMasked==MotionEvent.ACTION_SCROLL) {
             val lines=(-event.getAxisValue(MotionEvent.AXIS_VSCROLL)*3).roundToInt()
             if(lines!=0) {
-                if(screen?.applicationScroll==true && screen?.scroll?.below==0L && event.metaState and KeyEvent.META_SHIFT_ON==0) {
-                    val frame=screen
-                    onWheel(lines,((event.x-insetHorizontal)/desiredCellWidth).toInt(),frame?.let {frameRow(it,event.y).coerceAtLeast(0)} ?: 0,desiredCellWidth.roundToInt(),desiredCellHeight.roundToInt())
-                } else onScroll(lines)
+                scrollMotion.reset()
+                if(screen?.applicationScroll==true && screen?.scroll?.below==0L && event.metaState and KeyEvent.META_SHIFT_ON==0)
+                    onWheel(lines,((event.x-insetHorizontal)/desiredCellWidth).toInt(),((event.y-insetTop)/desiredCellHeight).toInt(),desiredCellWidth.roundToInt(),desiredCellHeight.roundToInt())
+                else onScroll(lines)
                 return true
             }
         }
@@ -443,29 +497,17 @@ class TerminalView(context: Context) : View(context) {
     }
     fun keyboard() {
         if (!controlled) return
-        if ((screen?.scroll?.below ?: 0L) > 0L) onBottom?.invoke()
         requestFocus()
-        restartEditor()
-        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        // Focus and the request land in the same frame; a rejected first call is normal
-        // and resolves one message later, so retry once instead of waiting for a new tap.
-        if (!imm.showSoftInput(this, 0)) post { if (controlled && hasFocus()) imm.showSoftInput(this, 0) }
-    }
-    /** Frame row under a screen y, or -1 when the point is outside the drawn content. */
-    private fun frameRow(frame: TerminalScreen,y: Float): Int {
-        val window=rowWindowOf(frame)
-        if(y<maxOf(insetTop,window.origin) || y>=height-insetBottom) return -1
-        return window.row(y,cellHeight)
+        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(this, 0)
     }
     private fun linkAt(x: Float,y: Float): TerminalLink? {
         val frame=screen ?: return null
-        val row=frameRow(frame,y)
-        if(x<insetHorizontal || x>=width-insetHorizontal || row !in 0 until frame.rows) return null
-        val column=((x-insetHorizontal)/cellWidth).toInt()
+        if(x<insetHorizontal || x>=width-insetHorizontal || y<insetTop || y>=height-insetBottom) return null
+        val column=((x-insetHorizontal)/cellWidth).toInt();val row=((y-insetTop)/cellHeight).toInt()
         val links=linkIndex.update(frame).getOrNull(row) ?: return null
         return links.firstOrNull {it.contains(column)}
     }
-    internal fun openWebLink(url: String) {
+    private fun openWebLink(url: String) {
         val safe=TerminalLinks.webUrl(url) ?: return
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(safe)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -500,38 +542,21 @@ class TerminalView(context: Context) : View(context) {
         sample.offsetLocation(event.rawX-event.x,event.rawY-event.y)
         touchVelocity?.addMovement(sample);sample.recycle()
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                touchWasFlinging = !scrollFling.isFinished
-                scrollFling.abortAnimation()
-                pressedMouseTarget=mouseTarget();pressedMouseGrid=screen?.let {it.columns to it.rows};pressedMouse=screen?.mouseTracking==true;pressedControlled=controlled
-                pressedLink=if (touchWasFlinging) null else linkAt(event.x,event.y)
-                pressX=event.x;pressY=event.y
-                removeCallbacks(longPress)
-                if (!touchWasFlinging) {
-                    postDelayed(longPress,ViewConfiguration.getLongPressTimeout().toLong())
-                }
-                wheelCol=((event.x-insetHorizontal)/desiredCellWidth).toInt()
-                wheelRow=screen?.let {frameRow(it,event.y).coerceAtLeast(0)} ?: 0
-                startX=event.rawX;startY=event.rawY;lastScrollY=event.rawY;scrollPixels=0f;scrolling=false;dragging=false
-                if (!touchWasFlinging) paneGesture.begin(event.x, event.y)
-            }
+            MotionEvent.ACTION_DOWN -> {suppressScrollTap=!scrollFling.isFinished || scrollTranslation!=0f;scrollFling.abortAnimation();scrollMotion.reset();invalidate();pressedMouseTarget=mouseTarget();pressedMouseGrid=screen?.let {it.columns to it.rows};pressedMouse=screen?.mouseTracking==true;pressedControlled=controlled;pressedLink=linkAt(event.x,event.y);pressX=event.x;pressY=event.y;removeCallbacks(longPress);postDelayed(longPress,ViewConfiguration.getLongPressTimeout().toLong());wheelCol=((event.x-insetHorizontal)/desiredCellWidth).toInt();wheelRow=((event.y-insetTop)/desiredCellHeight).toInt();scrollFling.abortAnimation();startX=event.rawX;startY=event.rawY;lastScrollY=event.rawY;scrollPixels=0f;scrollMotion.reset();scrolling=false;dragging=false;paneGesture.begin(event.x, event.y)}
             MotionEvent.ACTION_MOVE -> {
-                if (event.pointerCount != 1) { removeCallbacks(longPress);paneGesture.cancel();onPaneDrag?.invoke(0f,false);dragging=false;scrolling=false;touchWasFlinging=false }
+                if (event.pointerCount != 1) { removeCallbacks(longPress);paneGesture.cancel();onPaneDrag?.invoke(0f,false);dragging=false;scrolling=false }
                 else {
+                    paneGesture.move(event.x,event.y)
                     val dx=event.rawX-startX;val dy=event.rawY-startY
                     val slop=ViewConfiguration.get(context).scaledTouchSlop
-                    if(kotlin.math.abs(dx)>slop || kotlin.math.abs(dy)>slop) {
-                        removeCallbacks(longPress)
-                        touchWasFlinging=false
-                    }
+                    if(kotlin.math.abs(dx)>slop || kotlin.math.abs(dy)>slop) removeCallbacks(longPress)
                     if(!scrolling && kotlin.math.abs(dx)>slop && kotlin.math.abs(dx)>kotlin.math.abs(dy)*1.5f) dragging=true
                     if(!dragging && kotlin.math.abs(dy)>slop && kotlin.math.abs(dy)>kotlin.math.abs(dx)*1.5f) {scrolling=true;paneGesture.cancel()}
                     if(scrolling) {scrollByPixels(lastScrollY-event.rawY);lastScrollY=event.rawY}
                     else if(dragging) onPaneDrag?.invoke(dx,true)
-                    paneGesture.move(event.x,event.y)
                 }
             }
-            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {pressedLink=null;removeCallbacks(longPress);paneGesture.cancel();onPaneDrag?.invoke(0f,false);dragging=false;scrolling=false;touchWasFlinging=false}
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {scrollFling.abortAnimation();scrollMotion.reset();invalidate();pressedLink=null;removeCallbacks(longPress);paneGesture.cancel();onPaneDrag?.invoke(0f,false);dragging=false;scrolling=false}
             MotionEvent.ACTION_UP -> if(scrolling) {
                 touchVelocity?.computeCurrentVelocity(1000)
                 val velocity=-(touchVelocity?.yVelocity ?: 0f).toInt()
@@ -540,15 +565,13 @@ class TerminalView(context: Context) : View(context) {
                     val minimum=-(history.offset.toDouble()*cellHeight).coerceAtMost(1000000.0).toInt()
                     val maximum=(history.below.toDouble()*cellHeight).coerceAtMost(1000000.0).toInt()
                     lastFlingY=0;scrollFling.fling(0,0,0,velocity,0,0,minimum,maximum);postInvalidateOnAnimation()
-                }
-                scrolling=false;paneGesture.cancel();touchWasFlinging=false
+                } else settleScroll()
+                scrolling=false;paneGesture.cancel()
             } else if(dragging && onPaneDragEnd!=null) {
                 touchVelocity?.computeCurrentVelocity(1000)
-                onPaneDragEnd?.invoke(event.rawX-startX,touchVelocity?.xVelocity ?: 0f);dragging=false;paneGesture.cancel();touchWasFlinging=false
-            } else if(touchWasFlinging) {
-                touchWasFlinging=false;paneGesture.cancel()
+                onPaneDragEnd?.invoke(event.rawX-startX,touchVelocity?.xVelocity ?: 0f);dragging=false;paneGesture.cancel()
             } else when (paneGesture.finish(event.x, event.y)) {
-                PaneGesture.Result.TAP -> {val link=pressedLink;if(link==null) terminalTap(event.x,event.y) else if(link==linkAt(event.x,event.y)) onOpenLink(link.url)}
+                PaneGesture.Result.TAP -> {val link=pressedLink;if(suppressScrollTap) Unit else if(link==null) terminalTap(event.x,event.y) else if(link==linkAt(event.x,event.y)) onOpenLink(link.url)}
                 PaneGesture.Result.NEXT -> onPaneSwipe(1)
                 PaneGesture.Result.PREVIOUS -> onPaneSwipe(-1)
                 PaneGesture.Result.NONE -> Unit
@@ -564,25 +587,32 @@ class TerminalView(context: Context) : View(context) {
             if(frame?.mouseTracking!=true || !pressedMouse || !pressedControlled || frame.scroll.below>0 ||
                 pressedMouseTarget!=mouseTarget() || pressedMouseGrid!=(frame.columns to frame.rows)) return
             val col=floor((x-insetHorizontal)/cellWidth).toInt()
-            val row=frameRow(frame,y)
-            if(x<insetHorizontal || x>=width-insetHorizontal ||
+            val row=floor((y-insetTop)/cellHeight).toInt()
+            if(x<insetHorizontal || x>=width-insetHorizontal || y<insetTop || y>=height-insetBottom ||
                 col !in 0 until frame.columns || row !in 0 until frame.rows) return
             super.performClick()
             onMouseClick(col,row,cellWidth.roundToInt().coerceAtLeast(1),cellHeight.roundToInt().coerceAtLeast(1))
-            if(frame.cursorX!=null && row==frame.cursorY) onCursorTap()
+            if(frame.isSemanticInputRow(row)) keyboard()
+            else if(frame.cursorX!=null && row==frame.cursorY) onCursorTap()
+        } else if(controlled && frame?.hasSemanticPrompt==true) {
+            val row=floor((y-insetTop)/cellHeight).toInt()
+            if(pressedMouseTarget!=mouseTarget() || pressedMouseGrid!=(frame.columns to frame.rows) ||
+                x<insetHorizontal || x>=width-insetHorizontal || y<insetTop || y>=height-insetBottom) return
+            super.performClick()
+            if(frame.isSemanticInputRow(row)) keyboard()
+            else if(frame.scroll.below==0L && frame.cursorX!=null && row==frame.cursorY) onCursorTap()
         } else performClick()
+    }
+    internal fun copySemanticSelection(output: Boolean): Boolean {
+        val selected=selection ?: return false
+        if(!selected.frame.hasSemanticPrompt || selectionInputTarget!=imageInputTarget()) return false
+        if(onSemanticCopy?.invoke(selected.frame,selected.first.column,selected.first.row,output)!=true) return false
+        selectionMode?.finish();return true
     }
     private fun clearSelection() {
         removeCallbacks(longPress)
-        magnifier?.dismiss()
         selection=null;selectionLink=null;selectionInputTarget=null;selectionTouch=false
         val mode=selectionMode;selectionMode=null;mode?.finish();invalidate()
-    }
-    private fun canPasteSelection(): Boolean = selection!=null && controlled && interactive &&
-        selectionInputTarget==imageInputTarget() && (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).hasPrimaryClip()
-    internal fun pasteSelection(): Boolean {
-        if(!canPasteSelection() || !onPaste()) return false
-        clearSelection();return true
     }
     private fun selectionEvent(event: MotionEvent): Boolean {
         val current=selection
@@ -590,32 +620,33 @@ class TerminalView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN -> {
                 selectionTouch=true
                 if(current!=null) {
-                    val window=rowWindowOf(current.frame)
                     fun distance(point: TerminalSelection.Point,end: Boolean): Float {
                         val x=insetHorizontal+(if(end) current.endColumn(point) else point.column)*cellWidth
-                        val y=window.top(point.row+1,cellHeight)
+                        val y=insetTop+(point.row+1)*cellHeight
                         return kotlin.math.hypot(event.x-x,event.y-y)
                     }
                     val a=distance(current.anchor,false);val b=distance(current.extent,true)
-                    if(minOf(a,b)<=28*resources.displayMetrics.density) {
-                        moveSelectionAnchor=a<b
-                        magnifier?.show(event.x,event.y)
-                    }
+                    if(minOf(a,b)<=28*resources.displayMetrics.density) moveSelectionAnchor=a<b
                     else {clearSelection();selectionTouch=true}
                 }
             }
             MotionEvent.ACTION_MOVE -> if(current!=null && event.pointerCount==1) {
-                current.move(((event.x-insetHorizontal)/cellWidth).toInt(),frameRow(current.frame,event.y),moveSelectionAnchor)
+                current.move(((event.x-insetHorizontal)/cellWidth).toInt(),((event.y-insetTop)/cellHeight).toInt(),moveSelectionAnchor)
                 val link=selectionLink
                 if(link!=null && (current.first>TerminalSelection.Point(link.end-1,link.row) || current.last<TerminalSelection.Point(link.start,link.row))) {
                     selectionLink=null;selectionMode?.invalidate()
                 }
                 selectionMode?.invalidateContentRect();invalidate()
-                magnifier?.show(event.x,event.y)
             }
-            MotionEvent.ACTION_UP,MotionEvent.ACTION_CANCEL -> {selectionTouch=false;touchVelocity?.recycle();touchVelocity=null;magnifier?.dismiss()}
+            MotionEvent.ACTION_UP,MotionEvent.ACTION_CANCEL -> {selectionTouch=false;touchVelocity?.recycle();touchVelocity=null}
         }
         return true
+    }
+    private fun canPasteSelection(): Boolean = selection!=null && controlled && interactive &&
+        selectionInputTarget==imageInputTarget() && (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).hasPrimaryClip()
+    internal fun pasteSelection(): Boolean {
+        if(!canPasteSelection() || !onPaste()) return false
+        clearSelection();return true
     }
     override fun performLongClick(): Boolean {
         val frame=screen ?: return false
@@ -625,15 +656,19 @@ class TerminalView(context: Context) : View(context) {
         pressedLink=null
         removeCallbacks(longPress);paneGesture.cancel();dragging=false;scrolling=false;scrollFling.abortAnimation();onPaneDrag?.invoke(0f,false)
         selectionInputTarget=imageInputTarget()
-        selection=TerminalSelection(frame,((pressX-insetHorizontal)/cellWidth).toInt(),frameRow(frame,pressY).coerceIn(0,frame.rows-1)).also {it.word()}
+        selection=TerminalSelection(frame,((pressX-insetHorizontal)/cellWidth).toInt(),((pressY-insetTop)/cellHeight).toInt()).also {it.word()}
         selectionTouch=true;moveSelectionAnchor=false;parent?.requestDisallowInterceptTouchEvent(true)
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         selectionMode=startActionMode(object: ActionMode.Callback2() {
             override fun onCreateActionMode(mode: ActionMode,menu: Menu): Boolean {
                 menu.add(0,android.R.id.copy,0,"Copy").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                 menu.add(0,android.R.id.paste,1,"Paste").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu.findItem(android.R.id.paste)?.isVisible=canPasteSelection()
+                menu.findItem(android.R.id.paste).isVisible=canPasteSelection()
                 menu.add(0,android.R.id.selectAll,2,"Select all").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                if(frame.hasSemanticPrompt && onSemanticCopy!=null) {
+                    menu.add(0,0x524504,3,"Copy command").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                    menu.add(0,0x524505,4,"Copy output").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                }
                 if(selectionLink!=null) {
                     menu.add(0,0x524501,2,"Open link").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                     menu.add(0,0x524502,3,"Copy link address").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
@@ -653,6 +688,7 @@ class TerminalView(context: Context) : View(context) {
                 }
                 android.R.id.paste -> pasteSelection()
                 android.R.id.selectAll -> {selection?.all();selectionLink=null;invalidate();mode.invalidate();mode.invalidateContentRect();true}
+                0x524504,0x524505 -> copySemanticSelection(item.itemId==0x524505)
                 0x524501 -> selectedLinkAction(TerminalLinkAction.OPEN)
                 0x524502 -> selectedLinkAction(TerminalLinkAction.COPY_ADDRESS)
                 0x524503 -> selectedLinkAction(TerminalLinkAction.SHARE)
@@ -661,40 +697,113 @@ class TerminalView(context: Context) : View(context) {
             override fun onDestroyActionMode(mode: ActionMode) {if(selectionMode===mode) {selectionMode=null;selection=null;selectionLink=null;selectionInputTarget=null;invalidate()}}
             override fun onGetContentRect(mode: ActionMode,view: View,outRect: android.graphics.Rect) {
                 val selected=selection ?: return super.onGetContentRect(mode,view,outRect)
-                val window=rowWindowOf(selected.frame)
-                outRect.set((insetHorizontal+selected.first.column*cellWidth).toInt(),window.top(selected.first.row,cellHeight).toInt(),
+                outRect.set((insetHorizontal+selected.first.column*cellWidth).toInt(),(insetTop+selected.first.row*cellHeight).toInt(),
                     (insetHorizontal+selected.endColumn(selected.last)*cellWidth).toInt().coerceAtMost(width),
-                    window.top(selected.last.row+1,cellHeight).toInt().coerceAtMost(height))
+                    (insetTop+(selected.last.row+1)*cellHeight).toInt().coerceAtMost(height))
             }
         },ActionMode.TYPE_FLOATING)
         invalidate();return true
     }
     private fun drawSelection(canvas: Canvas) {
         val selected=selection ?: return
-        val window=rowWindowOf(selected.frame)
         backgroundPaint.color=(palette.accent and 0xffffff) or (0x55 shl 24)
         for(row in selected.first.row..selected.last.row) {
             val left=if(row==selected.first.row) selected.first.column else 0
             val right=if(row==selected.last.row) selected.endColumn(selected.last) else selected.frame.columns
-            canvas.drawRect(insetHorizontal+left*cellWidth,window.top(row,cellHeight),
-                (insetHorizontal+right*cellWidth).coerceAtMost(width-insetHorizontal),window.top(row+1,cellHeight),backgroundPaint)
+            canvas.drawRect(insetHorizontal+left*cellWidth,insetTop+row*cellHeight,
+                (insetHorizontal+right*cellWidth).coerceAtMost(width-insetHorizontal),insetTop+(row+1)*cellHeight,backgroundPaint)
         }
         backgroundPaint.color=palette.accent
         for((point,end) in listOf(selected.first to false,selected.last to true)) {
             val x=insetHorizontal+(if(end) selected.endColumn(point) else point.column)*cellWidth
-            val y=window.top(point.row+1,cellHeight)
+            val y=insetTop+(point.row+1)*cellHeight
             canvas.drawCircle(x,y,5*resources.displayMetrics.density,backgroundPaint)
         }
     }
-    override fun performClick(): Boolean { super.performClick();if(interactive) {requestFocus();if(controlled) keyboard() else onActivate()};return true }
+    internal fun flushComposingText(restartIme: Boolean=true) {
+        if(deliveringImeInput) return
+        val hadContext=imeEditable?.isNotEmpty()==true || composing.isNotEmpty()
+        flushImeEditor?.invoke()
+        composing="";composingCursor=0
+        if(restartIme && hadContext) {
+            imeEditable=null;flushImeEditor=null
+            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)
+        }
+    }
+    override fun performClick(): Boolean { super.performClick();if(interactive) {if(controlled) keyboard() else onActivate()};return true }
     override fun onCheckIsTextEditor() = controlled
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         if (!controlled) return null
-        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or (if(keyboardSuggestions) InputType.TYPE_TEXT_FLAG_AUTO_CORRECT else InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_ACTION_NONE
         outAttrs.contentMimeTypes=imageMimeTypes.copyOf()
         val imageTarget=imageInputTarget()
-        return object : BaseInputConnection(this, false) {
+        val pending=composing
+        val editor=android.text.SpannableStringBuilder(pending)
+        android.text.Selection.setSelection(editor,editor.length)
+        imeEditable=editor
+        outAttrs.initialSelStart=editor.length;outAttrs.initialSelEnd=editor.length
+        if(android.os.Build.VERSION.SDK_INT>=30) outAttrs.setInitialSurroundingText(editor)
+        val connection=object : BaseInputConnection(this, true) {
+            private var batchDepth=0
+            private var pendingCommit=false
+            private val imeLine=TerminalImeLine()
+            private fun active()=controlled && interactive && imageTarget==imageInputTarget() && imeEditable===editor
+            override fun getEditable(): android.text.Editable = editor
+            private fun sync() {
+                val text=editor.toString()
+                composing=if(text.startsWith(imeLine.text) && imeLine.cursor==imeLine.text.length) text.substring(imeLine.text.length) else ""
+                composingCursor=(android.text.Selection.getSelectionEnd(editor)-imeLine.text.length).coerceIn(0,composing.length)
+                invalidate()
+                if(batchDepth==0) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).updateSelection(this@TerminalView,
+                    android.text.Selection.getSelectionStart(editor),android.text.Selection.getSelectionEnd(editor),
+                    getComposingSpanStart(editor),getComposingSpanEnd(editor))
+            }
+            private fun submit(text: String,cursor: Int) {
+                val keys=imeLine.edit(text,cursor)
+                if(keys.isNotEmpty()) {
+                    deliveringImeInput=true
+                    try {onInput(keys)} finally {deliveringImeInput=false}
+                }
+            }
+            fun flush() {
+                if(!active()) return
+                submit(editor.toString(),android.text.Selection.getSelectionEnd(editor).coerceIn(0,editor.length))
+                BaseInputConnection.removeComposingSpans(editor)
+                editor.clear();android.text.Selection.setSelection(editor,0);imeLine.reset()
+                sync()
+            }
+            private fun commitPending() {
+                if(!pendingCommit || batchDepth>0) {sync();return}
+                pendingCommit=false
+                val start=getComposingSpanStart(editor)
+                val end=if(start<0) editor.length else start
+                submit(editor.substring(0,end),if(start<0) android.text.Selection.getSelectionEnd(editor).coerceIn(0,end) else end)
+                if(!keyboardSuggestions || editor.length>8192 || editor.any {it<' '}) {
+                    editor.clear();android.text.Selection.setSelection(editor,0);imeLine.reset()
+                }
+                sync()
+            }
+            private fun edited() {
+                if(getComposingSpanStart(editor)<0) {pendingCommit=true;commitPending()} else sync()
+            }
+            override fun beginBatchEdit(): Boolean {if(!active()) return false;batchDepth++;return true}
+            override fun endBatchEdit(): Boolean {if(!active()) return false;if(batchDepth>0) batchDepth--;commitPending();return batchDepth>0}
+            override fun getExtractedText(request: android.view.inputmethod.ExtractedTextRequest?,flags: Int): android.view.inputmethod.ExtractedText? {
+                if(!active()) return null
+                return android.view.inputmethod.ExtractedText().apply {
+                    text=editor.toString();startOffset=0;partialStartOffset=-1;partialEndOffset=-1
+                    selectionStart=android.text.Selection.getSelectionStart(editor);selectionEnd=android.text.Selection.getSelectionEnd(editor)
+                }
+            }
+            override fun setSelection(start: Int,end: Int): Boolean {
+                if(!active() || start !in 0..editor.length || end !in 0..editor.length) return false
+                return super.setSelection(start,end).also {sync()}
+            }
+            override fun setComposingRegion(start: Int,end: Int): Boolean {
+                if(!active()) return false
+                return super.setComposingRegion(start,end).also {sync()}
+            }
             override fun commitContent(info: android.view.inputmethod.InputContentInfo,flags: Int,opts: android.os.Bundle?): Boolean {
                 if(!controlled || !interactive || imageTarget!=imageInputTarget() || imageMimeTypes.none {info.description.hasMimeType(it)}) return false
                 val granted=flags and InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION!=0
@@ -705,49 +814,78 @@ class TerminalView(context: Context) : View(context) {
             }
             override fun performContextMenuAction(id: Int): Boolean = if(id==android.R.id.paste || id==android.R.id.pasteAsPlainText) controlled && interactive && imageTarget==imageInputTarget() && onPaste() else super.performContextMenuAction(id)
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                composing = ""
-                if (text != null) {
-                    if ((screen?.scroll?.below ?: 0L) > 0L) onBottom?.invoke()
-                    onInput(text.toString())
-                }
-                invalidate(); return true
+                if(!active()) return false
+                awake.activity();refreshCursorBlink()
+                if(text!=null) {super.commitText(text,newCursorPosition);pendingCommit=true;commitPending()}
+                return true
+            }
+            // Gboard's space-triggered autocorrection uses this API on Android 14+.
+            // BaseInputConnection edits the buffer directly, bypassing commitText.
+            @androidx.annotation.RequiresApi(34)
+            override fun replaceText(start: Int,end: Int,text: CharSequence,newCursorPosition: Int,textAttribute: android.view.inputmethod.TextAttribute?): Boolean {
+                if(!active()) return false
+                awake.activity();refreshCursorBlink()
+                val result=super.replaceText(start,end,text,newCursorPosition,textAttribute)
+                if(result) {pendingCommit=true;commitPending()}
+                return result
             }
             override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                if ((screen?.scroll?.below ?: 0L) > 0L) onBottom?.invoke()
-                composing = text?.toString().orEmpty(); invalidate(); return true
+                if(!active()) return false
+                awake.activity();refreshCursorBlink()
+                super.setComposingText(text ?: "",newCursorPosition);sync();return true
             }
             override fun finishComposingText(): Boolean {
-                if (composing.isNotEmpty()) {
-                    if ((screen?.scroll?.below ?: 0L) > 0L) onBottom?.invoke()
-                    onInput(composing)
-                }
-                composing = ""; invalidate(); return true
+                if(!active()) return false
+                super.finishComposingText();pendingCommit=true;commitPending();return true
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-                if ((screen?.scroll?.below ?: 0L) > 0L) onBottom?.invoke()
-                if (composing.isNotEmpty()) { composing = composing.dropLast(beforeLength.coerceAtMost(composing.length)); invalidate(); return true }
-                repeat(beforeLength.coerceAtMost(128)) { onInput("\u007f") }
-                repeat(afterLength.coerceAtMost(128)) { onInput("\u001b[3~") }; return true
+                if(!active()) return false
+                awake.activity();refreshCursorBlink()
+                if(editor.isNotEmpty()) {super.deleteSurroundingText(beforeLength.coerceAtLeast(0),afterLength.coerceAtLeast(0));edited();return true}
+                repeat(beforeLength.coerceIn(0,128)) {onInput("\u007f")}
+                repeat(afterLength.coerceIn(0,128)) {onInput("\u001b[3~")};return true
+            }
+            override fun deleteSurroundingTextInCodePoints(beforeLength: Int,afterLength: Int): Boolean {
+                if(!active()) return false
+                if(editor.isNotEmpty()) return super.deleteSurroundingTextInCodePoints(beforeLength.coerceAtLeast(0),afterLength.coerceAtLeast(0)).also {edited()}
+                return deleteSurroundingText(beforeLength,afterLength)
             }
             override fun sendKeyEvent(event: KeyEvent): Boolean {
-                if (event.action != KeyEvent.ACTION_DOWN) {
-                    // An input method may swallow key-up, so end a held delete here too.
-                    if (isDelete(event.keyCode)) stopDeleteRepeat()
-                    return true
+                if(!active()) return false
+                if(event.action!=KeyEvent.ACTION_DOWN) return true
+                if(editor.isNotEmpty() && event.keyCode in listOf(KeyEvent.KEYCODE_DEL,KeyEvent.KEYCODE_DPAD_LEFT,KeyEvent.KEYCODE_DPAD_RIGHT)) {
+                    val start=android.text.Selection.getSelectionStart(editor);val end=android.text.Selection.getSelectionEnd(editor)
+                    if(event.keyCode==KeyEvent.KEYCODE_DEL) {
+                        if(start!=end) editor.delete(minOf(start,end),maxOf(start,end))
+                        else if(start>0) editor.delete(Character.offsetByCodePoints(editor,start,-1),start)
+                    } else {
+                        val cursor=if(event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT) minOf(start,end) else maxOf(start,end)
+                        val next=if(event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT && cursor>0) Character.offsetByCodePoints(editor,cursor,-1)
+                            else if(event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT && cursor<editor.length) Character.offsetByCodePoints(editor,cursor,1) else cursor
+                        android.text.Selection.setSelection(editor,next)
+                    }
+                    edited();return true
                 }
-                if (event.keyCode == KeyEvent.KEYCODE_ENTER) finishComposingText()
-                return onKeyDown(event.keyCode, event)
+                if(editor.isNotEmpty()) flushComposingText(restartIme=false)
+                return onKeyDown(event.keyCode,event)
             }
-            override fun performEditorAction(actionCode: Int): Boolean { finishComposingText(); onInput("\r"); return true }
+            override fun performEditorAction(actionCode: Int): Boolean {
+                if(!active()) return false
+                batchDepth=0;finishComposingText();flush();onInput("\r");return true
+            }
         }
+        flushImeEditor={connection.flush()}
+        if(pending.isNotEmpty()) connection.setComposingRegion(0,editor.length)
+        // Run after IMM has accepted the connection, before retiring its predecessor.
+        post {if(imeEditable===editor && controlled && hasFocus()) onInputConnectionReady()}
+        return connection
     }
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        awake.activity();refreshCursorBlink()
         if(event.isShiftPressed && keyCode in listOf(KeyEvent.KEYCODE_PAGE_UP,KeyEvent.KEYCODE_PAGE_DOWN)) {
             onScroll((if(keyCode==KeyEvent.KEYCODE_PAGE_UP) -1 else 1)*(screen?.rows ?: 24));return true
         }
-        if (!controlled) {stopDeleteRepeat();return super.onKeyDown(keyCode, event)}
-        if (!isDelete(keyCode)) stopDeleteRepeat()
-        if ((screen?.scroll?.below ?: 0L) > 0L) onBottom?.invoke()
+        if (!controlled) return super.onKeyDown(keyCode, event)
         val named = when (keyCode) {
             KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> "enter"
             KeyEvent.KEYCODE_DEL -> "backspace"; KeyEvent.KEYCODE_FORWARD_DEL -> "delete"
@@ -758,29 +896,12 @@ class TerminalView(context: Context) : View(context) {
             KeyEvent.KEYCODE_MOVE_HOME -> "home"; KeyEvent.KEYCODE_MOVE_END -> "end"
             else -> null
         }
-        if (named != null) {
-            val input=TerminalInput.key(named,event.isCtrlPressed,event.isAltPressed,event.isShiftPressed)
-            // Soft keyboards either autorepeat at their own pace or not at all, so a held
-            // delete repeats here and the keyboard's own repeats are dropped.
-            if (isDelete(keyCode)) {
-                if (event.repeatCount > 0) return true
-                onInput(input); startDeleteRepeat(input); return true
-            }
-            onInput(input); return true
-        }
+        if (named != null) { onInput(TerminalInput.key(named,event.isCtrlPressed,event.isAltPressed,event.isShiftPressed)); return true }
         val point = event.unicodeChar
         if (point != 0 && point and KeyCharacterMapCompat.COMBINING_ACCENT == 0) {
             onInput(TerminalInput.modified(String(Character.toChars(point)), event.isCtrlPressed, event.isAltPressed)); return true
         }
         return super.onKeyDown(keyCode, event)
-    }
-    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (isDelete(keyCode)) stopDeleteRepeat()
-        return super.onKeyUp(keyCode, event)
-    }
-    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
-        if (!gainFocus) stopDeleteRepeat()
-        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
     }
 }
 private object KeyCharacterMapCompat { const val COMBINING_ACCENT: Int = Int.MIN_VALUE }

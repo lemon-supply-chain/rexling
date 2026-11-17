@@ -1,44 +1,21 @@
 package dev.lemon.rex
 
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalUpdatesTest {
-    private fun packet(revision: Long,flag: Int,changed: Map<Int,String>,metadata: String="",version: Int=1,links: Map<Int,List<Triple<Int,Int,String>>> = emptyMap(),payloads: List<TerminalImagePayload> = emptyList(),placements: List<TerminalImagePlacement> = emptyList(),shift: Int=0): ByteArray {
+    private fun packet(revision: Long,flag: Int,changed: Map<Int,String>,metadata: String="",version: Int=1,links: Map<Int,List<Triple<Int,Int,String>>> = emptyMap()): ByteArray {
         val out=ByteArrayOutputStream()
         fun number(value: Long,size: Int) {repeat(size){out.write((value ushr (8*it)).toInt() and 255)}}
         fun text(value: String) {val bytes=value.toByteArray();number(bytes.size.toLong(),4);out.write(bytes)}
         out.write("RXT$version".toByteArray());number(revision,8);text(metadata);number(flag.toLong(),1)
         if(flag>=2) {
             number(2,2);number(2,2);number(-1,4);number(-1,4);number(-1,4);number(0xff000000,4)
-            repeat(3){number(2,8)};if(version>=2) number(3,1)
-            if(version>=5) number(shift.toLong(),2)
-            number(changed.size.toLong(),2)
+            repeat(3){number(2,8)};if(version>=2) number(3,1);number(changed.size.toLong(),2)
             changed.forEach {(row,value)->
                 number(row.toLong(),2);number(1,2);number(0,2);number(1,1);number(0,4);number(-1,4);number(0xff000000,4);text(value)
                 if(version>=3) {val ranges=links[row].orEmpty();number(ranges.size.toLong(),2);for((start,end,url) in ranges) {number(start.toLong(),2);number(end.toLong(),2);text(url)}}
-            }
-            if(version>=4) {
-                number(payloads.size.toLong(),2)
-                for(p in payloads) {
-                    number(p.imageId.toLong(),4);number(p.generation,8)
-                    number(p.width.toLong(),4);number(p.height.toLong(),4)
-                    number(p.pixels.size.toLong(),4);out.write(p.pixels)
-                }
-                number(placements.size.toLong(),2)
-                for(pl in placements) {
-                    number(pl.imageId.toLong(),4)
-                    number(pl.col.toLong(),4);number(pl.row.toLong(),4)
-                    number(pl.cols.toLong(),4);number(pl.rows.toLong(),4)
-                    number(pl.offsetX.toLong(),4);number(pl.offsetY.toLong(),4)
-                    number(pl.width.toLong(),4);number(pl.height.toLong(),4)
-                    number(pl.srcX.toLong(),4);number(pl.srcY.toLong(),4)
-                    number(pl.srcWidth.toLong(),4);number(pl.srcHeight.toLong(),4)
-                    number(pl.z.toLong(),4)
-                }
             }
         }
         return out.toByteArray()
@@ -101,73 +78,89 @@ class TerminalUpdatesTest {
         assertTrue(decoder.decode(packet(3,1,emptyMap(),"""{"activity":null}""")).activity.isEmpty())
     }
 
-    @Test fun versionFourDecodesKittyImagesAndPixels() {
-        val decoder=TerminalUpdates()
-        val payload = TerminalImagePayload(42, 1L, 1, 1, byteArrayOf(255.toByte(), 0, 0, 255.toByte()))
-        val placement = TerminalImagePlacement(42, 0, 0, 10, 5, 0, 0, 80, 80, 0, 0, 1, 1, 0)
-        val first = decoder.decode(packet(1, 3, mapOf(0 to "x", 1 to "y"), version = 4, payloads = listOf(payload), placements = listOf(placement)))
-        assertEquals(1, first.screen!!.imagePayloads.size)
-        assertEquals(1, first.screen.imagePlacements.size)
-        val decPayload = first.screen.imagePayloads[0]
-        assertEquals(42, decPayload.imageId)
-        assertEquals(1L, decPayload.generation)
-        assertArrayEquals(byteArrayOf(255.toByte(), 0, 0, 255.toByte()), decPayload.pixels)
-        val decPlacement = first.screen.imagePlacements[0]
-        assertEquals(42, decPlacement.imageId)
-        assertEquals(10, decPlacement.cols)
-        assertEquals(5, decPlacement.rows)
-
-        // Delta frame with no new payloads (cached), only placement moving:
-        val cachedPlacement = placement.copy(col = 1)
-        val second = decoder.decode(packet(2, 2, emptyMap(), version = 4, payloads = emptyList(), placements = listOf(cachedPlacement)))
-        assertEquals(0, second.screen!!.imagePayloads.size)
-        assertEquals(1, second.screen.imagePlacements.size)
-        assertEquals(1, second.screen.imagePlacements[0].col)
-    }
-
-    @Test fun versionFourRejectsCorruptedPixelLength() {
-        val decoder = TerminalUpdates()
-        val out = ByteArrayOutputStream()
-        fun number(value: Long, size: Int) { repeat(size) { out.write((value ushr (8 * it)).toInt() and 255) } }
-        fun text(value: String) { val bytes = value.toByteArray(); number(bytes.size.toLong(), 4); out.write(bytes) }
-        out.write("RXT4".toByteArray()); number(1, 8); text(""); number(3, 1)
-        number(2, 2); number(2, 2); number(-1, 4); number(-1, 4); number(-1, 4); number(0xff000000, 4)
-        repeat(3) { number(2, 8) }; number(3, 1); number(0, 2)
-        number(1, 2)
-        number(10, 4); number(1, 8); number(10, 4); number(10, 4)
-        number(9999999, 4)
-        number(0, 2)
-        assertTrue(runCatching { decoder.decode(out.toByteArray()) }.isFailure)
-        assertEquals(0L, decoder.revision)
-    }
-
-    @Test fun shiftedRowsKeepHyperlinksAndLocalImagePlacementFormat() {
-        val decoder=TerminalUpdates()
-        val payload=TerminalImagePayload(42,1,1,1,byteArrayOf(-1,0,0,-1))
-        val placement=TerminalImagePlacement(42,0,1,1,1,0,0,8,16,0,0,1,1,0)
-        decoder.decode(packet(1,3,mapOf(0 to "a",1 to "Docs"),version=5,
-            links=mapOf(1 to listOf(Triple(0,1,"https://example.com"))),payloads=listOf(payload),placements=listOf(placement)))
-        val shifted=decoder.decode(packet(2,2,mapOf(1 to "new"),version=5,shift=1,placements=listOf(placement.copy(row=0)))).screen!!
-        assertEquals(listOf("Docs","new"),shifted.lines.map {it.single().text})
-        assertEquals(listOf(0,1),shifted.cells.map {it.y})
-        assertEquals("https://example.com",shifted.lines[0].single().hyperlink)
-        assertTrue(shifted.imagePayloads.isEmpty())
-        assertEquals(placement.copy(row=0),shifted.imagePlacements.single())
-        val back=decoder.decode(packet(3,2,mapOf(0 to "above"),version=5,shift=-1)).screen!!
-        assertEquals(listOf("above","Docs"),back.lines.map {it.single().text})
-        assertEquals(1,back.lines[1].single().y)
-    }
-
-    @Test fun invalidShiftsDoNotAdvanceOrDestroyTheBase() {
-        val decoder=TerminalUpdates()
-        decoder.decode(packet(1,3,mapOf(0 to "a",1 to "b"),version=5))
-        for(invalid in listOf(packet(2,2,emptyMap(),version=5,shift=1),
-            packet(2,2,mapOf(0 to "x"),version=5,shift=-2),
-            packet(2,3,mapOf(0 to "x",1 to "y"),version=5,shift=1))) {
-            assertTrue(runCatching {decoder.decode(invalid)}.isFailure)
-            assertEquals(1L,decoder.revision)
+    private fun graphicsPacket(revision: Long,flag: Int=3,asset: Boolean=true,placements: Boolean=true,badLength: Boolean=false,badCrop: Boolean=false): ByteArray {
+        val base=packet(revision,flag,if(flag==3) mapOf(0 to "",1 to "") else emptyMap(),version=3)
+        base[3]='4'.code.toByte()
+        val out=ByteArrayOutputStream();out.write(base)
+        fun n(value: Long,size: Int) {repeat(size) {out.write((value ushr (8*it)).toInt() and 255)}}
+        if(flag>=2) {
+            n(8,4);n(16,4);n(if(asset) 1 else 0,2)
+            if(asset) {n(7,4);n(1,8);n(2,4);n(1,4);n(if(badLength) 7 else 8,4);out.write(byteArrayOf(-1,0,0,-1,0,-1,0,-1))}
+            n(if(placements) 1 else 0,2)
+            if(placements) {
+                n(7,4);n(1,8);n(1,1);n(-1,4);n(0,4);n(0,4)
+                for(v in listOf(0,0,16,16,0,0,if(badCrop) 3 else 2,1)) n(v.toLong(),4)
+            }
         }
-        val valid=decoder.decode(packet(2,2,mapOf(1 to "c"),version=5,shift=1)).screen!!
-        assertEquals(listOf("b","c"),valid.cells.map {it.text})
+        n(0,2);return out.toByteArray()
+    }
+    @Test fun imageDeltasReusePixelsAndMetadataOnlyUpdatesKeepTheImage() {
+        val decoder=TerminalUpdates();val first=decoder.decode(graphicsPacket(1)).screen!!
+        assertEquals(1,first.images.size)
+        assertEquals(8,first.imageCellWidth);assertEquals(16,first.imageCellHeight)
+        val next=decoder.decode(graphicsPacket(2,2,asset=false)).screen!!
+        assertSame(first.images[0].image,next.images[0].image)
+        assertSame(next,decoder.decode(graphicsPacket(3,0)).screen)
+        assertTrue(decoder.decode(graphicsPacket(4,2,asset=false,placements=false)).screen!!.images.isEmpty())
+    }
+    @Test fun malformedImagesCannotCommitADecoderRevisionOrReuseAnUnknownBase() {
+        for(bytes in listOf(graphicsPacket(1,badLength=true),graphicsPacket(1,badCrop=true),graphicsPacket(1,asset=false))) {
+            val decoder=TerminalUpdates();assertTrue(runCatching {decoder.decode(bytes)}.isFailure);assertEquals(0L,decoder.revision)
+            assertEquals(1,decoder.decode(graphicsPacket(1)).screen!!.images.size)
+        }
+    }
+
+    @Test fun cursorShapeAndBlinkDecodeOnFullAndCursorOnlyDelta() {
+        fun packet(revision: Long,flag: Int,flags: Int): ByteArray {
+            val old=rxt5(revision,flag,2,0,if(flag==3) mapOf(0 to "a",1 to "b") else emptyMap())
+            val at=16+1+4+8+8+24+1
+            return (old.take(at)+listOf(flags.toByte())+old.drop(at)).toByteArray().also {it[3]='6'.code.toByte()}
+        }
+        val decoder=TerminalUpdates()
+        val first=decoder.decode(packet(1,3,4)).screen!!
+        assertEquals(0,first.cursorStyle);assertTrue(first.cursorBlinking)
+        val steady=decoder.decode(packet(2,2,2)).screen!!
+        assertEquals(2,steady.cursorStyle);assertFalse(steady.cursorBlinking)
+        assertEquals(first.lines,steady.lines)
+        assertTrue(runCatching {TerminalUpdates().decode(packet(1,3,8))}.isFailure)
+    }
+    /** RXT5 packet: [shift], changed rows (each one cell of [text]) and overscan rows. */
+    private fun rxt5(revision: Long,flag: Int,rows: Int,shift: Int,changed: Map<Int,String>,above: List<String> = emptyList(),below: List<String> = emptyList(),reuseOverscan: Boolean=false): ByteArray {
+        val out=ByteArrayOutputStream()
+        fun number(value: Long,size: Int) {repeat(size){out.write((value ushr (8*it)).toInt() and 255)}}
+        fun text(value: String) {val bytes=value.toByteArray();number(bytes.size.toLong(),4);out.write(bytes)}
+        fun row(value: String) {number(1,2);number(0,2);number(1,1);number(0,4);number(-1,4);number(0xff000000,4);text(value);number(0,2)}
+        out.write("RXT5".toByteArray());number(revision,8);text("");number(flag.toLong(),1)
+        number(2,2);number(rows.toLong(),2);number(-1,4);number(-1,4);number(-1,4);number(0xff000000,4)
+        number(100,8);number(10,8);number(rows.toLong(),8);number(0,1)
+        number(shift.toLong(),2);number(changed.size.toLong(),2)
+        changed.forEach {(y,value)->number(y.toLong(),2);row(value)}
+        number(if(reuseOverscan) 255 else above.size.toLong(),1);if(!reuseOverscan) above.forEach(::row)
+        number(if(reuseOverscan) 255 else below.size.toLong(),1);if(!reuseOverscan) below.forEach(::row)
+        number(8,4);number(16,4);number(0,2);number(0,2)  // image cell size, no assets, no placements
+        number(0,2)  // no previews
+        return out.toByteArray()
+    }
+    @Test fun unchangedOverscanSidesReuseOnlyTheSameDeltaBase() {
+        val decoder=TerminalUpdates()
+        decoder.decode(rxt5(1,3,2,0,mapOf(0 to "a",1 to "b"),above=listOf("z"),below=listOf("c")))
+        val next=decoder.decode(rxt5(2,2,2,0,mapOf(0 to "x"),reuseOverscan=true)).screen!!
+        assertEquals("z",next.above.single().single().text);assertEquals("c",next.below.single().single().text)
+        assertTrue(runCatching {TerminalUpdates().decode(rxt5(1,3,2,0,mapOf(0 to "a",1 to "b"),reuseOverscan=true))}.isFailure)
+    }
+    @Test fun shiftedRowsMoveWithTheirContentAndOverscanRowsDecode() {
+        val decoder=TerminalUpdates()
+        val first=decoder.decode(rxt5(1,3,4,0,mapOf(0 to "a",1 to "b",2 to "c",3 to "d"),above=listOf("z"),below=listOf("e"))).screen!!
+        assertEquals("z",first.above.single()[0].text);assertEquals("e",first.below.single()[0].text)
+        // Content moved up one row: only the new bottom row is sent.
+        val next=decoder.decode(rxt5(2,2,4,1,mapOf(3 to "e"))).screen!!
+        assertEquals(listOf("b","c","d","e"),next.lines.map {it.single().text})
+        assertEquals(listOf(0,1,2,3),next.lines.map {it.single().y})
+        assertEquals("b",next.cells[0].text)
+        // Scrolling back down by two needs both uncovered top rows.
+        val back=decoder.decode(rxt5(3,2,4,-2,mapOf(0 to "y",1 to "z"))).screen!!
+        assertEquals(listOf("y","z","b","c"),back.lines.map {it.single().text})
+        assertTrue(runCatching {decoder.decode(rxt5(4,2,4,1,emptyMap()))}.isFailure)
+        assertTrue(runCatching {decoder.decode(rxt5(4,3,4,1,mapOf(0 to "a",1 to "b",2 to "c",3 to "d")))}.isFailure)
     }
 }

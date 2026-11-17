@@ -7,7 +7,6 @@
     <string name="save">Save</string>
     <string name="done">Done</string>
     <string name="close">Close</string>
-    <string name="retry">Retry</string>
     <string name="connect">Connect</string>
     <string name="disconnect">Disconnect</string>
     <string name="delete">Delete</string>
@@ -87,7 +86,6 @@
     <string name="font_size">Font size</string>
     <string name="font_size_detail">Terminal text size</string>
     <string name="language">Language</string>
-    <string name="language_detail">System default, English or Chinese</string>
     <string name="language_system">System default</string>
     <string name="language_en">English</string>
     <string name="language_zh">简体中文</string>
@@ -145,13 +143,11 @@
 
     <!-- Servers -->
     <string name="count_connected_format">%d connected</string>
-    <string name="add_server">+ Add server</string>
     <string name="add_server_title">Add server</string>
     <string name="edit_server_title">Edit server</string>
     <string name="add_rex_server_started">Add a Rex server to get started.</string>
     <string name="switch_servers_hint">Switch servers without closing their connections.</string>
     <string name="server_url">Server URL</string>
-    <string name="tailscale_address_hint">Use the server\'s authenticated Tailscale address.</string>
     <string name="save_and_connect">Save &amp; connect</string>
     <string name="forget_server">Forget server</string>
     <string name="status_connected_viewing">Connected · viewing</string>
@@ -161,7 +157,6 @@
     <string name="status_paused">Paused</string>
     <string name="status_failed">Connection failed</string>
     <string name="status_disconnected">Disconnected</string>
-    <string name="choose_server_icon">Choose server icon</string>
     <string name="server_icon_globe">Globe</string>
     <string name="server_icon_server">Server</string>
     <string name="server_icon_cloud">Cloud</string>
@@ -192,7 +187,6 @@
     <string name="filter_finished">Finished</string>
 
     <!-- Neovim Shortcuts -->
-    <string name="enable_neovim_shortcuts">Enable Neovim shortcuts</string>
     <string name="menu_layout">Menu layout</string>
     <string name="layout_grid">Grid</string>
     <string name="layout_circular">Circular</string>
@@ -222,7 +216,6 @@
     <string name="predictive_echo_always_detail">Always shows typing immediately in shells and pi.</string>
 
     <!-- Shortcut Profiles -->
-    <string name="shortcuts_detail">Floating key menus for Neovim, the shell and other programs</string>
     <string name="close_shortcuts">Close shortcuts</string>
     <string name="shortcuts_subtitle">The floating menu shows the profile that matches the program in the pane.</string>
     <string name="shortcut_profiles">Profiles</string>
@@ -251,7 +244,7 @@
     <string name="enter_text_detail">Plain text gets Enter; key sequences such as &lt;C-c&gt; do not.</string>
     <string name="enter_ex_commands">: commands</string>
     <string name="enter_ex_commands_detail">Only plain : commands get Enter, as in Neovim.</string>
-    <string name="shortcut_syntax_hint">One shortcut per line, optionally named: Name = keys. [Group] headers put the following shortcuts in a submenu; [] ends the group. Add :blue, :green, :orange or :purple to colour a group, as in [Git:green]. Start a line with ! to ask before sending it. Key notation: &lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, arrows and F1–F12.</string>
+    <string name="shortcut_syntax_hint">One shortcut per line, optionally named: Name = keys. Write Name := action to run a custom Rex action instead of keys; Rex runs it from the palette and shows any error it reports. [Group] headers put the following shortcuts in a submenu; [] ends the group. Add :blue, :green, :orange or :purple to colour a group, as in [Git:green]. Start a line with ! to ask before sending it. Key notation: &lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, arrows and F1–F12.</string>
     <string name="reset_shortcuts">Reset shortcuts</string>
     <string name="delete_profile_title">Delete %s?</string>
     <string name="delete_profile_confirm">Its shortcuts will be removed from this phone.</string>
@@ -259,4 +252,116 @@
     <string name="run_shortcut_confirm">This sends the following to the %s pane:</string>
     <string name="run">Run</string>
     <string name="close_title_format">Close %s</string>
+
+    <!-- Keep Screen Awake -->
+    <string name="keep_screen_awake">Keep screen awake</string>
+    <string name="keep_screen_awake_desc">Only while Rexling is in the foreground. You can still lock the phone.</string>
+    <string name="keep_screen_awake_system">System default</string>
+    <string name="keep_screen_awake_system_desc">Use the normal screen timeout</string>
+    <string name="keep_screen_awake_visible">While a terminal is visible</string>
+    <string name="keep_screen_awake_visible_desc">Stay awake even when the terminal is idle</string>
+    <string name="keep_screen_awake_active">While the visible terminal is active</string>
+    <string name="keep_screen_awake_active_desc">Typing and new output refresh the normal screen timeout</string>
+
+    <!-- Keyboard Toolbar -->
+    <string name="keyboard_toolbar">Keyboard toolbar</string>
+    <string name="keyboard_toolbar_detail">Choose and arrange up to seven buttons</string>
+    <string name="close_keyboard_toolbar">Close keyboard toolbar</string>
+    <string name="keyboard_toolbar_hint">Hold and drag buttons between the two areas. Up to seven buttons; the keyboard stays on the right.</string>
+    <string name="your_toolbar_format">Your toolbar · %1$d/%2$d</string>
+    <string name="drag_buttons_here">Drag buttons here</string>
+    <string name="drop_to_remove">Drop below to remove</string>
+    <string name="available_buttons">Available buttons</string>
+    <string name="remove_selected">Remove selected</string>
+    <string name="keyboard_toolbar_drag_hint">Drag within the toolbar to reorder. When full, drop onto a slot to replace it. You can also tap an available button to add it or replace the selected slot.</string>
+
+    <!-- Network -->
+    <string name="network">Network</string>
+    <string name="network_detail">Built-in Tailscale and control server</string>
+    <string name="close_network_settings">Close network settings</string>
+    <string name="current_server">Current server</string>
+    <string name="builtin_tailscale">Built-in Tailscale</string>
+    <string name="tailscale_off">Not set up</string>
+    <string name="tailscale_running">Connected</string>
+    <string name="tailscale_needs_login">Sign-in required</string>
+    <string name="tailscale_needs_machine_auth">Device approval required</string>
+    <string name="tailscale_stopped">Stopped</string>
+    <string name="tailscale_starting">Connecting…</string>
+    <string name="tailscale_not_connected">Not connected</string>
+    <string name="tailscale_ready_desc">Built-in Tailscale is ready</string>
+    <string name="tailscale_machine_auth_desc">Approve this device in your Tailscale admin console</string>
+    <string name="tailscale_off_desc">Optional. Not needed when using the phone’s network or VPN.</string>
+    <string name="tailscale_browser_signin_desc">Sign in securely in your browser</string>
+    <string name="set_up">Set up</string>
+    <string name="sign_in">Sign in</string>
+    <string name="active_connections">Active connections</string>
+    <string name="continue_in_browser">Continue in browser</string>
+    <string name="cancel_sign_in">Cancel sign-in</string>
+    <string name="control_server_optional">Control server (optional)</string>
+    <string name="control_server_hint">Leave blank for Tailscale. Each control server keeps its own sign-in.</string>
+    <string name="choose_network_per_server">Choose the connection network separately in each server’s settings.</string>
+    <string name="apply">Apply</string>
+    <string name="applying">Applying…</string>
+    <string name="ssh_key">SSH key</string>
+    <string name="ssh_key_saved">Saved securely on this phone</string>
+    <string name="ssh_key_optional">Optional for Tailscale SSH.</string>
+    <string name="import_file">Import file</string>
+    <string name="paste_key">Paste key</string>
+    <string name="paste_ssh_key">Paste SSH key</string>
+    <string name="import_ssh_key">Import SSH key</string>
+    <string name="ssh_key_encrypted_hint">The key stays encrypted on this phone. Enter its passphrase if required.</string>
+    <string name="private_key">Private key</string>
+    <string name="private_key_lines_hint">Include the BEGIN and END lines.</string>
+    <string name="passphrase_optional">Passphrase (optional)</string>
+    <string name="importing">Importing…</string>
+    <string name="import_action">Import</string>
+    <string name="trust_ssh_host">Trust SSH host?</string>
+    <string name="ssh_host_key_changed">SSH host key changed</string>
+    <string name="trust_host_verify_hint">Verify this fingerprint with the host before trusting it.</string>
+    <string name="trust_host">Trust host</string>
+    <string name="ssh_signin_title">SSH sign-in</string>
+    <string name="copy_message">Copy message</string>
+    <string name="open_browser">Open browser</string>
+
+    <!-- Port Forwarding -->
+    <string name="section_port_forwarding">Port forwarding</string>
+    <string name="port_forwarding">Port forwarding</string>
+    <string name="port_conflict_title">When the phone port is in use</string>
+    <string name="port_conflict_desc">Prefer the remote port number. Only Rexling forwards can be replaced.</string>
+    <string name="port_conflict_ask">Ask each time</string>
+    <string name="port_conflict_auto">Choose another phone port</string>
+    <string name="port_conflict_replace">Stop the other Rexling forward</string>
+    <string name="add_port_forward">Add port forward</string>
+    <string name="close_port_forwarding">Close port forwarding</string>
+    <string name="running_forwards_format">All servers · %d running</string>
+    <string name="tap_localhost_hint">Tap a localhost link in a terminal, or add a forward.</string>
+    <string name="remote_port">Remote port</string>
+    <string name="phone_port">Phone port</string>
+    <string name="same_as_remote">Same as remote port</string>
+    <string name="phone_port_zero_hint">Use 0 to choose an available port.</string>
+    <string name="remote_host">Remote host</string>
+    <string name="advanced">Advanced</string>
+    <string name="hide_advanced">Hide advanced</string>
+    <string name="choose_server">Choose server</string>
+    <string name="forward_action">Forward</string>
+    <string name="stop_forward">Stop</string>
+    <string name="start_forward">Start</string>
+    <string name="open_link">Open</string>
+    <string name="dismiss">Dismiss</string>
+
+    <!-- Server Routing & Editing -->
+    <string name="ssh_target_hint">SSH to a host running Rex.</string>
+    <string name="https_target_hint">Use an HTTPS address, or ssh://user@host.</string>
+    <string name="connection_network">Connection network</string>
+    <string name="tailnet_route_desc">Use a tailnet IP or device name. No Tailscale VPN app required.</string>
+    <string name="system_route_desc">Use this phone’s network and existing VPN.</string>
+    <string name="setup_or_signin">Set up / sign in</string>
+    <string name="network_route_system">Phone network / VPN</string>
+    <string name="network_route_builtin">Built-in Tailscale</string>
+    <string name="predictive_echo_summary">Predict typed characters and enter responses locally</string>
+    <string name="remove">Remove</string>
+    <string name="saving">Saving…</string>
+    <string name="close_servers">Close servers</string>
+    <string name="welcome_title">Welcome to Rexling</string>
+    <string name="welcome_desc">Add a Rex server to get started. Choose your phone’s network or built-in Tailscale during setup.</string>
 </resources>

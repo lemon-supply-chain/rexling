@@ -7,7 +7,6 @@
     <string name="save">保存</string>
     <string name="done">完成</string>
     <string name="close">关闭</string>
-    <string name="retry">重试</string>
     <string name="connect">连接</string>
     <string name="disconnect">断开连接</string>
     <string name="delete">删除</string>
@@ -87,7 +86,6 @@
     <string name="font_size">字体大小</string>
     <string name="font_size_detail">终端文本字号</string>
     <string name="language">语言</string>
-    <string name="language_detail">跟随系统、English 或 简体中文</string>
     <string name="language_system">跟随系统</string>
     <string name="language_en">English</string>
     <string name="language_zh">简体中文</string>
@@ -145,13 +143,11 @@
 
     <!-- Servers -->
     <string name="count_connected_format">%d 台已连接</string>
-    <string name="add_server">+ 添加服务器</string>
     <string name="add_server_title">添加服务器</string>
     <string name="edit_server_title">编辑服务器</string>
     <string name="add_rex_server_started">添加 Rex 服务器以开始使用。</string>
     <string name="switch_servers_hint">无需关闭连接即可切换服务器。</string>
     <string name="server_url">服务器 URL</string>
-    <string name="tailscale_address_hint">使用服务器经过身份验证的 Tailscale 地址。</string>
     <string name="save_and_connect">保存并连接</string>
     <string name="forget_server">删除服务器</string>
     <string name="status_connected_viewing">已连接 · 正在查看</string>
@@ -161,7 +157,6 @@
     <string name="status_paused">已暂停</string>
     <string name="status_failed">连接失败</string>
     <string name="status_disconnected">已断开</string>
-    <string name="choose_server_icon">选择服务器图标</string>
     <string name="server_icon_globe">地球</string>
     <string name="server_icon_server">服务器</string>
     <string name="server_icon_cloud">云端</string>
@@ -192,7 +187,6 @@
     <string name="filter_finished">已完成</string>
 
     <!-- Neovim Shortcuts -->
-    <string name="enable_neovim_shortcuts">启用 Neovim 快捷键</string>
     <string name="menu_layout">菜单布局</string>
     <string name="layout_grid">网格</string>
     <string name="layout_circular">环形</string>
@@ -222,7 +216,6 @@
     <string name="predictive_echo_always_detail">始终在 Shell 与各类终端中立即显示输入。</string>
 
     <!-- Shortcut Profiles -->
-    <string name="shortcuts_detail">适用于 Neovim、Shell 及其他程序的浮动按键菜单</string>
     <string name="close_shortcuts">关闭快捷键</string>
     <string name="shortcuts_subtitle">浮动菜单将显示与当前窗格程序匹配的配置文件。</string>
     <string name="shortcut_profiles">配置文件</string>
@@ -251,7 +244,7 @@
     <string name="enter_text_detail">普通文本自动附带 Enter；&lt;C-c&gt; 等组合按键不会附带。</string>
     <string name="enter_ex_commands">仅 : 命令</string>
     <string name="enter_ex_commands_detail">仅普通 : 命令附带 Enter，如 Neovim 命令。</string>
-    <string name="shortcut_syntax_hint">每行一个快捷键，可命名：名称 = 按键。[分组] 标题将后续快捷键放入子菜单；[] 结束分组。在分组名后加 :blue、:green、:orange 或 :purple 可为分组着色，例如 [Git:green]。以 ! 开头将在发送前确认。按键表示法：&lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, 方向键及 F1–F12。</string>
+    <string name="shortcut_syntax_hint">每行一个快捷键，可命名：名称 = 按键。写 名称 := 动作 可直接让 Rex 以 palette 来源执行自定义动作而非发送按键，报错会显示出来。[分组] 标题将后续快捷键放入子菜单；[] 结束分组。在分组名后加 :blue、:green、:orange 或 :purple 可为分组着色，例如 [Git:green]。以 ! 开头将在发送前确认。按键表示法：&lt;CR&gt;, &lt;Esc&gt;, &lt;Tab&gt;, &lt;Space&gt;, &lt;C-x&gt;, &lt;M-x&gt;, 方向键及 F1–F12。</string>
     <string name="reset_shortcuts">重置快捷键</string>
     <string name="delete_profile_title">删除 %s？</string>
     <string name="delete_profile_confirm">其快捷键将从此手机中移除。</string>
@@ -259,4 +252,116 @@
     <string name="run_shortcut_confirm">这将向 %s 窗格发送以下内容：</string>
     <string name="run">执行</string>
     <string name="close_title_format">关闭 %s</string>
+
+    <!-- Keep Screen Awake -->
+    <string name="keep_screen_awake">保持屏幕常亮</string>
+    <string name="keep_screen_awake_desc">仅在 Rexling 处于前台时生效。您仍可手动锁定手机。</string>
+    <string name="keep_screen_awake_system">系统默认</string>
+    <string name="keep_screen_awake_system_desc">遵循系统的屏幕超时休眠</string>
+    <string name="keep_screen_awake_visible">终端可见时</string>
+    <string name="keep_screen_awake_visible_desc">即使终端空闲也保持常亮</string>
+    <string name="keep_screen_awake_active">可见终端活跃时</string>
+    <string name="keep_screen_awake_active_desc">输入和新输出将重置屏幕超时计时</string>
+
+    <!-- Keyboard Toolbar -->
+    <string name="keyboard_toolbar">键盘工具栏</string>
+    <string name="keyboard_toolbar_detail">自定义并排列最多 7 个常驻按键</string>
+    <string name="close_keyboard_toolbar">关闭键盘工具栏设置</string>
+    <string name="keyboard_toolbar_hint">在两个区域之间按住并拖动按键。最多 7 个按键，键盘键常驻在最右侧。</string>
+    <string name="your_toolbar_format">当前工具栏 · %1$d/%2$d</string>
+    <string name="drag_buttons_here">将按键拖动至此处</string>
+    <string name="drop_to_remove">拖动到下方以移除</string>
+    <string name="available_buttons">可用按键</string>
+    <string name="remove_selected">移除选中项</string>
+    <string name="keyboard_toolbar_drag_hint">在工具栏内拖动可重新排序。已满时拖动到某个槽位可直接替换。也可直接点击可用按键将其添加到工具栏或替换当前槽位。</string>
+
+    <!-- Network -->
+    <string name="network">网络</string>
+    <string name="network_detail">内置 Tailscale 与控制服务器</string>
+    <string name="close_network_settings">关闭网络设置</string>
+    <string name="current_server">当前服务器</string>
+    <string name="builtin_tailscale">内置 Tailscale</string>
+    <string name="tailscale_off">未设置</string>
+    <string name="tailscale_running">已连接</string>
+    <string name="tailscale_needs_login">需要登录</string>
+    <string name="tailscale_needs_machine_auth">需要设备审批</string>
+    <string name="tailscale_stopped">已停止</string>
+    <string name="tailscale_starting">正在连接…</string>
+    <string name="tailscale_not_connected">未连接</string>
+    <string name="tailscale_ready_desc">内置 Tailscale 已就绪</string>
+    <string name="tailscale_machine_auth_desc">请在 Tailscale 管理控制台中批准此设备</string>
+    <string name="tailscale_off_desc">可选。当使用手机本机网络或 VPN 时无需开启。</string>
+    <string name="tailscale_browser_signin_desc">在浏览器中安全登录</string>
+    <string name="set_up">设置</string>
+    <string name="sign_in">登录</string>
+    <string name="active_connections">活跃连接</string>
+    <string name="continue_in_browser">在浏览器中继续</string>
+    <string name="cancel_sign_in">取消登录</string>
+    <string name="control_server_optional">控制服务器（可选）</string>
+    <string name="control_server_hint">使用官方 Tailscale 请留空。每个控制服务器维护各自独立的登录状态。</string>
+    <string name="choose_network_per_server">在各个服务器设置中分别配置连接网络。</string>
+    <string name="apply">应用</string>
+    <string name="applying">正在应用…</string>
+    <string name="ssh_key">SSH 密钥</string>
+    <string name="ssh_key_saved">已安全保存在此手机上</string>
+    <string name="ssh_key_optional">对于 Tailscale SSH 为可选。</string>
+    <string name="import_file">导入文件</string>
+    <string name="paste_key">粘贴密钥</string>
+    <string name="paste_ssh_key">粘贴 SSH 密钥</string>
+    <string name="import_ssh_key">导入 SSH 密钥</string>
+    <string name="ssh_key_encrypted_hint">密钥将在此手机上加密保存。如果密钥受保护，请输入其密码短语。</string>
+    <string name="private_key">私钥</string>
+    <string name="private_key_lines_hint">需包含 BEGIN 和 END 标记行。</string>
+    <string name="passphrase_optional">密码短语（可选）</string>
+    <string name="importing">正在导入…</string>
+    <string name="import_action">导入</string>
+    <string name="trust_ssh_host">信任此 SSH 主机？</string>
+    <string name="ssh_host_key_changed">SSH 主机密钥已变更</string>
+    <string name="trust_host_verify_hint">在信任前请先与主机核对此指纹。</string>
+    <string name="trust_host">信任主机</string>
+    <string name="ssh_signin_title">SSH 登录</string>
+    <string name="copy_message">复制信息</string>
+    <string name="open_browser">在浏览器中打开</string>
+
+    <!-- Port Forwarding -->
+    <string name="section_port_forwarding">端口转发</string>
+    <string name="port_forwarding">端口转发</string>
+    <string name="port_conflict_title">当手机端端口已被占用时</string>
+    <string name="port_conflict_desc">优先使用远程端口号。仅可替换 Rexling 自身的转发。</string>
+    <string name="port_conflict_ask">每次询问</string>
+    <string name="port_conflict_auto">自动选择其他可用端口</string>
+    <string name="port_conflict_replace">停止并替换原转发</string>
+    <string name="add_port_forward">添加端口转发</string>
+    <string name="close_port_forwarding">关闭端口转发</string>
+    <string name="running_forwards_format">所有服务器 · %d 个运行中</string>
+    <string name="tap_localhost_hint">在终端中点击 localhost 链接，或手动添加转发。</string>
+    <string name="remote_port">远程端口</string>
+    <string name="phone_port">手机端口</string>
+    <string name="same_as_remote">与远程端口一致</string>
+    <string name="phone_port_zero_hint">输入 0 可自动选择可用端口。</string>
+    <string name="remote_host">远程主机</string>
+    <string name="advanced">高级设置</string>
+    <string name="hide_advanced">收起高级设置</string>
+    <string name="choose_server">选择服务器</string>
+    <string name="forward_action">转发</string>
+    <string name="stop_forward">停止</string>
+    <string name="start_forward">启动</string>
+    <string name="open_link">打开</string>
+    <string name="dismiss">忽略</string>
+
+    <!-- Server Routing & Editing -->
+    <string name="ssh_target_hint">通过 SSH 连接到运行 Rex 的主机。</string>
+    <string name="https_target_hint">使用 HTTPS 地址，或 ssh://user@host。</string>
+    <string name="connection_network">连接网络</string>
+    <string name="tailnet_route_desc">使用 Tailnet IP 或设备名。无需单独运行 Tailscale VPN 应用。</string>
+    <string name="system_route_desc">使用此手机的网络和已配置的 VPN。</string>
+    <string name="setup_or_signin">设置 / 登录</string>
+    <string name="network_route_system">手机网络 / VPN</string>
+    <string name="network_route_builtin">内置 Tailscale</string>
+    <string name="predictive_echo_summary">在本地预测键入字符及输入响应</string>
+    <string name="remove">移除</string>
+    <string name="saving">保存中…</string>
+    <string name="close_servers">关闭服务器</string>
+    <string name="welcome_title">欢迎使用 Rexling</string>
+    <string name="welcome_desc">添加 Rex 服务器以开始使用。在配置时可选择手机网络或内置 Tailscale。</string>
 </resources>

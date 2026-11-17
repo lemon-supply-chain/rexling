@@ -1,0 +1,109 @@
+# Upstream Sync Plan & Status
+
+Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884c48f3600dd787f17a5` through `7e1cd8ecf997558af4b9fe18bfd3b9129173bdf9` (`upstream/main`), while preserving repository customizations:
+- Package name `dev.lemon.rex` preserved.
+- Icon rainbow marquee and glint effects (`RainbowMarquee.kt`, `ProgramStack.kt`, `TerminalChrome.kt`) preserved.
+- Custom vector artwork system (`ProgramArtwork.kt`, `ProgramVectorPicture.kt`, `ProgramVocabulary.kt`) preserved.
+- QR scanner dialog with camera permissions preserved.
+- Chinese localization (`res/values-zh/` and language toggle) preserved.
+- Neovim shortcut profiles preserved.
+- Custom terminal padding setting preserved.
+
+---
+
+## Commit Checklist
+
+- [x] **1. `e62c619`** - Add reconnecting local TCP port forwards through Rex
+  - **Full Hash**: `e62c6193ff0591e1549884c48f3600dd787f17a5`
+  - **Area**: Port Forwarding, Rust Core, Android Service
+  - **Status**: Synced to `PortForwardService.kt`, `PortForwards.kt`, `forward.rs`, `forwards.rs`.
+
+- [x] **2. `af91b55`** - Add SSH and built-in Tailscale with smoother keyboard rendering
+  - **Full Hash**: `af91b55ad59c3e6fc41bd2eebc4a0b64f5b2dc98`
+  - **Area**: Network & SSH, Tailscale, Go Daemon, UI & IME
+  - **Status**: Synced `rexling-network` (Go daemon), `NetworkSheet.kt`, `NetworkSettings.kt`, and viewport smoothing.
+
+- [x] **3. `c65cd06`** - Keep healthy terminal connections through network handoffs
+  - **Full Hash**: `c65cd06800817e9765127ddc3bd5adbaa317315c`
+  - **Area**: Network Resilience, JNI Engine
+  - **Status**: Synced to `rexling-core` network reconnect & route tracking.
+
+- [x] **4. `5596fe6`** - Keep terminal prompt footers visible above the keyboard
+  - **Full Hash**: `5596fe6f67cee83de3984acf05f0cac0efec4f36`
+  - **Area**: Keyboard Viewport, Terminal UI
+  - **Status**: Synced `TerminalImeViewport.kt` and `TerminalImeHandoff.kt`.
+
+- [x] **5. `b4e671f`** - Stabilize terminal redraws and detect semantic input regions
+  - **Full Hash**: `b4e671f635a9e643ac23ba57cbc1114b04562925`
+  - **Area**: Ghostty Shim, Terminal Rendering, Semantic Zones
+  - **Status**: Synced `ghostty_shim.c` and semantic prompt navigation in `TerminalView.kt`.
+
+- [x] **6. `296fc99`** - Add OSC clipboard, semantic command actions, and terminal progress
+  - **Full Hash**: `296fc998383188cf1344a51d894d68ef8fa51a99`
+  - **Area**: Terminal Features, OSC Escape Sequences, Progress Bar
+  - **Status**: Synced `TerminalClipboardDelivery.kt`, `TerminalProgress.kt`, `progress.rs`.
+
+- [x] **7. `b225407`** - Support pasting SSH keys and compact the server editor
+  - **Full Hash**: `b2254071deafa6ffb24b43f8a43819df1697d85e`
+  - **Area**: Server Configuration UI, SSH Keys
+  - **Status**: Synced compact `ServerEditor` with SSH key paste and route selection.
+
+- [x] **8. `bf50fa1`** - Preserve Gboard word context and support suggestion corrections
+  - **Full Hash**: `bf50fa139768a3970df8a516e4fe9544cd05bf1e`
+  - **Area**: IME / Gboard Integration
+  - **Status**: Synced `TerminalImeLine.kt` word context handling.
+
+- [x] **9. `ad3e8ae`** - Keep Gboard layout stable when switching panes
+  - **Full Hash**: `ad3e8ae09d5b780a0873f550b792cdd9db1b35d1`
+  - **Area**: Terminal Panes, Keyboard State
+  - **Status**: Synced `TerminalImeHandoff.kt` pane focus management.
+
+- [x] **10. `663df32`** - Skip superseded pane and session navigation before execution
+  - **Full Hash**: `663df32d0c80d80043dc022af5f11c70cd7a22d4`
+  - **Area**: JNI Engine, Navigation Queue
+  - **Status**: Synced `input_queue.rs` navigation deduplication.
+
+- [x] **11. `0a2f8f9`** - Extract cursor-aware keyboard correction model and test edit sequences
+  - **Full Hash**: `0a2f8f9dbb343da9aa4c97640439d1d390fda726`
+  - **Area**: IME Architecture, Unit Testing
+  - **Status**: Synced `TerminalImeLine.kt` and `TerminalImeLineTest.kt`.
+
+- [x] **12. `4187a1c`** - Add smooth local scrollback and reuse shifted row drawings
+  - **Full Hash**: `4187a1ce33c1adba0c9664ffd73b0dc9294ccc91`
+  - **Area**: Terminal Rendering, Scrollback Performance
+  - **Status**: Synced `TerminalScrollMotion.kt` and row reuse logic.
+
+- [x] **13. `f595ab8`** - Improve tab activity badges, Gboard input and screen-awake preferences
+  - **Full Hash**: `f595ab896f9d36b0d70daa25e2012018200d630b`
+  - **Area**: Preferences, Tab UI, IME
+  - **Status**: Synced `KeepScreenAwake.kt`, `ActivityBadges.kt`, and updated `PreferencesSheet.kt`.
+
+- [x] **14. `a2bd804`** - Honor program cursor modes and stabilize keyboard viewport navigation
+  - **Full Hash**: `a2bd804d843b7314635499679ad7c285cbd65e84`
+  - **Area**: Ghostty Shim, Cursor Appearance, Viewport Navigation
+  - **Status**: Synced `ghostty_shim.c`, `TerminalUpdates.kt`, `TerminalView.kt`.
+
+- [x] **15. `6948dbd`** - Add per-server network routing and improve Tailscale setup
+  - **Full Hash**: `6948dbd6e3f304faada679143b3250e83ec017eb`
+  - **Area**: Network & Tailscale, Server Profiles
+  - **Status**: Synced `NetworkSettings.kt`, route tracking, and `TailscaleSetupTest.kt`.
+
+- [x] **16. `a530fc6`** - Add automatic localhost forwarding and unify drawer styling
+  - **Full Hash**: `a530fc64d5f8107a1017e90b551649c09d05810d`
+  - **Area**: Port Forwarding, Drawer UI Components
+  - **Status**: Synced `ForwardPolicy.kt`, `ForwardLinkUi.kt`, `SettingsDrawer.kt`.
+
+- [x] **17. `7e1cd8e`** - Add drag-and-drop keyboard toolbar customization
+  - **Full Hash**: `7e1cd8ecf997558af4b9fe18bfd3b9129173bdf9`
+  - **Area**: Keyboard Toolbar, Customization UI
+  - **Status**: Synced `KeyboardToolbar.kt`, `KeyboardToolbarSheet.kt`, and `ToolbarLayoutTest.kt`.
+
+---
+
+## Verification
+- Rust Core (`rexling-core`): 114 tests passed, 18 ignored.
+- Go Network Daemon (`rexling-network`): 6 tests passed.
+- Android Application (`rexling-android`):
+  - Debug compilation: `BUILD SUCCESSFUL`.
+  - Debug unit tests: 253 passed, 1 skipped (`testDebugUnitTest` SUCCESS).
+  - Debug APK assembly: `BUILD SUCCESSFUL` (`assembleDebug`).

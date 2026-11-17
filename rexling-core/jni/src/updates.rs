@@ -43,7 +43,6 @@ pub struct WireBase {
     activity: Arc<serde_json::Value>,
     key: String,
     frame: Option<Arc<Frame>>,
-    known_images: std::collections::HashMap<u32, u64>,
 }
 fn u16le(out: &mut Vec<u8>, v: u16) {
     out.extend(v.to_le_bytes());
@@ -61,20 +60,154 @@ fn text(out: &mut Vec<u8>, v: &str) {
 fn rgb(v: [u8; 3]) -> u32 {
     0xff000000 | ((v[0] as u32) << 16) | ((v[1] as u32) << 8) | v[2] as u32
 }
-/// A row the terminal handed out, indexed by viewport row. Rows the render state did
-/// not touch are absent, so a dirty frame stays dirty all the way to the wire.
-fn rows(frame: &Frame) -> Vec<Option<&[Cell]>> {
-    let mut result = vec![None; frame.rows as usize];
+fn rows(frame: &Frame) -> Vec<&[Cell]> {
+    let mut result = Vec::with_capacity(frame.rows as usize);
     let mut start = 0;
-    while start < frame.cells.len() {
-        let y = frame.cells[start].y as usize;
-        let end = start + frame.cells[start..].iter().take_while(|c| c.y as usize == y).count();
-        if let Some(slot) = result.get_mut(y) {
-            *slot = Some(&frame.cells[start..end]);
-        }
+    for y in 0..frame.rows {
+        let end = start + frame.cells[start..].iter().take_while(|c| c.y == y).count();
+        result.push(&frame.cells[start..end]);
         start = end;
     }
     result
+}
+/// Cells compare without `y`, so a row that only moved still matches.
+fn same_row(a: &[Cell], b: &[Cell]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(a, b)| {
+        a.x == b.x && a.width == b.width && a.attributes == b.attributes && a.foreground == b.foreground
+            && a.background == b.background && a.text == b.text && a.hyperlink == b.hyperlink
+    })
+}
+/// Scroll distance between two frames: how far the viewport's top moved in
+/// the scrollback (scrolling, or output pushing a bottom-pinned view up).
+/// Trusted only when most of the moved rows still match.
+fn row_shift(old: &[&[Cell]], next: &[&[Cell]], previous: &Frame, frame: &Frame) -> i16 {
+    let moved = frame.scroll_offset as i64 - previous.scroll_offset as i64;
+    checked_shift(old, next, moved)
+}
+fn checked_shift(old: &[&[Cell]], next: &[&[Cell]], shift: i64) -> i16 {
+    let rows = next.len() as i64;
+    if shift == 0 || shift.abs() >= rows || shift.abs() > i64::from(i16::MAX) {return 0;}
+    let overlap: Vec<_> = (0..rows).filter(|y| (0..rows).contains(&(y + shift))).collect();
+    let same = overlap.iter().filter(|y| same_row(old[(**y + shift) as usize], next[**y as usize])).count();
+    if same * 2 >= overlap.len() {shift as i16} else {0}
+}
+fn encode_row(out: &mut Vec<u8>, row: &[Cell]) {
+    u16le(out, row.len() as u16);
+    for cell in row {
+            u16le(out, cell.x);
+            out.push(cell.width);
+            u32le(out, cell.attributes);
+            u32le(out, rgb(cell.foreground));
+            u32le(out, rgb(cell.background));
+            text(out, &cell.text);
+        }
+        // Sparse contiguous link ranges keep ordinary rows cheap.
+        let mut links: Vec<(u16, u16, &str)> = Vec::new();
+        for cell in row {
+            if cell.width == 0 {
+                continue;
+            }
+            if let Some(uri) = cell.hyperlink.as_deref() {
+                if let Some(last) = links
+                    .last_mut()
+                    .filter(|last| last.1 == cell.x && last.2 == uri)
+                {
+                    last.1 = cell.x + u16::from(cell.width);
+                } else {
+                    links.push((cell.x, cell.x + u16::from(cell.width), uri));
+                }
+            }
+        }
+        u16le(out, links.len() as u16);
+        for (start, end, uri) in links {
+            u16le(out, start);
+            u16le(out, end);
+            text(out, uri);
+        }
+}
+fn encode_frame(out: &mut Vec<u8>, frame: &Frame, previous: Option<&Frame>) {
+    out.push(if previous.is_some() { 2 } else { 3 });
+    u16le(out, frame.columns);
+    u16le(out, frame.rows);
+    let (x, y) = frame
+        .cursor
+        .map_or((-1, -1), |(x, y)| (i32::from(x), i32::from(y)));
+    out.extend(x.to_le_bytes());
+    out.extend(y.to_le_bytes());
+    u32le(out, rgb(frame.foreground));
+    u32le(out, rgb(frame.background));
+    for v in [
+        frame.scroll_total,
+        frame.scroll_offset,
+        frame.scroll_visible,
+    ] {
+        u64le(out, v);
+    }
+    out.push(frame.input_flags);
+    out.push(frame.cursor_style | ((frame.cursor_blinking as u8) << 2));
+    let next = rows(frame);
+    let old = previous.map(|old| rows(old));
+    // RXT5 shift: content moved by `shift` rows (positive: up). The decoder
+    // moves its rows first, so only rows that are really new are sent.
+    let shift = old.as_ref().zip(previous).map_or(0, |(old, previous)| row_shift(old, &next, previous, frame));
+    out.extend(shift.to_le_bytes());
+    let base = |y: usize| -> Option<&[Cell]> {
+        let old = old.as_ref()?;
+        let from = y as i64 + i64::from(shift);
+        (from >= 0 && (from as usize) < old.len()).then(|| old[from as usize])
+    };
+    let changed: Vec<_> = next
+        .iter()
+        .enumerate()
+        .filter(|(y, row)| base(*y).is_none_or(|old| !same_row(old, row)))
+        .collect();
+    u16le(out, changed.len() as u16);
+    for (y, row) in changed {
+        u16le(out, y as u16);
+        encode_row(out, row);
+    }
+    // RXT5: 255 retains an unchanged overscan side on a delta. Ordinary typing
+    // must not resend the same history rows on every frame.
+    for (side,old) in [(&frame.above,previous.map(|f|&f.above)),(&frame.below,previous.map(|f|&f.below))] {
+        if old==Some(side) {out.push(255);} else {
+            out.push(side.len() as u8);
+            for row in side {encode_row(out,row);}
+        }
+    }
+    u32le(out, frame.image_cell_width);
+    u32le(out, frame.image_cell_height);
+    let unique: std::collections::BTreeMap<_, _> = frame
+        .images
+        .iter()
+        .map(|p| ((p.image.id, p.image.generation), &p.image))
+        .collect();
+    let changed: Vec<_> = unique
+        .values()
+        .filter(|image| {
+            previous.is_none_or(|old| !old.images.iter().any(|p| Arc::ptr_eq(&p.image, image)))
+        })
+        .collect();
+    u16le(out, changed.len() as u16);
+    for image in changed {
+        u32le(out, image.id);
+        u64le(out, image.generation);
+        u32le(out, image.width);
+        u32le(out, image.height);
+        u32le(out, image.rgba.len() as u32);
+        out.extend_from_slice(&image.rgba);
+    }
+    u16le(out, frame.images.len() as u16);
+    for p in &frame.images {
+        u32le(out, p.image.id);
+        u64le(out, p.image.generation);
+        out.push(p.layer as u8);
+        for v in [p.z, p.col, p.row] {
+            out.extend(v.to_le_bytes());
+        }
+        for v in [p.ox, p.oy, p.width, p.height, p.sx, p.sy, p.sw, p.sh] {
+            u32le(out, v);
+        }
+    }
 }
 pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     if after >= state.revision {
@@ -82,9 +215,12 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     }
     let base = &state.wire;
     let reset = after != base.revision || base.key != state.key;
-    let mut out = b"RXT5".to_vec();
+    let mut out = b"RXT6".to_vec();
     u64le(&mut out, state.revision);
-    let previews = std::mem::take(&mut state.pending_previews);
+    let previews: Vec<_> = std::mem::take(&mut state.pending_previews)
+        .into_iter()
+        .take(32)
+        .collect();
     let activity_changed = reset || !Arc::ptr_eq(&base.activity, &state.activity);
     if reset || base.metadata != state.json || activity_changed || !previews.is_empty() {
         let mut metadata: serde_json::Value =
@@ -92,19 +228,12 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
         if activity_changed {
             metadata["activity"] = state.activity.as_ref().clone();
         }
-        if !previews.is_empty() {
-            metadata["previews"] = serde_json::to_value(previews).expect("preview frames");
-        }
         text(&mut out, &metadata.to_string());
     } else {
         text(&mut out, "");
     }
-    // The frame the reader now holds; None when this packet carried no screen.
-    let delivered: Option<Arc<Frame>> = match &state.frame {
-        None => {
-            out.push(1);
-            None
-        }
+    match &state.frame {
+        None => out.push(1),
         Some(frame)
             if !reset
                 && base
@@ -112,183 +241,27 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
                     .as_ref()
                     .is_some_and(|old| Arc::ptr_eq(old, frame)) =>
         {
-            out.push(0);
-            Some(frame.clone())
+            out.push(0)
         }
         Some(frame) => {
             let previous = base
                 .frame
                 .as_ref()
                 .filter(|old| !reset && old.columns == frame.columns && old.rows == frame.rows);
-            let next = rows(frame);
-            let complete = next.iter().all(Option::is_some);
-            // A reader without a base can only be given a whole screen, so ask the
-            // terminal for every row and send nothing rather than half a screen.
-            if previous.is_none() && !complete {
-                state.force_full_frame = true;
-                out.push(1);
-                return settle(state, out, None);
-            }
-            // A full packet is only needed for a reader without a base; otherwise the
-            // packet is a row delta even when the frame happens to hold every row.
-            let full = previous.is_none();
-            out.push(if full { 3 } else { 2 });
-            u16le(&mut out, frame.columns);
-            u16le(&mut out, frame.rows);
-            let (x, y) = frame
-                .cursor
-                .map_or((-1, -1), |(x, y)| (i32::from(x), i32::from(y)));
-            out.extend(x.to_le_bytes());
-            out.extend(y.to_le_bytes());
-            u32le(&mut out, rgb(frame.foreground));
-            u32le(&mut out, rgb(frame.background));
-            for v in [
-                frame.scroll_total,
-                frame.scroll_offset,
-                frame.scroll_visible,
-            ] {
-                u64le(&mut out, v);
-            }
-            out.push(frame.input_flags);
-            let old = previous.map(|old| rows(old));
-            let shift = previous.zip(old.as_ref()).map_or(0, |(previous, old)| {
-                row_shift(previous, frame, old, &next)
-            });
-            out.extend(shift.to_le_bytes());
-            let changed: Vec<(u16, &[Cell])> = next
-                .iter()
-                .enumerate()
-                .filter_map(|(y, row)| {
-                    let row = (*row)?;
-                    if full {
-                        return Some((y as u16, row));
-                    }
-                    let from = y as i64 + i64::from(shift);
-                    match old.as_ref().and_then(|old| {
-                        usize::try_from(from).ok().and_then(|from| old.get(from)).copied().flatten()
-                    }) {
-                        Some(same) if same_row(same, row) => None,
-                        _ => Some((y as u16, row)),
-                    }
-                })
-                .collect();
-            u16le(&mut out, changed.len() as u16);
-            for (y, row) in changed {
-                u16le(&mut out, y as u16);
-                encode_row(&mut out, row);
-            }
-            let mut new_payloads = Vec::new();
-            for img in &frame.images {
-                let known =
-                    !reset && base.known_images.get(&img.image_id).copied() == Some(img.generation);
-                if !known {
-                    new_payloads.push(img);
-                }
-            }
-            let total_payload_size: usize = new_payloads.iter().map(|img| img.rgba.len() + 24).sum();
-            out.reserve(total_payload_size + frame.placements.len() * 48);
-            u16le(&mut out, new_payloads.len() as u16);
-            for img in new_payloads {
-                u32le(&mut out, img.image_id);
-                u64le(&mut out, img.generation);
-                u32le(&mut out, img.width);
-                u32le(&mut out, img.height);
-                u32le(&mut out, img.rgba.len() as u32);
-                out.extend_from_slice(&img.rgba);
-            }
-
-            u16le(&mut out, frame.placements.len() as u16);
-            for pl in &frame.placements {
-                u32le(&mut out, pl.image_id);
-                out.extend(pl.col.to_le_bytes());
-                out.extend(pl.row.to_le_bytes());
-                u32le(&mut out, pl.cols);
-                u32le(&mut out, pl.rows);
-                u32le(&mut out, pl.offset_x);
-                u32le(&mut out, pl.offset_y);
-                u32le(&mut out, pl.width);
-                u32le(&mut out, pl.height);
-                u32le(&mut out, pl.src_x);
-                u32le(&mut out, pl.src_y);
-                u32le(&mut out, pl.src_width);
-                u32le(&mut out, pl.src_height);
-                out.extend(pl.z.to_le_bytes());
-            }
-            Some(frame.clone())
-        }
-    };
-    settle(state, out, delivered)
-}
-fn same_row(first: &[Cell], second: &[Cell]) -> bool {
-    first.len() == second.len() && first.iter().zip(second).all(|(first, second)| {
-        first.x == second.x && first.width == second.width && first.text == second.text
-            && first.attributes == second.attributes && first.foreground == second.foreground
-            && first.background == second.background && first.hyperlink == second.hyperlink
-    })
-}
-fn encode_row(out: &mut Vec<u8>, row: &[Cell]) {
-    u16le(out, row.len() as u16);
-    for cell in row {
-        u16le(out, cell.x);
-        out.push(cell.width);
-        u32le(out, cell.attributes);
-        u32le(out, rgb(cell.foreground));
-        u32le(out, rgb(cell.background));
-        text(out, &cell.text);
-    }
-    let mut links: Vec<(u16, u16, &str)> = Vec::new();
-    for cell in row {
-        if cell.width == 0 { continue; }
-        if let Some(uri) = cell.hyperlink.as_deref() {
-            if let Some(last) = links.last_mut().filter(|last| last.1 == cell.x && last.2 == uri) {
-                last.1 = cell.x + u16::from(cell.width);
-            } else {
-                links.push((cell.x, cell.x + u16::from(cell.width), uri));
-            }
+            encode_frame(&mut out, frame, previous.map(Arc::as_ref));
         }
     }
-    u16le(out, links.len() as u16);
-    for (start, end, uri) in links {
-        u16le(out, start);
-        u16le(out, end);
-        text(out, uri);
-    }
-}
-fn row_shift(previous: &Frame, frame: &Frame, old: &[Option<&[Cell]>], next: &[Option<&[Cell]>]) -> i16 {
-    let moved = i128::from(frame.scroll_offset) - i128::from(previous.scroll_offset);
-    if moved == 0 || moved.abs() >= next.len() as i128 || moved.abs() > i128::from(i16::MAX)
-        || old.iter().any(Option::is_none) || next.iter().any(Option::is_none) {
-        return 0;
-    }
-    let shift = moved as i16;
-    let mut overlap = 0;
-    let mut matched = 0;
-    for (row, cells) in next.iter().enumerate() {
-        let from = row as i64 + i64::from(shift);
-        if let Some(previous) = usize::try_from(from).ok().and_then(|from| old.get(from)) {
-            overlap += 1;
-            if same_row(previous.unwrap(), cells.unwrap()) { matched += 1; }
-        }
-    }
-    if matched * 2 >= overlap { shift } else { 0 }
-}
-
-/// Record what the reader now holds. `delivered` is the frame this packet carried, so
-/// `None` means the reader has no screen base and the next packet must be a full one.
-fn settle(state: &mut Shared, out: Vec<u8>, delivered: Option<Arc<Frame>>) -> Vec<u8> {
-    let mut known_images = std::collections::HashMap::new();
-    if let Some(frame) = &delivered {
-        for img in &frame.images {
-            known_images.insert(img.image_id, img.generation);
-        }
+    u16le(&mut out, previews.len() as u16);
+    for (id, frame) in previews {
+        text(&mut out, &id);
+        encode_frame(&mut out, &frame, None);
     }
     state.wire = WireBase {
         revision: state.revision,
         metadata: state.json.clone(),
         activity: state.activity.clone(),
         key: state.key.clone(),
-        frame: delivered,
-        known_images,
+        frame: state.frame.clone(),
     };
     out
 }
@@ -318,9 +291,10 @@ mod wire_tests {
         Frame {
             columns: 100,
             rows: 50,
-            full: true,
             cursor: Some((0, 0)),
             cursor_at: Some((0, 0)),
+            cursor_style: 1,
+            cursor_blinking: false,
             foreground: [255; 3],
             background: [0; 3],
             cells: (0..50)
@@ -337,19 +311,30 @@ mod wire_tests {
                     })
                 })
                 .collect(),
-            images: Vec::new(),
-            placements: Vec::new(),
             scroll_total: 50,
             scroll_offset: 0,
             scroll_visible: 50,
             input_flags: 0,
+            next_image_delay_ms: None,
+            image_cell_width: 8,
+            image_cell_height: 16,
+            images: Vec::new(),
+            above: Vec::new(),
+            below: Vec::new(),
         }
+    }
+    #[test]
+    fn cursor_only_changes_encode_without_repeating_rows() {
+        let old=frame();let mut next=frame();next.cursor_style=0;next.cursor_blinking=true;
+        let mut bytes=Vec::new();encode_frame(&mut bytes,&next,Some(&old));
+        // Geometry 4, cursor 8, colors 8, scroll 24, input 1, cursor flags 1.
+        assert_eq!(bytes[46],4);
+        assert_eq!(u16::from_le_bytes(bytes[49..51].try_into().unwrap()),0);
     }
     #[test]
     fn packets_diff_against_delivered_frame_and_reset_on_unknown_base() {
         let mut state = Shared {
             revision: 1,
-            force_full_frame: false,
             json: "{}".into(),
             pending_previews: BTreeMap::new(),
             frame: Some(Arc::new(frame())),
@@ -395,126 +380,6 @@ mod wire_tests {
         updates.close();
         assert_eq!(thread.join().unwrap(), -1);
     }
-    /// Metadata length, then the frame flag, then the changed-row count.
-    fn changed_rows(packet: &[u8]) -> u16 {
-        let metadata = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
-        // columns, rows, cursor x/y, fg, bg, three scrollbar words, input flags
-        let at = 16 + metadata + 1 + 2 + 2 + 4 + 4 + 4 + 4 + 24 + 1 + 2;
-        u16::from_le_bytes(packet[at..at + 2].try_into().unwrap())
-    }
-    /// Only some rows, as the terminal hands them out for a dirty frame.
-    fn dirty(rows: &[u16]) -> Frame {
-        let mut frame = frame();
-        frame.full = false;
-        frame.cells.retain(|cell| rows.contains(&cell.y));
-        frame
-    }
-
-    fn scrolled(offset: u64) -> Frame {
-        let mut frame = frame();
-        frame.scroll_total = 1000;
-        frame.scroll_offset = offset;
-        for cell in &mut frame.cells {
-            cell.text = (offset + u64::from(cell.y)).to_string();
-        }
-        frame
-    }
-
-    fn packet_shift(packet: &[u8]) -> i16 {
-        let metadata = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
-        let at = 16 + metadata + 1 + 44 + 1;
-        i16::from_le_bytes(packet[at..at + 2].try_into().unwrap())
-    }
-
-    #[test]
-    fn scrolling_sends_only_uncovered_rows_and_resets_on_jumps() {
-        let mut state = Shared {
-            revision: 1, force_full_frame: false, json: "{}".into(),
-            activity: Arc::default(), pending_previews: BTreeMap::new(),
-            frame: Some(Arc::new(scrolled(100))), key: "a".into(), wire: WireBase::default(),
-        };
-        let full = encode(&mut state, 0);
-        assert_eq!(packet_shift(&full), 0);
-        for (revision, offset, shift, count) in [(2, 103, 3, 3), (3, 101, -2, 2), (4, 500, 0, 50)] {
-            state.revision = revision;
-            state.frame = Some(Arc::new(scrolled(offset)));
-            let packet = encode(&mut state, revision - 1);
-            assert_eq!(packet_shift(&packet), shift);
-            assert_eq!(changed_rows(&packet), count);
-            if shift != 0 { assert!(packet.len() < full.len() / 10); }
-        }
-    }
-
-    #[test]
-    fn shifts_require_complete_bases_and_preserve_changed_links() {
-        let previous = scrolled(100);
-        let mut next = scrolled(103);
-        next.cells[0].hyperlink = Some("https://example.com/changed".into());
-        assert_eq!(row_shift(&previous, &next, &rows(&previous), &rows(&next)), 3);
-        assert!(!same_row(&previous.cells[300..400], &next.cells[0..100]));
-        let mut partial = scrolled(100);
-        partial.cells.retain(|cell| cell.y == 7);
-        assert_eq!(row_shift(&partial, &next, &rows(&partial), &rows(&next)), 0);
-        assert_eq!(row_shift(&previous, &partial, &rows(&previous), &rows(&partial)), 0);
-        let unrelated = frame();
-        assert_eq!(row_shift(&previous, &unrelated, &rows(&previous), &rows(&unrelated)), 0);
-    }
-
-    #[test]
-    fn a_dirty_frame_sends_only_the_rows_it_carries() {
-        let mut state = Shared {
-            revision: 1,
-            force_full_frame: false,
-            json: "{}".into(),
-            activity: Arc::default(),
-            pending_previews: BTreeMap::new(),
-            frame: Some(Arc::new(frame())),
-            key: "a".into(),
-            wire: WireBase::default(),
-        };
-        let full = encode(&mut state, 0);
-        assert_eq!(full[16 + u32::from_le_bytes(full[12..16].try_into().unwrap()) as usize], 3);
-
-        let mut next = dirty(&[7]);
-        next.cells[0].text = "z".into();
-        state.frame = Some(Arc::new(next));
-        state.revision = 2;
-        let delta = encode(&mut state, 1);
-        let metadata = u32::from_le_bytes(delta[12..16].try_into().unwrap()) as usize;
-        assert_eq!(delta[16 + metadata], 2, "a dirty frame is a row delta");
-        assert_eq!(changed_rows(&delta), 1);
-        assert!(delta.len() * 10 < full.len(), "one row must not cost a screen");
-    }
-
-    #[test]
-    fn a_dirty_frame_without_a_base_waits_for_a_full_one() {
-        // A reader that never received the screen cannot apply row 7 alone.
-        let mut state = Shared {
-            revision: 1,
-            force_full_frame: false,
-            json: "{}".into(),
-            activity: Arc::default(),
-            pending_previews: BTreeMap::new(),
-            frame: Some(Arc::new(dirty(&[7]))),
-            key: "a".into(),
-            wire: WireBase::default(),
-        };
-        let packet = encode(&mut state, 0);
-        let metadata = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
-        assert_eq!(packet[16 + metadata], 1, "no half a screen for a reader without a base");
-        assert!(state.force_full_frame, "the terminal is asked for every row next time");
-
-        // The engine obeys the request, so the next packet replaces the whole screen.
-        state.force_full_frame = false;
-        state.revision = 2;
-        state.frame = Some(Arc::new(frame()));
-        let complete = encode(&mut state, 1);
-        let metadata = u32::from_le_bytes(complete[12..16].try_into().unwrap()) as usize;
-        assert_eq!(complete[16 + metadata], 3);
-        assert_eq!(changed_rows(&complete), 50);
-        assert!(!state.force_full_frame);
-    }
-
     #[test]
     fn hyperlink_only_changes_emit_a_sparse_row_delta_and_removal() {
         let mut first = frame();
@@ -523,7 +388,6 @@ mod wire_tests {
         }
         let mut state = Shared {
             revision: 1,
-            force_full_frame: false,
             json: "{}".into(),
             pending_previews: BTreeMap::new(),
             frame: Some(Arc::new(first)),
@@ -532,7 +396,7 @@ mod wire_tests {
             activity: Arc::default(),
         };
         let full = encode(&mut state, 0);
-        assert_eq!(&full[..4], b"RXT5");
+        assert_eq!(&full[..4], b"RXT6");
         assert_eq!(
             full.windows(b"https://example.com/one".len())
                 .filter(|w| *w == b"https://example.com/one")
@@ -553,7 +417,6 @@ mod wire_tests {
                 .windows(b"https://example.com/two".len())
                 .any(|w| w == b"https://example.com/two")
         );
-        assert!(delta.ends_with(&[0, 0]));
         state.frame = Some(Arc::new(frame()));
         state.revision = 3;
         let removed = encode(&mut state, 2);
@@ -565,7 +428,6 @@ mod wire_tests {
     fn activity_catalog_is_sent_only_when_changed_and_resets_clear_it() {
         let mut state = Shared {
             revision: 1,
-            force_full_frame: false,
             json: "{}".into(),
             activity: Arc::new(serde_json::json!([{"title":"Task"}])),
             pending_previews: BTreeMap::new(),
@@ -587,74 +449,108 @@ mod wire_tests {
         state.revision = 4;
         assert!(metadata(&encode(&mut state, 1))["activity"].is_null());
     }
-
+    fn scrolled(offset: u64) -> Frame {
+        // Rows show scrollback line numbers: row y shows line offset+y.
+        let mut f = frame();
+        f.scroll_total = 1000;
+        f.scroll_offset = offset;
+        for c in &mut f.cells {c.text = format!("{}", (offset + u64::from(c.y)) % 10);c.attributes = (offset + u64::from(c.y)) as u32;}
+        f
+    }
+    fn shift_and_rows(packet: &[u8]) -> (i16, u16) {
+        // Header: magic 4, revision 8, metadata len 4 (+ bytes), flag 1, cols 2, rows 2, cursor 8, colors 8, scroll 24, input 1.
+        let meta = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
+        let at = 16 + meta + 1 + 2 + 2 + 8 + 8 + 24 + 1 + 1;
+        (i16::from_le_bytes(packet[at..at + 2].try_into().unwrap()), u16::from_le_bytes(packet[at + 2..at + 4].try_into().unwrap()))
+    }
     #[test]
-    fn images_are_serialized_and_cached_on_subsequent_deltas() {
-        let mut first = frame();
-        first.images.push(rex_core::ghostty::ImagePayload {
-            image_id: 10,
-            generation: 1,
-            width: 100,
-            height: 100,
-            rgba: vec![255; 40000],
-        });
-        first.placements.push(rex_core::ghostty::ImagePlacement {
-            image_id: 10,
-            col: 5,
-            row: 6,
-            cols: 20,
-            rows: 10,
-            offset_x: 0,
-            offset_y: 0,
-            width: 160,
-            height: 160,
-            src_x: 0,
-            src_y: 0,
-            src_width: 100,
-            src_height: 100,
-            z: 0,
-        });
+    fn ordinary_typing_reuses_unchanged_overscan_without_resending_history() {
+        let mut old=frame();old.above=vec![old.cells[..100].to_vec()];old.below=vec![old.cells[..100].to_vec()];
+        let mut next=frame();next.above=old.above.clone();next.below=old.below.clone();next.cursor=Some((1,0));
+        let mut delta=Vec::new();encode_frame(&mut delta,&next,Some(&old));
+        // Fixed frame header through changed-row count is 51 bytes. No cell
+        // changed here, so the two overscan retain markers immediately follow it.
+        assert_eq!(&delta[51..53],&[255,255]);
+        let mut full=Vec::new();encode_frame(&mut full,&next,None);
+        assert!(delta.len()*10<full.len());
+    }
+    #[test]
+    fn scrolling_sends_a_shift_and_only_the_new_rows() {
         let mut state = Shared {
-            revision: 1,
-            force_full_frame: false,
-            json: "{}".into(),
-            pending_previews: BTreeMap::new(),
-            frame: Some(Arc::new(first)),
-            key: "a".into(),
-            wire: WireBase::default(),
-            activity: Arc::default(),
+            revision: 1, json: "{}".into(), pending_previews: BTreeMap::new(),
+            frame: Some(Arc::new(scrolled(100))), key: "a".into(), wire: WireBase::default(), activity: Arc::default(),
         };
         let full = encode(&mut state, 0);
-        assert!(full.len() > 40000);
-        assert_eq!(&full[..4], b"RXT5");
-
-        let mut next = frame();
-        next.images.push(rex_core::ghostty::ImagePayload {
-            image_id: 10,
-            generation: 1,
-            width: 100,
-            height: 100,
-            rgba: vec![255; 40000],
-        });
-        next.placements.push(rex_core::ghostty::ImagePlacement {
-            image_id: 10,
-            col: 6,
-            row: 6,
-            cols: 20,
-            rows: 10,
-            offset_x: 0,
-            offset_y: 0,
-            width: 160,
-            height: 160,
-            src_x: 0,
-            src_y: 0,
-            src_width: 100,
-            src_height: 100,
-            z: 0,
-        });
-        state.frame = Some(Arc::new(next));
+        assert_eq!(shift_and_rows(&full), (0, 50));
+        // Scroll down 3 lines: rows move up by 3, three new rows at the bottom.
+        state.frame = Some(Arc::new(scrolled(103)));
         state.revision = 2;
         let delta = encode(&mut state, 1);
-        assert!(delta.len() < 200);
+        assert_eq!(shift_and_rows(&delta), (3, 3));
+        assert!(delta.len() < full.len() / 10, "{} vs {}", delta.len(), full.len());
+        // Scroll back up 2: shift -2, two new rows at the top.
+        state.frame = Some(Arc::new(scrolled(101)));
+        state.revision = 3;
+        assert_eq!(shift_and_rows(&encode(&mut state, 2)), (-2, 2));
+        // A jump larger than the screen is a full repaint, no shift.
+        state.frame = Some(Arc::new(scrolled(500)));
+        state.revision = 4;
+        assert_eq!(shift_and_rows(&encode(&mut state, 3)), (0, 50));
+    }
+}
+
+#[cfg(test)]
+mod graphics_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+    #[test]
+    fn unchanged_image_pixels_are_not_retransmitted_and_previews_keep_images() {
+        let mut terminal = rex_core::ghostty::Terminal::new(10, 5).unwrap();
+        terminal.resize(10, 5, 8, 16).unwrap();
+        terminal
+            .write(b"\x1b_Ga=T,f=32,s=2,v=1,i=7,c=2,r=1;/wAA/wD/AP8=\x1b\\")
+            .unwrap();
+        let frame = Arc::new(terminal.frame().unwrap());
+        assert_eq!(frame.images.len(), 1);
+        let mut state = Shared {
+            revision: 1,
+            json: r#"{"phase":"preview","selectedBlock":"image"}"#.into(),
+            activity: Arc::default(),
+            pending_previews: BTreeMap::new(),
+            frame: Some(frame.clone()),
+            key: "image".into(),
+            wire: WireBase::default(),
+        };
+        let full = encode(&mut state, 0);
+        terminal.write(b"x").unwrap();
+        let next = Arc::new(terminal.frame().unwrap());
+        assert!(Arc::ptr_eq(&frame.images[0].image, &next.images[0].image));
+        state.frame = Some(next);
+        state.revision = 2;
+        let delta = encode(&mut state, 1);
+        assert!(delta.len() < full.len());
+        state.pending_previews.insert("other".into(), frame);
+        state.revision = 3;
+        let preview = encode(&mut state, 2);
+        assert!(preview.len() > delta.len());
+        terminal.write(b"\x1b_Ga=d,d=I,i=7\x1b\\").unwrap();
+        state.frame = Some(Arc::new(terminal.frame().unwrap()));
+        state.revision = 4;
+        let deleted = encode(&mut state, 3);
+        if let Ok(path) = std::env::var("REXLING_GRAPHICS_FIXTURES") {
+            std::fs::create_dir_all(&path).unwrap();
+            for (name, bytes) in [
+                ("full", full),
+                ("delta", delta),
+                ("preview", preview),
+                ("deleted", deleted),
+            ] {
+                std::fs::write(
+                    std::path::Path::new(&path).join(format!("kitty_{name}.rxt")),
+                    bytes,
+                )
+                .unwrap();
+            }
+        }
     }
 }

@@ -1,7 +1,6 @@
 package dev.lemon.rex
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,41 +19,52 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+
+@Composable internal fun EmptyServerContent(onAdd: ()->Unit) {
+    Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.welcome_title),style=SettingsType.title,color=MaterialTheme.colorScheme.onSurface)
+        Text(stringResource(R.string.welcome_desc),style=SettingsType.body,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(onClick=onAdd) {ChromeSymbol(ChromeIcon.ADD,Modifier.size(18.dp),color=LocalContentColor.current);Spacer(Modifier.width(6.dp));Text(stringResource(R.string.add_server_title))}
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun ServersSheet(model: RexModel,onDismiss: ()->Unit) {
+@Composable internal fun ServersSheet(model: RexModel,hazeState: dev.chrisbanes.haze.HazeState?=null,onDismiss: ()->Unit) {
     var editing by remember {mutableStateOf<ServerProfile?>(null)}
     var editor by remember {mutableStateOf(false)}
     var scanning by remember {mutableStateOf(false)}
-    ModalBottomSheet(onDismissRequest=onDismiss,containerColor=MaterialTheme.colorScheme.surface) {
-        Column(Modifier.fillMaxWidth().heightIn(max=600.dp).verticalScroll(rememberScrollState()).padding(horizontal=18.dp).padding(bottom=25.dp)) {
-            Row(Modifier.fillMaxWidth().padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.servers),fontSize=20.sp,fontWeight=FontWeight.Bold)
-                    Text(stringResource(R.string.count_connected_format,model.connectedCount),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
+        containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            Column(Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                DrawerHandle()
+                Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text(stringResource(R.string.servers),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                    IconButton(onClick={scanning=true}) {
+                        ChromeSymbol(ChromeIcon.QR,color=MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    ChromeButton(ChromeIcon.ADD,stringResource(R.string.add_server_title)) {editing=null;editor=true}
+                    ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_servers),onClick=onDismiss)
                 }
-                IconButton(onClick={scanning=true}) {
-                    ChromeSymbol(ChromeIcon.QR,color=MaterialTheme.colorScheme.primary)
-                }
-                Spacer(Modifier.width(4.dp))
-                Button(onClick={editing=null;editor=true}) {Text(stringResource(R.string.add_server))}
-            }
+        Column(Modifier.fillMaxWidth().heightIn(max=560.dp).verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(bottom=12.dp)) {
+            Text(stringResource(R.string.count_connected_format,model.connectedCount),Modifier.padding(top=4.dp,bottom=8.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(model.servers.isEmpty()) Text(stringResource(R.string.add_rex_server_started),Modifier.padding(vertical=16.dp))
             for(server in model.servers) {
                 val selected=server.id==model.activeServerId
                 val status=model.serverStatuses[server.id] ?: ServerStatus()
                 var menu by remember(server.id) {mutableStateOf(false)}
-                Row(Modifier.fillMaxWidth().padding(bottom=8.dp).clip(RoundedCornerShape(16.dp))
-                    .background(if(selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
-                    .border(1.dp,if(selected) MaterialTheme.colorScheme.primary.copy(alpha=.25f) else Color.Transparent,RoundedCornerShape(16.dp))
-                    .clickable {onDismiss();model.connectServer(server.id)}.padding(start=13.dp,top=12.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(bottom=4.dp).heightIn(min=56.dp).clip(RoundedCornerShape(12.dp))
+                    .background(if(selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha=.65f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f))
+                    .clickable {onDismiss();model.connectServer(server.id)}.padding(start=12.dp,top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
                     Box(Modifier.size(7.dp).background(if(status.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,RoundedCornerShape(4.dp)))
                     Spacer(Modifier.width(11.dp))
                     ServerGlyph(server.icon,Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(server.label,fontWeight=FontWeight.SemiBold,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        Text(server.endpoint,fontFamily=MonoUi,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        Text(server.label,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        Text(server.endpoint,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
                         Text(when(status.phase) {
                             "connected"->if(selected) stringResource(R.string.status_connected_viewing) else stringResource(R.string.status_connected)
                             "connecting"->stringResource(R.string.status_connecting)
@@ -62,8 +72,8 @@ import androidx.compose.ui.unit.sp
                             "paused"->stringResource(R.string.status_paused)
                             "error"->stringResource(R.string.status_failed)
                             else->stringResource(R.string.status_disconnected)
-                        },fontSize=11.sp,color=if(status.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                        if(status.error.isNotBlank()) Text(status.error,fontSize=10.sp,maxLines=2,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.error)
+                        },style=SettingsType.detail,color=if(status.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        if(status.error.isNotBlank()) Text(status.error,style=SettingsType.detail,maxLines=2,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.error)
                     }
                     Box {
                         ChromeButton(ChromeIcon.MORE,"Server actions for ${server.label}") {menu=true}
@@ -75,46 +85,76 @@ import androidx.compose.ui.unit.sp
                     }
                 }
             }
-            Text(stringResource(R.string.switch_servers_hint),Modifier.padding(top=9.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.switch_servers_hint),Modifier.padding(top=9.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    if(scanning) {
-        QrScannerDialog(onDismiss={scanning=false},onScanned={label,endpoint->
-            val err=model.saveServer(null,label,endpoint)
-            if(err==null) onDismiss() else {
-                editing=model.servers.firstOrNull {it.endpoint==endpoint}
-                editor=true
-            }
-        })
+    }
     }
     if(editor) ServerEditor(editing,onClose={editor=false},onSave={label,endpoint,icon->model.saveServer(editing?.id,label,endpoint,icon)})
+    if(scanning) {
+        QrScannerDialog(
+            onDismiss={scanning=false},
+            onScanned={label,endpoint->
+                scanning=false
+                model.saveServer(null,label,endpoint)
+                model.connect(endpoint)
+                onDismiss()
+            }
+        )
+    }
 }
 
 @Composable internal fun ServerEditor(server: ServerProfile?,onClose: ()->Unit,onSave: (String,String,ServerIcon)->String?) {
+    val networkStatus by NetworkSettings.status.collectAsState()
+    val tailnetConnected=networkStatus.optJSONObject("tailscale")?.optString("BackendState")=="Running"
     var name by remember(server?.id) {mutableStateOf(server?.label.orEmpty())}
     var endpoint by remember(server?.id) {mutableStateOf(server?.endpoint.orEmpty())}
     var icon by remember(server?.id) {mutableStateOf(server?.icon ?: ServerIcon.GLOBE)}
     var error by remember {mutableStateOf<String?>(null)}
-    var scanning by remember {mutableStateOf(false)}
-    if(scanning) {
-        QrScannerDialog(onDismiss={scanning=false},onScanned={label,url->
-            name=label;endpoint=url;scanning=false
-        })
-    }
-    AlertDialog(onDismissRequest=onClose,title={Text(stringResource(if(server==null) R.string.add_server_title else R.string.edit_server_title))},text={
-        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            ServerIconPicker(icon) {icon=it}
-            OutlinedTextField(name,{name=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.name))},singleLine=true)
-            OutlinedTextField(endpoint,{endpoint=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.server_url))},singleLine=true,
-                trailingIcon={
-                    IconButton(onClick={scanning=true}) {
-                        ChromeSymbol(ChromeIcon.QR,color=MaterialTheme.colorScheme.primary)
-                    }
-                },
+    var route by remember(server?.id) {mutableStateOf(NetworkSettings.route(server?.endpoint.orEmpty()))}
+    var routesOpen by remember {mutableStateOf(false)}
+    var networkOpen by remember {mutableStateOf(false)}
+    var busy by remember {mutableStateOf(false)}
+    val scope=rememberCoroutineScope()
+    if(networkOpen) NetworkSheet(onClose={networkOpen=false})
+    AlertDialog(onDismissRequest={if(!busy) onClose()},title={Text(if(server==null) stringResource(R.string.add_server_title) else stringResource(R.string.edit_server_title),style=SettingsType.title)},text={
+        Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
+                ServerIconPicker(icon,compact=true) {icon=it}
+                OutlinedTextField(name,{name=it;error=null},Modifier.weight(1f),label={Text(stringResource(R.string.name))},singleLine=true,textStyle=SettingsType.body)
+            }
+            OutlinedTextField(endpoint,{endpoint=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.server_url))},singleLine=true,textStyle=SettingsType.body,
                 keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri),placeholder={Text("https://host.tailnet.ts.net",fontSize=11.sp)})
-            Text(stringResource(R.string.tailscale_address_hint),fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if(endpoint.startsWith("ssh://")) stringResource(R.string.ssh_target_hint) else stringResource(R.string.https_target_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            if(runCatching {ServerProfile.normalizeEndpoint(endpoint)}.isSuccess) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.5f)).padding(12.dp)) {
+                Text(stringResource(R.string.connection_network),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Box {
+                    TextButton(enabled=!busy,onClick={routesOpen=true},contentPadding=PaddingValues(horizontal=0.dp,vertical=4.dp)) {Text(stringResource(route.labelRes),style=SettingsType.row);Text(" ▾")}
+                    DropdownMenu(expanded=routesOpen,onDismissRequest={routesOpen=false}) {
+                        ServerNetworkRoute.entries.forEach {choice->DropdownMenuItem(text={Text(stringResource(choice.labelRes),style=SettingsType.row)},onClick={route=choice;routesOpen=false})}
+                    }
+                }
+                if(route==ServerNetworkRoute.BUILTIN) {
+                    Text(stringResource(R.string.tailnet_route_desc),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick={networkOpen=true},contentPadding=PaddingValues(horizontal=0.dp,vertical=4.dp)) {Text(if(tailnetConnected) stringResource(R.string.status_connected) else stringResource(R.string.setup_or_signin),style=SettingsType.detail)}
+                } else Text(stringResource(R.string.system_route_desc),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if(endpoint.startsWith("ssh://")) {
+                val normalized=runCatching {ServerProfile.normalizeEndpoint(endpoint)}.getOrNull()
+                if(normalized!=null) SshKeyEditor(normalized)
+            }
             error?.let {Text(it,color=MaterialTheme.colorScheme.error,fontSize=12.sp)}
         }
-    },confirmButton={Button(onClick={error=onSave(name,endpoint,icon);if(error==null) onClose()},enabled=endpoint.isNotBlank()) {Text(stringResource(R.string.save_and_connect))}},
-        dismissButton={TextButton(onClick=onClose) {Text(stringResource(R.string.cancel))}})
+    },confirmButton={Button(onClick={
+        val profile=runCatching {ServerProfile.create(name,endpoint,icon=icon)}.getOrElse {error=it.message;return@Button}
+        val requestedRoute=route
+        busy=true
+        scope.launch {
+            val previous=NetworkSettings.route(profile.endpoint)
+            error=runCatching {NetworkSettings.saveRoute(profile.endpoint,requestedRoute) ?: onSave(profile.label,profile.endpoint,profile.icon)}.getOrElse {"Could not save server network"}
+            if(error!=null && previous!=requestedRoute) NetworkSettings.saveRoute(profile.endpoint,previous)
+            busy=false;if(error==null) onClose()
+        }
+    },enabled=endpoint.isNotBlank() && !busy) {Text(if(busy) stringResource(R.string.saving) else stringResource(R.string.save_and_connect))}},
+        dismissButton={TextButton(enabled=!busy,onClick=onClose) {Text(stringResource(R.string.cancel))}})
 }

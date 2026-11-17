@@ -7,9 +7,9 @@ class ShortcutProfilesTest {
     private fun program(vararg candidates: String)=ProgramIdentity.resolve(candidates.toList())
     private fun state(program: ProgramIdentity)=AppState(phase="connected",selectedSession="s",selectedBlock="p",controlled=true,
         programs=mapOf("p" to program),screen=TerminalScreen(80,24,0,0,-1,0,emptyList()))
-    private val lazygit=ShortcutProfile("lg","lazygit",listOf("lazygit"),items=NeovimShortcuts.parse("Push = P"),enter=ShortcutEnter.NEVER)
-    private val any=ShortcutProfile("any","Any",listOf("*"),items=NeovimShortcuts.parse("Interrupt = <C-c>"))
-    private val pi=ShortcutProfile("pi","pi",listOf("*/pi-coding-agent/*"),items=NeovimShortcuts.parse("/model"))
+    private val lazygit=ShortcutProfile("lg","lazygit",listOf("lazygit"),items=NeovimShortcuts.parse("Push = P"),enter=ShortcutEnter.NEVER,text="Push = P")
+    private val any=ShortcutProfile("any","Any",listOf("*"),items=NeovimShortcuts.parse("Interrupt = <C-c>"),text="Interrupt = <C-c>")
+    private val pi=ShortcutProfile("pi","pi",listOf("*/pi-coding-agent/*"),items=NeovimShortcuts.parse("/model"),text="/model")
 
     @Test fun profilesMatchExecutableNamesAndPathPatterns() {
         val antigravity=ShortcutProfile("agy","Antigravity",listOf("antigravity"),items=NeovimShortcuts.parse("Help = ?"))
@@ -89,6 +89,29 @@ class ShortcutProfilesTest {
         assertEquals(legacy,profiles.first {it.id==ShortcutProfiles.NEOVIM}.items)
         assertFalse(profiles.first {it.id==ShortcutProfiles.NEOVIM}.enabled)
         assertTrue(profiles.first {it.id==ShortcutProfiles.SHELL}.enabled)
+    }
+
+    @Test fun theSavedTextIsKeptExactlyAsWritten() {
+        // The editor shows the saved text again, so a trailing group terminator, blank lines,
+        // spacing or an action line are never rewritten on the next edit.
+        val text="[Git:green]\nLazyGit = <Space>lg\n\n[]\n:w \n  dev := dev_layout\n"
+        val profile=ShortcutProfiles.build("p-text","Shell","bash","",ShortcutEnter.TEXT,true,text,emptyList())
+        assertEquals(text,profile.text)
+        assertEquals(text,profile.editorText)
+        val decoded=ShortcutProfiles.decode(ShortcutProfiles.encode(listOf(profile))) {emptyList()}.single()
+        assertEquals(text,decoded.text)
+        assertEquals(text,decoded.editorText)
+        assertEquals(profile.items,decoded.items)
+    }
+
+    @Test fun aProfileStoredBeforeTheTextWasKeptStillOpens() {
+        val legacy="""[{"id":"p-old","name":"Old","match":["bash"],"prefix":"","enter":"TEXT","enabled":true,"items":[{"label":"ls","keys":"ls -la"}]}]"""
+        val decoded=ShortcutProfiles.decode(legacy) {emptyList()}.single()
+        assertEquals(listOf(NeovimShortcut("ls","ls -la")),decoded.items)
+        assertEquals("ls = ls -la",decoded.editorText)
+        // Saving it once keeps the text it now shows.
+        val saved=ShortcutProfiles.build(decoded.id,decoded.name,"bash","",decoded.enter,decoded.enabled,decoded.editorText,emptyList())
+        assertEquals("ls = ls -la",saved.text)
     }
 
     @Test fun buildRejectsUnclearProfiles() {

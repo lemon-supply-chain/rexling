@@ -231,6 +231,7 @@ impl Predictor {
     /// frame that only carries dirty rows cannot feed it. Callers ask for every row
     /// only while a guess is possible: the feature is on, and the pane runs a program
     /// that accepts predicted typing, or guesses are already pending.
+    #[cfg(test)]
     pub fn requires_full_frame(&self, program: Program) -> bool {
         self.mode != Mode::Off
             && (!matches!(program, Program::Other)
@@ -350,9 +351,8 @@ impl Predictor {
 
     /// Checks predictions against a new server frame.
     pub fn observe(&mut self, frame: Arc<Frame>, now: Instant) {
-        // Guesses read the screen under the cursor, so only a frame that holds every row
-        // may become the base; a dirty frame must never hide the rows around the cursor.
-        let previous = if frame.full {
+        let full = frame.cells.len() >= (frame.columns * frame.rows) as usize;
+        let previous = if full {
             self.base.replace(frame.clone())
         } else {
             self.base.clone()
@@ -488,20 +488,9 @@ impl Predictor {
             (cursor, _) => cursor,
         };
         Arc::new(Frame {
-            columns: frame.columns,
-            rows: frame.rows,
-            full: frame.full,
             cursor,
-            cursor_at: frame.cursor_at,
-            foreground: frame.foreground,
-            background: frame.background,
             cells,
-            images: frame.images.clone(),
-            placements: frame.placements.clone(),
-            scroll_total: frame.scroll_total,
-            scroll_offset: frame.scroll_offset,
-            scroll_visible: frame.scroll_visible,
-            input_flags: frame.input_flags,
+            ..(*frame).clone()
         })
     }
 }
@@ -553,18 +542,23 @@ mod tests {
         Arc::new(Frame {
             columns: COLS,
             rows: ROWS,
-            full: true,
             cursor: visible.then_some(cursor),
             cursor_at: Some(cursor),
+            cursor_style: 1,
+            cursor_blinking: true,
             foreground: [200; 3],
             background: [0; 3],
             cells,
-            images: Vec::new(),
-            placements: Vec::new(),
             scroll_total: ROWS as u64 + scroll,
             scroll_offset: scroll,
             scroll_visible: ROWS as u64,
             input_flags: 0,
+            next_image_delay_ms: None,
+            image_cell_width: 0,
+            image_cell_height: 0,
+            images: Vec::new(),
+            above: Vec::new(),
+            below: Vec::new(),
         })
     }
 
@@ -602,20 +596,8 @@ mod tests {
             .cloned()
             .collect();
         Arc::new(Frame {
-            columns: complete.columns,
-            rows: complete.rows,
-            full: false,
-            cursor: complete.cursor,
-            cursor_at: complete.cursor_at,
-            foreground: complete.foreground,
-            background: complete.background,
             cells,
-            images: Vec::new(),
-            placements: Vec::new(),
-            scroll_total: complete.scroll_total,
-            scroll_offset: complete.scroll_offset,
-            scroll_visible: complete.scroll_visible,
-            input_flags: complete.input_flags,
+            ..(*complete).clone()
         })
     }
 
@@ -825,7 +807,7 @@ mod tests {
     fn full_screen_programs_scrollback_and_other_programs_are_left_alone() {
         let now = Instant::now();
         let (mut p, f) = warmed(now);
-        let mut alt = (*f).clone_frame();
+        let mut alt = (*f).clone();
         alt.input_flags = ALTERNATE_SCREEN;
         p.observe(Arc::new(alt), now);
         p.input("t", "j", Program::Shell, now);
@@ -836,7 +818,7 @@ mod tests {
         assert_eq!(row(&p.display(f), 0), "$ e");
         let (mut p, _) = warmed(now);
         let scrolled = frame(&["$ e"], (3, 0), true, 10);
-        let mut scrolled = (*scrolled).clone_frame();
+        let mut scrolled = (*scrolled).clone();
         scrolled.scroll_offset = 2;
         p.observe(Arc::new(scrolled), now);
         p.input("t", "j", Program::Shell, now);
@@ -961,29 +943,5 @@ mod tests {
         assert_eq!(program(&json!(["nvim"])), Program::Other);
         assert_eq!(program(&json!(["claude-code", "node"])), Program::Other);
         assert_eq!(program(&json!(null)), Program::Other);
-    }
-
-    trait CloneFrame {
-        fn clone_frame(&self) -> Frame;
-    }
-    impl CloneFrame for Frame {
-        fn clone_frame(&self) -> Frame {
-            Frame {
-                columns: self.columns,
-                rows: self.rows,
-                full: self.full,
-                cursor: self.cursor,
-                cursor_at: self.cursor_at,
-                foreground: self.foreground,
-                background: self.background,
-                cells: self.cells.clone(),
-                images: self.images.clone(),
-                placements: self.placements.clone(),
-                scroll_total: self.scroll_total,
-                scroll_offset: self.scroll_offset,
-                scroll_visible: self.scroll_visible,
-                input_flags: self.input_flags,
-            }
-        }
     }
 }

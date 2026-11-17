@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -34,22 +33,22 @@ internal data class AppBuildInfo(val version: String,val number: Int,val type: S
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AboutSheet(onClose: ()->Unit) {
+@Composable internal fun AboutSheet(hazeState: dev.chrisbanes.haze.HazeState?=null,onClose: ()->Unit) {
     val context=LocalContext.current
     val uri=LocalUriHandler.current
-    ModalBottomSheet(onDismissRequest=onClose,containerColor=MaterialTheme.colorScheme.surface) {
+    SettingsDrawer(stringResource(R.string.about),stringResource(R.string.close_about),onClose,hazeState) {
         AboutContent(AppBuildInfo.current,onClose,onCopy={text->
             (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Rexling build",text))
         },onOpen={url->
             runCatching {uri.openUri(url)}.onFailure {Toast.makeText(context,context.getString(R.string.no_browser),Toast.LENGTH_SHORT).show()}
-        })
+        },showHeader=false)
     }
 }
 
-@Composable internal fun AboutContent(info: AppBuildInfo,onClose: ()->Unit,onCopy: (String)->Unit,onOpen: (String)->Unit) {
-    Column(Modifier.fillMaxWidth().heightIn(max=620.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-            Text(stringResource(R.string.about),Modifier.weight(1f),fontSize=20.sp,fontWeight=FontWeight.Bold)
+@Composable internal fun AboutContent(info: AppBuildInfo,onClose: ()->Unit,onCopy: (String)->Unit,onOpen: (String)->Unit,showHeader: Boolean=true) {
+    Column(Modifier.fillMaxWidth().heightIn(max=620.dp).verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=8.dp,bottom=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(showHeader) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Text(stringResource(R.string.about),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold)
             ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_about),onClick=onClose)
         }
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {

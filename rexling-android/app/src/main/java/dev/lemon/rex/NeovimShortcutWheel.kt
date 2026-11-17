@@ -1,6 +1,5 @@
 package dev.lemon.rex
 
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.PathOperation

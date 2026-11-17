@@ -12,7 +12,6 @@ import android.graphics.Path
 import android.graphics.Picture
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader

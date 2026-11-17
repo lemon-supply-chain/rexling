@@ -16,7 +16,11 @@ internal enum class NeovimShortcutEffect(val label: String,val openMillis: Int,v
  * [confirm] asks before sending; written as a leading `!` in the editor. [category] colours the
  * sector of the item's group, written as `[Group:green]`, and is shared by every item in the group.
  */
-internal data class NeovimShortcut(val label: String,val keys: String,val group: String="",val confirm: Boolean=false,val category: WheelCategory?=null)
+internal data class NeovimShortcut(val label: String,val keys: String,val group: String="",val confirm: Boolean=false,val category: WheelCategory?=null,val rex: Boolean=false) {
+    /** Set by `Name := action`: [keys] holds a custom Rex action name, not key notation. */
+    val isAction: Boolean get()=rex
+    val action: String? get()=keys.takeIf {rex}
+}
 internal sealed interface NeovimShortcutEntry {
     val label: String
     val category: WheelCategory?
@@ -30,7 +34,8 @@ internal object NeovimShortcuts {
         var group=""
         items.forEach {item->
             if(item.group!=group) {add("[${item.group}${item.category?.let {":${it.key}"}.orEmpty()}]");group=item.group}
-            val line=if(item.label==item.keys && !(item.keys.startsWith("[") && item.keys.endsWith("]")) && !item.keys.startsWith("!")) item.keys else "${item.label} = ${item.keys}"
+            val line=if(item.label==item.keys && !(item.keys.startsWith("[") && item.keys.endsWith("]")) && !item.keys.startsWith("!")) item.keys
+                else if(item.isAction) RexActions.editorText(item.label,item.keys) else "${item.label} = ${item.keys}"
             add(if(item.confirm) "!$line" else line)
         }
     }.joinToString("\n")
@@ -65,14 +70,20 @@ internal object NeovimShortcuts {
             // A leading ! asks before sending. Use Name = !keys to send a literal !.
             val confirm=line.length>1 && line.startsWith("!")
             val body=if(confirm) line.drop(1).trimStart() else line
-            val split=body.indexOf(" = ")
+            // `Name = keys` sends keys; `Name := action` names a custom Rex action instead.
+            val colon=body.indexOf(RexActions.SEPARATOR)
+            val plain=if(colon<0) body.indexOf(" = ") else -1
+            val separator=when {colon>=0->RexActions.SEPARATOR;plain>=0->" = ";else->""}
+            val split=maxOf(colon,plain)
             val label=(if(split<0) body else body.take(split)).trim()
-            val keys=(if(split<0) body else body.substring(split+3)).trim()
+            val keys=(if(split<0) body else body.substring(split+separator.length)).trim()
             require(label.isNotEmpty() && label.length<=40) {"Use a name of 1–40 characters. For longer keys, use Name = keys."}
             require(keys.isNotEmpty() && keys.length<=256) {"Use 1–256 characters for each key sequence."}
             require((label+keys).none {it.isISOControl() || Character.getType(it)==Character.FORMAT.toInt()}) {"Use key notation such as <CR> instead of control characters."}
-            decodeKeys(keys)
-            items.add(NeovimShortcut(label,keys,group,confirm))
+            // A custom action name is forwarded as written and never decoded as key notation.
+            val action=colon>=0
+            if(!action) decodeKeys(keys)
+            items.add(NeovimShortcut(label,keys,group,confirm,rex=action))
         }
         for(i in items.indices) categories[items[i].group]?.let {items[i]=items[i].copy(category=it)}
         require(items.map {it.group to it.label}.distinct().size==items.size) {"Give shortcuts in the same group different names."}
@@ -114,12 +125,12 @@ internal object NeovimShortcuts {
         return if(category==null) header to null else header.take(colon).trim() to category
     }
     fun encode(items: List<NeovimShortcut>)=JSONArray().apply {items.forEach {item->put(JSONObject().put("label",item.label).put("keys",item.keys).apply {
-        if(item.group.isNotEmpty()) put("group",item.group);if(item.confirm) put("confirm",true);item.category?.let {put("category",it.key)}})}}.toString()
+        if(item.group.isNotEmpty()) put("group",item.group);if(item.confirm) put("confirm",true);if(item.rex) put("rex",true);item.category?.let {put("category",it.key)}})}}.toString()
     /** Stored shape shared with shortcut profiles. Older groups named like `Git:green` take that colour. */
     fun item(o: JSONObject): NeovimShortcut {
         val stored=WheelCategory.fromKey(o.optString("category"))
         val (group,named)=if(stored==null) splitCategory(o.optString("group")) else o.optString("group") to stored
-        return NeovimShortcut(o.getString("label"),o.getString("keys"),group,o.optBoolean("confirm"),named)
+        return NeovimShortcut(o.getString("label"),o.getString("keys"),group,o.optBoolean("confirm"),named,o.optBoolean("rex"))
     }
     fun decode(text: String?): List<NeovimShortcut> = if(text==null) defaults else runCatching {
         val array=JSONArray(text)

@@ -3,7 +3,6 @@ package dev.lemon.rex
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

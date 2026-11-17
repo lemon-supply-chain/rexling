@@ -2,7 +2,6 @@ package dev.lemon.rex
 
 import android.content.Context
 import org.json.JSONArray
-import org.json.JSONObject
 
 data class AppTheme(val id: String,val name: String,val terminal: TerminalPalette,val ui: Map<String,Int> = emptyMap())
 internal object ThemeCatalog {

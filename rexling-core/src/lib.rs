@@ -7,6 +7,10 @@ pub mod transport;
 
 pub mod upload;
 pub mod forward;
+pub mod graphics;
+
+#[cfg(target_os = "android")]
+pub mod network;
 
 #[cfg(target_os = "android")]
 pub fn android_log(msg: &str) {

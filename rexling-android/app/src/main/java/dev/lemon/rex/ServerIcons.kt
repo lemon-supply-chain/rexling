@@ -1,12 +1,15 @@
 package dev.lemon.rex
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -67,15 +70,18 @@ internal val ServerIcon.labelRes: Int get() = when(this) {
     }
 }
 
-@Composable internal fun ServerIconPicker(selected: ServerIcon,onSelect: (ServerIcon)->Unit) {
+@Composable internal fun ServerIconPicker(selected: ServerIcon,compact: Boolean=false,onSelect: (ServerIcon)->Unit) {
     var open by remember {mutableStateOf(false)}
     Box {
-        Row(Modifier.fillMaxWidth().clickable(role=Role.Button) {open=true}.semantics {contentDescription="Choose server icon"}
-            .padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+        Row((if(compact) Modifier.height(56.dp).width(52.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.6f)) else Modifier.fillMaxWidth())
+            .clickable(role=Role.Button) {open=true}.semantics {contentDescription="Choose server icon"}
+            .padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(compact) Arrangement.Center else Arrangement.spacedBy(10.dp)) {
             ServerGlyph(selected,color=MaterialTheme.colorScheme.onSurface)
-            Text(stringResource(R.string.icon),Modifier.weight(1f),style=SettingsType.row)
-            Text(stringResource(selected.labelRes),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(14.dp),MaterialTheme.colorScheme.onSurfaceVariant)
+            if(!compact) {
+                Text(stringResource(R.string.icon),Modifier.weight(1f),style=SettingsType.row)
+                Text(stringResource(selected.labelRes),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(14.dp),MaterialTheme.colorScheme.onSurfaceVariant)
+            } else Spacer(Modifier.width(4.dp))
         }
         DropdownMenu(open,{open=false},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
             ServerIcon.entries.forEach {icon->

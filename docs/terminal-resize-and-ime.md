@@ -114,6 +114,52 @@ Tests and verification ensure that:
 4. **Haptic Feedback**:
    - Standardized `HapticFeedbackType.TextHandleMove` and `LongPress` across dock keys, repeat keys, joystick interactions, and shortcut selections.
 
+### 3.7 Program-Driven IME Viewport Policy
+
+The keyboard changes which part of the terminal is usable, but not every program wants the same
+reaction. Inline prompts should stay visible without reflowing the PTY, while full-screen TUIs
+have to receive the new grid size and repaint themselves. `TerminalImeAnchor.kt` resolves that
+policy per program from a data table.
+
+`ImeAnchor.CURSOR` and `ImeAnchor.CONTENT` keep the PTY's full-height grid and position the
+viewport with `TerminalKeyboardFocus` (`TerminalView.keyboardFocus`) and `terminalImePan`:
+
+- `ImeAnchor.CURSOR`: only the reported hardware cursor moves the viewport (shells, editors,
+  monitors).
+- `ImeAnchor.CONTENT`: the reported cursor still wins; without one the last painted row anchors
+  the viewport, so a hidden caret reveals its own editor above the keyboard. Registered programs
+  are `pi` and `cursor-agent`; neither reports a hardware cursor nor emits OSC 133 semantic
+  prompt metadata, so the semantic-zone fallbacks cannot help.
+
+`ImeAnchor.RESIZE` is the opposite trade: the view shrinks to the visible area and
+`TerminalView.onSizeChanged` reports the smaller grid. The existing resize debounce and
+IME-animation flush then send SIGWINCH, so the program redraws into the space above the keyboard.
+`yazi` is registered here because it is a full-screen file manager rather than an inline agent
+with a fixed composer; its own layout must reflow instead of having the whole grid pushed up and
+clipped at the top.
+
+- `ImeAnchorRule` matches executable base names and install-path fragments against
+  `ProgramIdentity.matchNames`. Adding a program is one entry in `TerminalImeAnchors.rules`;
+  unknown or pending programs keep `CURSOR`, which never moves a viewport on its own.
+- Scrollback (`scroll.below > 0`) and the last-painted-row cap apply only to panning policies.
+  `RESIZE` programs always reflow; they never call `terminalImePan`.
+
+### 3.8 Predictive Local Echo & Cursor Coordinates
+
+To minimize typing latency over mobile high-latency connections, Rexling implements Mosh-style local echo (`prediction.rs`):
+
+- **Cursor Tracking**: Ghostty reports both drawn (`cursor`) and known viewport positions (`cursor_at`). Programs that hide the hardware cursor (`pi`, `cursor-agent`) park their caret at their input prompt; tracking `cursor_at` enables local echo predictions even when the drawn cursor is hidden.
+- **Engine Coordination**: Typed characters are drawn optimistically and confirmed or dropped upon server frames.
+- **Defensive Server Lifecycle**: Predictive echo commands (`command("prediction", ...)`) are guarded so that unconfigured or empty server profiles (`endpoint.isBlank()`) do not send premature RPCs to the engine, and error banners are suppressed on empty workspaces where no active servers exist.
+
+### 3.9 Edge Padding Strategy Pattern (Non-Editor vs Editor)
+
+Terminal padding (`insetTop`, `insetBottom`, `insetHorizontal`) provides comfortable margins and accommodates floating carousel pager dots. However, full-screen editors and segmented status-bar TUIs have opposing requirements:
+- **`TerminalEdgePolicy.NON_EDITOR` (Default)**: Strictly constrains drawing within the content box `clipRect(0f, insetTop, width, height - insetBottom)`. Tools with multi-colored status badges (e.g. `yazi`, `tmux`) never leak color stripes or icons into bottom insets or pager dots.
+- **`TerminalEdgePolicy.EDITOR`**: Enabled for full-screen editors (`vim`, `neovim`, `helix`, `nano`, `micro`, `emacs`). When `extendPadding` is true, the top row background seamlessly extends upward to `0f` and the last row background extends downward to `height`, eliminating letterbox blank borders while keeping text safely within the content padding.
+
+`TerminalEdgePolicies.policy(identity)` resolves the policy from `ProgramIdentity`, strictly defaulting to `NON_EDITOR` for shells, CLI utilities, and unclassified programs.
+
 ---
 
 ## 4. Verification & Testing
@@ -122,7 +168,10 @@ Tests and verification ensure that:
   - `a_resize_holds_frames_until_the_repaint_burst_goes_quiet` (verifies settling debounce logic).
   - `resize_keeps_an_at_bottom_viewport_pinned_to_new_output`.
   - `resize_keeps_a_scrolled_viewport_on_its_row`.
+  - `prediction::tests` (verifies predictive echo epoch confirmation, hidden-cursor tracking, backspace and overflow handling).
   - Run via: `cd rexling-core && cargo test`
 - **Android unit tests**:
   - `TerminalRowWindowTest`: Verifies top/bottom clipping, origin offsets, continuity across height transitions, and touch coordinate inversion.
+  - `TerminalImePanTest` / `TerminalImeAnchorTest`: Verifies that editor cursor moves do not recenter a settled viewport, that hidden-caret programs (pi, cursor-agent) anchor on the last painted row, that `yazi` selects the resize policy, and that every other program keeps the cursor anchor.
+  - `TerminalEdgePolicyTest`: Verifies that `null`, shells, tools (`yazi`, `btop`, `git`), and unknown programs strictly default to `NON_EDITOR`, while `vim`, `neovim`, and modern CLI editors resolve to `EDITOR`.
   - Run via: `cd rexling-android && ./gradlew testDebugUnitTest`
