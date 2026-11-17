@@ -83,10 +83,10 @@ pub struct PendingCall {
     id: String,
     method: String,
     deadline: tokio::time::Instant,
-    receiver: oneshot::Receiver<Result<CallReply>>,
+    receiver: oneshot::Receiver<Result<Value>>,
 }
 impl PendingCall {
-    pub async fn receive_reply(self) -> Result<CallReply> {
+    pub async fn receive(self) -> Result<Value> {
         tokio::time::timeout_at(self.deadline, self.receiver)
             .await
             .with_context(|| {
@@ -97,20 +97,10 @@ impl PendingCall {
             })?
             .context("control connection closed; request outcome is unknown")?
     }
-    pub async fn receive(self) -> Result<Value> {
-        self.receive_reply().await.map(|reply| reply.payload)
-    }
-}
-/// A reply carries the event sequence the server had reached when it started
-/// the request. Event and reply payloads share that ordering space.
-#[derive(Debug, Clone)]
-pub struct CallReply {
-    pub payload: Value,
-    pub seq: u64,
 }
 struct WaitingCall {
     method: String,
-    sender: oneshot::Sender<Result<CallReply>>,
+    sender: oneshot::Sender<Result<Value>>,
 }
 
 pub struct Control {
@@ -125,25 +115,16 @@ pub struct Control {
 }
 impl Control {
     pub async fn connect(endpoint: Endpoint, token: Option<&str>, trace: Trace) -> Result<Self> {
-        Self::connect_revision(endpoint, token, trace, 8, 7).await
+        Self::connect_revision(endpoint, token, trace, 8).await
     }
     /// Uploads use their own connection so revision 11 never changes the live terminal contract.
     pub async fn connect_upload(endpoint: Endpoint) -> Result<Self> {
-        Self::connect_revision(endpoint, None, Trace::default(), 11, 7).await
+        Self::connect_revision(endpoint, None, Trace::default(), 11).await
     }
-    /// The forward worker negotiates its own higher revision without touching
-    /// the terminal contract. It accepts any server that still speaks 0..16 so
-    /// an old server can be reported as unsupported instead of failing connect.
-    pub async fn connect_forward(endpoint: Endpoint) -> Result<Self> {
-        Self::connect_revision(endpoint, None, Trace::default(), 16, 0).await
+    pub async fn connect_forward(endpoint: Endpoint, token: Option<&str>) -> Result<Self> {
+        Self::connect_revision(endpoint, token, Trace::default(), 14).await
     }
-    async fn connect_revision(
-        endpoint: Endpoint,
-        token: Option<&str>,
-        trace: Trace,
-        revision: u64,
-        min_revision: u64,
-    ) -> Result<Self> {
+    async fn connect_revision(endpoint: Endpoint, token: Option<&str>, trace: Trace, revision: u64) -> Result<Self> {
         let mut ws = endpoint.open("/api/control", CONTROL).await?;
         let platform = match std::env::consts::OS {
             "macos" => "macos",
@@ -151,7 +132,7 @@ impl Control {
             _ => "other",
         };
         // The common control/data shapes have been checked against revisions 7 and 8.
-        let mut hello = json!({"type":"hello","api_revision":revision,"api_min_revision":min_revision,"client":{"kind":"app","name":"rexling","platform":platform,"version":env!("CARGO_PKG_VERSION")}});
+        let mut hello = json!({"type":"hello","api_revision":revision,"api_min_revision":7,"client":{"kind":"app","name":"rexling","platform":platform,"version":env!("CARGO_PKG_VERSION")}});
         if let Some(token) = token {
             hello["reconnect_token"] = json!(token);
         }
@@ -174,9 +155,7 @@ impl Control {
             "invalid control welcome"
         );
         ensure!(
-            welcome["api_revision"]
-                .as_u64()
-                .is_some_and(|n| (min_revision..=revision).contains(&n)),
+            welcome["api_revision"].as_u64().is_some_and(|n| (7..=revision).contains(&n)),
             "unsupported negotiated API revision"
         );
         ensure!(
@@ -248,10 +227,7 @@ impl Control {
                     }
                     .into())
                 } else {
-                    Ok(CallReply {
-                        payload: message.get("payload").cloned().unwrap_or(Value::Null),
-                        seq: message["seq"].as_u64().unwrap_or(0),
-                    })
+                    Ok(message.get("payload").cloned().unwrap_or(Value::Null))
                 };
                 // Dropping a waiter does not make a late wire reply invalid.
                 let _ = waiting.sender.send(result);
@@ -308,16 +284,9 @@ impl Control {
         })
     }
     pub async fn call(&mut self, method: &str, payload: Value) -> Result<Value> {
-        self.call_with_seq(method, payload)
-            .await
-            .map(|reply| reply.payload)
-    }
-    /// Keep the reply's event sequence so a caller can merge live events with
-    /// the result without dropping an event the result already covers.
-    pub async fn call_with_seq(&mut self, method: &str, payload: Value) -> Result<CallReply> {
         let pending = self.start_call(method, payload).await?;
         let id = pending.id.clone();
-        let reply = pending.receive_reply();
+        let reply = pending.receive();
         tokio::pin!(reply);
         let result = loop {
             tokio::select! {

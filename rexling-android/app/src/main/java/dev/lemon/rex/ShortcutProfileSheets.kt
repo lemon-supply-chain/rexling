@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
     layout: NeovimShortcutLayout=NeovimShortcutLayout.CIRCULAR,onLayout: (NeovimShortcutLayout)->Unit={},
     effect: NeovimShortcutEffect=NeovimShortcutEffect.FAN_OUT,onEffect: (NeovimShortcutEffect)->Unit={},
     hapticsEnabled: Boolean=true,onHaptics: (Boolean)->Unit={}) {
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface) {
+    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
             SettingsHeader(stringResource(R.string.shortcuts),stringResource(R.string.close_shortcuts),onClose,subtitle=stringResource(R.string.shortcuts_subtitle))
             SettingsSection(stringResource(R.string.shortcut_profiles)) {
@@ -67,7 +67,7 @@ import androidx.compose.ui.unit.dp
     Row(Modifier.fillMaxWidth().clickable(role=Role.Button,onClick=onClick).padding(start=16.dp,end=8.dp,top=12.dp,bottom=12.dp)
         .semantics {contentDescription="Edit ${profile.name} profile"},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-            Text(profile.name,style=SettingsType.row)
+            Text(profile.name,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
             Text(profile.matchText,style=SettingsType.detail.copy(fontFamily=MonoUi),color=MaterialTheme.colorScheme.primary,maxLines=1,overflow=TextOverflow.Ellipsis)
             Text(shortcutCount(profile.items),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -95,7 +95,7 @@ internal fun shortcutCount(items: List<NeovimShortcut>): String {
     var deleting by remember {mutableStateOf(false)}
     val defaultTitle=stringResource(R.string.new_profile)
     val title=profile?.name ?: defaultTitle
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface) {
+    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
             SettingsHeader(title,stringResource(R.string.close_title_format,title),onClose)
             SettingsTextField(stringResource(R.string.name),name,{name=it;error=null})

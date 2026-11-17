@@ -1,98 +1,112 @@
 package dev.lemon.rex
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.app.Service
-import android.content.Context
-import android.content.Intent
+import android.app.*
+import android.content.*
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
+import kotlinx.coroutines.*
+import org.json.JSONObject
+import java.util.UUID
 
-/**
- * Keeps the process alive while a loopback forward serves the browser.
- *
- * This is deliberately separate from [BackgroundMonitorService]: turning off
- * background monitoring must not tear down a page the user is reading.
- */
+/** Owns the tunnel handles independently of the terminal view while the browser is open. */
 class PortForwardService: Service() {
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
+    private data class Worker(val handle: Long,val job: Job,val generation: Long)
+    private val workers=mutableMapOf<String,Worker>()
     private val notifications by lazy {getSystemService(NotificationManager::class.java)}
-    private var running=false
-
     override fun onCreate() {
         super.onCreate()
         notifications.createNotificationChannel(NotificationChannel(CHANNEL,"Port forwarding",NotificationManager.IMPORTANCE_LOW).apply {
-            description="Keeps forwarded terminal ports reachable from the browser"
-            setShowBadge(false)
-            setSound(null,null)
-            enableVibration(false)
+            setShowBadge(false);setSound(null,null)
         })
     }
     override fun onStartCommand(intent: Intent?,flags: Int,startId: Int): Int {
-        if(intent?.action==CLOSE_ALL) {
-            PortForwardRegistry.closeAll()
-            stopSelf()
+        if(intent?.action==STOP) {PortForwards.items.toList().filter {it.running}.forEach {PortForwards.markStopped(it.id)};stopSelf();return START_NOT_STICKY}
+        if(intent?.action==CLOSE) {
+            val id=intent.getStringExtra("id")
+            val generation=intent.getLongExtra("generation",Long.MAX_VALUE)
+            workers[id]?.takeIf {it.generation<=generation}?.let {workers.remove(id);it.job.cancel();NativeBridge.forwardDestroy(it.handle)}
+            PortForwards.persist()
+            if(workers.isEmpty() && PortForwards.items.none {it.phase=="connecting"}) stopSelf() else ongoing()
             return START_NOT_STICKY
         }
-        if(!running) {
-            val notification=notification(emptyList())
-            if(Build.VERSION.SDK_INT>=34) startForeground(NOTIFICATION_ID,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-            else startForeground(NOTIFICATION_ID,notification)
-            running=true
-            scope.launch {PortForwardRegistry.states.collectLatest {states->notifications.notify(NOTIFICATION_ID,notification(states))}}
+        if(intent?.action!=ADD) {stopSelf();return START_NOT_STICKY}
+        try {
+            val notification=notification()
+            if(Build.VERSION.SDK_INT>=34) startForeground(NOTIFICATION,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            else startForeground(NOTIFICATION,notification)
+            val id=requireNotNull(intent.getStringExtra("id"))
+            val item=PortForwards.items.firstOrNull {it.id==id}
+            if(item==null || item.phase!="connecting") {if(workers.isEmpty()) stopSelf();return START_NOT_STICKY}
+            workers[id]?.let {
+                if(it.generation==item.generation) return START_NOT_STICKY
+                workers.remove(id);it.job.cancel();NativeBridge.forwardDestroy(it.handle)
+            }
+            require(workers.size<8) {"Stop a forward before adding another (maximum 8)"}
+            val request=JSONObject().put("id","$id-${UUID.randomUUID().toString().replace("-", "").take(16)}").put("endpoint",item.endpoint)
+                .put("session",item.session).put("host",item.host).put("port",item.port).put("local_port",item.localPort)
+            val handle=NativeBridge.forwardCreate(request.toString())
+            check(handle!=0L) {"Could not start forward"}
+            val job=scope.launch {
+                while(isActive) {
+                    val state=withContext(Dispatchers.IO) {JSONObject(NativeBridge.forwardPoll(handle))}
+                    val current=PortForwards.items.firstOrNull {it.id==id} ?: break
+                    if(current.generation!=item.generation) break
+                    val next=current.copy(phase=state.optString("phase","failed"),address=state.optString("address"),error=state.optString("error"))
+                    if(next!=current) {PortForwards.update(next);ongoing()}
+                    if(next.phase=="active") {
+                        if(next.localPort!=next.boundPort) {PortForwards.update(next.copy(localPort=next.boundPort));PortForwards.persist()};PortForwards.ready(next)
+                    }
+                    if(next.phase=="failed") {
+                        workers.remove(id);NativeBridge.forwardDestroy(handle)
+                        if(state.optBoolean("port_unavailable") && current.localPort>0) PortForwards.portBusy(this@PortForwardService,id)
+                        else PortForwards.failed(next)
+                        if(workers.isEmpty() && PortForwards.items.none {it.phase=="connecting"}) stopSelf()
+                        else ongoing()
+                        break
+                    }
+                    delay(250)
+                }
+            }
+            workers[id]=Worker(handle,job,item.generation)
+            ongoing()
+        } catch(e: Exception) {
+            PortForwards.notice=e.message ?: "Could not start port forwarding"
+            PortForwards.items.firstOrNull {it.id==intent.getStringExtra("id")}?.let {
+                val failed=it.copy(phase="failed",error=PortForwards.notice.orEmpty());PortForwards.update(failed);PortForwards.failed(failed)
+            }
+            if(workers.isEmpty()) stopSelf()
         }
         return START_NOT_STICKY
     }
-    private fun notification(states: List<PortForwardState>): Notification {
-        val active=states.count {it.active}
-        val waiting=states.count {it.awaitingSelection}
-        val title=when {
-            active>0 && waiting>0 -> "$active ${if(active==1) "forward" else "forwards"} · choose a port"
-            active>0 -> "$active ${if(active==1) "port forward" else "port forwards"}"
-            waiting>0 -> "Choose a terminal port"
-            else -> "Preparing port forward"
-        }
-        val open=PendingIntent.getActivity(this,1,Intent(this,MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val close=PendingIntent.getService(this,2,Intent(this,PortForwardService::class.java).setAction(CLOSE_ALL),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        return Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Rexling · $title")
-            .setContentText("Loopback ports stay reachable while you browse")
-            .setContentIntent(open).setOngoing(true).setShowWhen(false)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(Notification.Action.Builder(null,"Close all",close).build())
-            .build()
+    private fun notification(): Notification {
+        val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val stop=PendingIntent.getService(this,1,Intent(this,PortForwardService::class.java).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_notification).setContentTitle("Rexling port forwarding")
+            .setContentText("${workers.size} forwards · tap Rexling to manage").setContentIntent(open).setOngoing(true)
+            .addAction(Notification.Action.Builder(null,"Stop all",stop).build()).build()
     }
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        PortForwardRegistry.closeAll()
-        stopSelf()
-    }
+    private fun ongoing() {notifications.notify(NOTIFICATION,notification())}
+    override fun onTaskRemoved(rootIntent: Intent?) {PortForwards.items.toList().filter {it.running}.forEach {PortForwards.markStopped(it.id)};stopSelf()}
     override fun onDestroy() {
-        running=false
-        PortForwardRegistry.closeAll()
-        scope.cancel()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        super.onDestroy()
+        val owned=workers.toMap()
+        owned.values.forEach {it.job.cancel();NativeBridge.forwardDestroy(it.handle)}
+        workers.clear()
+        PortForwards.items.toList().filter {it.running && owned[it.id]?.generation==it.generation}.forEach {
+            PortForwards.update(it.copy(phase="stopped"));PortForwards.failed(it.copy(error="Forward stopped."))
+        }
+        PortForwards.persist();scope.cancel();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder?=null
     companion object {
-        const val CHANNEL="port_forward"
-        const val NOTIFICATION_ID=7200
-        const val CLOSE_ALL="dev.lemon.rex.CLOSE_FORWARDS"
-        fun start(context: Context) {
-            runCatching {context.startForegroundService(Intent(context,PortForwardService::class.java))}
-        }
-        fun stop(context: Context) {
-            runCatching {context.stopService(Intent(context,PortForwardService::class.java))}
-        }
+        const val ADD="dev.lemon.rex.forward.ADD"
+        const val CLOSE="dev.lemon.rex.forward.CLOSE"
+        const val STOP="dev.lemon.rex.forward.STOP"
+        private const val CHANNEL="port_forwards"
+        private const val NOTIFICATION=4401
     }
 }

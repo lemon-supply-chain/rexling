@@ -1,4 +1,5 @@
 mod activity;
+mod progress;
 mod engine;
 mod forwards;
 mod updates;
@@ -167,7 +168,6 @@ pub extern "system" fn Java_dev_lemon_rex_NativeBridge_readUpdate(
 }
 
 mod input_queue;
-mod prediction;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadCreate(
@@ -209,66 +209,47 @@ pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadDestroy(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardCreate(
-    mut env: JNIEnv,
-    _class: JClass,
-    request: JString,
-) -> jlong {
-    let result =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<u64> {
-            let request: String = env.get_string(&request)?.into();
-            forwards::create(serde_json::from_str(&request)?)
-        }));
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardCreate(mut env: JNIEnv, _class: JClass, request: JString) -> jlong {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<u64> {
+        let request: String = env.get_string(&request)?.into();
+        forwards::create(serde_json::from_str(&request)?)
+    }));
     match result {
         Ok(Ok(id)) => id as jlong,
-        _ => {
-            let _ = env.throw_new(
-                "java/lang/IllegalStateException",
-                "Could not start port forwarding",
-            );
+        error => {
+            let message = match error {Ok(Err(e))=>e.to_string(),_=>"Could not start forward".into()};
+            let _=env.throw_new("java/lang/IllegalStateException",message);
             0
         }
     }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardPoll(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardPoll(mut env: JNIEnv, _class: JClass, id: jlong) -> jstring {
+    let value = std::panic::catch_unwind(||forwards::poll(id as u64)).unwrap_or_else(|_|serde_json::json!({"phase":"failed"}));
+    string(&mut env,value.to_string())
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardDestroy(_env: JNIEnv, _class: JClass, id: jlong) {
+    let _=std::panic::catch_unwind(||forwards::destroy(id as u64));
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_networkCommand(
     mut env: JNIEnv,
     _class: JClass,
-    handle: jlong,
+    request: JString,
 ) -> jstring {
-    string(&mut env, forwards::poll(handle as u64).to_string())
-}
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardSelect(
-    _env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    port: jlong,
-) {
-    if (1..=65535).contains(&port) {
-        forwards::select(handle as u64, port as u16);
-    }
-}
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardClose(
-    _env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-) {
-    forwards::close(handle as u64);
-}
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardDestroy(
-    _env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-) {
-    forwards::destroy(handle as u64);
-}
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardCloseAll(
-    _env: JNIEnv,
-    _class: JClass,
-) {
-    forwards::close_all();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<String> {
+        let request: String = env.get_string(&request)?.into();
+        #[cfg(target_os = "android")]
+        return rex_core::network::command(&request);
+        #[cfg(not(target_os = "android"))]
+        { let _ = request; anyhow::bail!("Android networking bridge is unavailable on this platform") }
+    }));
+    let response = match result {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => serde_json::json!({"error": e.to_string()}).to_string(),
+        Err(_) => "{\"error\":\"Network command failed\"}".into(),
+    };
+    string(&mut env, response)
 }

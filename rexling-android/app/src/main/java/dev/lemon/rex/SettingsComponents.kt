@@ -35,17 +35,17 @@ internal object SettingsType {
 @Composable internal fun SettingsHeader(title: String,closeDescription: String,onClose: ()->Unit,subtitle: String?=null) {
     Row(Modifier.fillMaxWidth().padding(bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-            Text(title,style=SettingsType.title)
+            Text(title,style=SettingsType.title,color=MaterialTheme.colorScheme.onSurface)
             subtitle?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         }
         IconButton(onClick=onClose,modifier=Modifier.semantics {contentDescription=closeDescription}) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(20.dp))}
     }
 }
 
-@Composable internal fun SettingsSection(title: String,content: @Composable ColumnScope.()->Unit) {
+@Composable internal fun SettingsSection(title: String,compact: Boolean=true,content: @Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(title,Modifier.padding(start=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
-        Surface(shape=RoundedCornerShape(20.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)) {
+        Surface(shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),contentColor=MaterialTheme.colorScheme.onSurface) {
             Column(Modifier.fillMaxWidth(),content=content)
         }
     }
@@ -55,7 +55,7 @@ internal object SettingsType {
     HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))
 }
 
-internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND }
+internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK }
 
 @Composable internal fun SettingsRow(title: String,subtitle: String,glyph: SettingsGlyph,onClick: ()->Unit,badge: String?=null) {
     val chevronColor=MaterialTheme.colorScheme.onSurfaceVariant
@@ -63,7 +63,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
         SettingsIcon(glyph)
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-            Text(title,style=SettingsType.row)
+            Text(title,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
             Text(subtitle,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=3,overflow=TextOverflow.Ellipsis)
         }
         badge?.let {Text(it,style=SettingsType.section,color=MaterialTheme.colorScheme.onSurfaceVariant)}
@@ -106,6 +106,13 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
                             drawCircle(color,.8f*u,Offset(7f*u,(y+3)*u))
                         }
                     }
+                    SettingsGlyph.NETWORK->{
+                        line(12f,8f,12f,12f);line(5f,12f,19f,12f)
+                        line(5f,12f,5f,16f);line(19f,12f,19f,16f)
+                        for((x,y) in listOf(12f to 5f,5f to 19f,19f to 19f)) {
+                            drawCircle(color,3f*u,Offset(x*u,y*u),style=stroke)
+                        }
+                    }
                     SettingsGlyph.FONT->Unit
                     SettingsGlyph.COMMAND->{line(9f,6f,3f,12f);line(3f,12f,9f,18f);line(15f,6f,21f,12f);line(21f,12f,15f,18f)}
                 }
@@ -119,7 +126,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
     Row(Modifier.fillMaxWidth().toggleable(checked,role=Role.Switch,onValueChange=onChange).padding(horizontal=16.dp,vertical=14.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-            Text(title,style=SettingsType.row)
+            Text(title,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
             subtitle?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         }
         Switch(checked=checked,onCheckedChange=null)
@@ -129,7 +136,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
 /** A labelled single choice among a few options. */
 @Composable internal fun <T> SettingsChoiceRow(title: String,options: List<T>,selected: T,label: @Composable (T)->String,onSelect: (T)->Unit,subtitle: String?=null) {
     Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-        Text(title,style=SettingsType.row)
+        Text(title,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
         subtitle?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             options.forEach {option->

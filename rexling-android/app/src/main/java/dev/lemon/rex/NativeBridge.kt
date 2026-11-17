@@ -16,5 +16,6 @@ object NativeBridge {
     @JvmStatic external fun forwardClose(handle: Long)
     @JvmStatic external fun forwardDestroy(handle: Long)
     @JvmStatic external fun forwardCloseAll()
+    @JvmStatic external fun networkCommand(request: String): String
     @JvmStatic external fun destroy(handle: Long)
 }
