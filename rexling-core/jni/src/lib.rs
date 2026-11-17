@@ -28,7 +28,7 @@ fn string(env: &mut JNIEnv, value: String) -> jstring {
         .unwrap_or(std::ptr::null_mut())
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_create(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_create(
     mut env: JNIEnv,
     _class: JClass,
 ) -> jlong {
@@ -53,7 +53,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_create(
     }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_command(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_command(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -79,7 +79,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_command(
     string(&mut env, message)
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_poll(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_poll(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -103,7 +103,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_poll(
     )
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_destroy(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_destroy(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -117,7 +117,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_destroy(
 
 /// Wait without holding the handle registry lock. Destroy wakes pending readers.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_awaitUpdate(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_awaitUpdate(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -136,7 +136,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_awaitUpdate(
     .unwrap_or(-1)
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_readUpdate(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_readUpdate(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -170,7 +170,7 @@ mod input_queue;
 mod prediction;
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadCreate(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadCreate(
     mut env: JNIEnv,
     _class: JClass,
     request: JString,
@@ -192,7 +192,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadCreate(
     }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadPoll(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadPoll(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -200,7 +200,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadPoll(
     string(&mut env, uploads::poll(handle as u64).to_string())
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadDestroy(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadDestroy(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -209,7 +209,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_uploadDestroy(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardCreate(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardCreate(
     mut env: JNIEnv,
     _class: JClass,
     request: JString,
@@ -231,7 +231,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardCreate(
     }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardPoll(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardPoll(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -239,7 +239,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardPoll(
     string(&mut env, forwards::poll(handle as u64).to_string())
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardSelect(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardSelect(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -250,7 +250,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardSelect(
     }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardClose(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardClose(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -258,7 +258,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardClose(
     forwards::close(handle as u64);
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardDestroy(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardDestroy(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -266,7 +266,7 @@ pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardDestroy(
     forwards::destroy(handle as u64);
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_shulhi_rex_NativeBridge_forwardCloseAll(
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_forwardCloseAll(
     _env: JNIEnv,
     _class: JClass,
 ) {

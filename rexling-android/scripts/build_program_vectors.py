@@ -261,7 +261,7 @@ def compile_glyph(root):
 
 
 def program_kinds():
-    text = (ROOT / "app/src/main/java/dev/shulhi/rex/ProgramIdentity.kt").read_text()
+    text = (ROOT / "app/src/main/java/dev/lemon/rex/ProgramIdentity.kt").read_text()
     body = re.search(r"enum class ProgramKind\s*\{([^}]*)\}", text).group(1)
     return {name.strip() for name in body.split(",") if name.strip()}
 

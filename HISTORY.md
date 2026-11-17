@@ -17,7 +17,7 @@ git log --all --graph --decorate --oneline
 git log legacy/android --oneline
 git log legacy/probe --oneline
 git log -m --follow -- rexling-core/src/control.rs
-git log -m --follow -- rexling-android/app/src/main/java/dev/shulhi/rex/MainActivity.kt
+git log -m --follow -- rexling-android/app/src/main/java/dev/lemon/rex/MainActivity.kt
 ```
 
 Use `-m` to examine the import merge against each parent when following file

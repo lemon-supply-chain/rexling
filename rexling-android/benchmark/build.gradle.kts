@@ -1,6 +1,6 @@
 plugins { id("com.android.test") }
 android {
-    namespace="dev.shulhi.rex.benchmark"
+    namespace="dev.lemon.rex.benchmark"
     compileSdk {version=release(37)}
     defaultConfig {
         minSdk=28

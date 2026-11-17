@@ -36,7 +36,7 @@ def main():
     version_code = int(re.search(r"(?m)^package: .*versionCode='([0-9]+)'", badging).group(1))
     label = re.search(r"(?m)^application-label:'([^']*)'$", badging).group(1)
     assert label == "Rexling", label
-    expected = {f"Java_dev_shulhi_rex_NativeBridge_{name}" for name in ["create", "command", "poll", "awaitUpdate", "readUpdate", "destroy", "uploadCreate", "uploadPoll", "uploadDestroy"]}
+    expected = {f"Java_dev_lemon_rex_NativeBridge_{name}" for name in ["create", "command", "poll", "awaitUpdate", "readUpdate", "destroy", "uploadCreate", "uploadPoll", "uploadDestroy"]}
     libraries = []
     profiles = []
     with zipfile.ZipFile(apk) as archive, tempfile.TemporaryDirectory(prefix="rex-apk-") as temporary:
@@ -58,7 +58,7 @@ def main():
     assert any(item["name"].endswith("librex_android.so") for item in libraries)
     assert any(item["name"].endswith("libc++_shared.so") for item in libraries)
     manifest = run([sdk / "cmdline-tools/latest/bin/apkanalyzer", "manifest", "print", apk])
-    assert 'package="dev.shulhi.rex"' in manifest
+    assert 'package="dev.lemon.rex"' in manifest
     debuggable='android:debuggable="true"' in manifest
     if args.require_release:
         assert not debuggable,"Release must not be debuggable"

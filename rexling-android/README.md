@@ -21,7 +21,8 @@ The release APK is `app/build/outputs/apk/release/app-release.apk` (arm64, API 2
 Run `./scripts/gradle.sh :app:shareRelease` for a copy in `dist/` named
 `Rexling-<date>-build<code>-<commit>-arm64-release.apk`, with a SHA-256 checksum.
 Its identity matches **⋮ → About Rexling**; local edits add `-modified`.
-The package remains `dev.shulhi.rex`, preserving existing installs and settings.
+The application ID is `dev.lemon.rex`, so this fork installs alongside the
+upstream `dev.shulhi.rex` app and keeps separate settings.
 Local releases retain the development signing identity; configure production
 signing separately before publishing. SDK paths and caches remain ignored.
 

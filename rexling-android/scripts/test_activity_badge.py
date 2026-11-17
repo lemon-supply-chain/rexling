@@ -28,10 +28,10 @@ def main():
     session=created['session_id']
     try:
         for apk in apks:subprocess.run([adb,'-s',args.serial,'install','-r',str(apk)],check=True)
-        command=[adb,'-s',args.serial,'shell','am','instrument','-w','-e','class','dev.shulhi.rex.ActivityAttentionTest,dev.shulhi.rex.ActivitySheetTest','-e','attention_server',args.server,'-e','attention_session',session,'dev.shulhi.rex.test/androidx.test.runner.AndroidJUnitRunner']
+        command=[adb,'-s',args.serial,'shell','am','instrument','-w','-e','class','dev.lemon.rex.ActivityAttentionTest,dev.lemon.rex.ActivitySheetTest','-e','attention_server',args.server,'-e','attention_session',session,'dev.lemon.rex.test/androidx.test.runner.AndroidJUnitRunner']
         output=subprocess.check_output(command,text=True);print(output)
         if 'OK (6 tests)' not in output:raise RuntimeError('Activity instrumentation failed')
-        image=subprocess.check_output([adb,'-s',args.serial,'exec-out','run-as','dev.shulhi.rex','cat','cache/activity-attention.png'])
+        image=subprocess.check_output([adb,'-s',args.serial,'exec-out','run-as','dev.lemon.rex','cat','cache/activity-attention.png'])
         target=ROOT/'.build/activity-attention.png';target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(image)
         print('Badge screenshot:',target)
     finally:

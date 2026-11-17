@@ -227,8 +227,8 @@ With debug and Android test APKs installed on an arm64 emulator, run:
 
 ```sh
 adb -s emulator-5554 shell am instrument -w -e class \
-  dev.shulhi.rex.NativeImageUploadTest,dev.shulhi.rex.TerminalImageInputTest,dev.shulhi.rex.ClipboardImagePasteTest \
-  dev.shulhi.rex.test/androidx.test.runner.AndroidJUnitRunner
+  dev.lemon.rex.NativeImageUploadTest,dev.lemon.rex.TerminalImageInputTest,dev.lemon.rex.ClipboardImagePasteTest \
+  dev.lemon.rex.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
 These use isolated loopback peers and test image content, progress/confirmation,

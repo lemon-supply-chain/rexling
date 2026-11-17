@@ -16,14 +16,14 @@ def main():
     if not args.copy_existing:
         env=os.environ.copy();env['ANDROID_SERIAL']=args.serial
         cmd=[str(ROOT/'scripts/gradle.sh'),':benchmark:connectedProfileAndroidTest',
-            '-Pandroid.testInstrumentationRunnerArguments.class=dev.shulhi.rex.benchmark.BaselineProfileGenerator','--no-daemon']
+            '-Pandroid.testInstrumentationRunnerArguments.class=dev.lemon.rex.benchmark.BaselineProfileGenerator','--no-daemon']
         if args.serial.startswith('emulator-'):cmd+=['-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR']
         subprocess.run(cmd,cwd=ROOT,env=env,check=True)
     outputs=ROOT/'benchmark/build/outputs/connected_android_test_additional_output/profile/connected'
     profiles=list(outputs.glob('*/BaselineProfileGenerator_offlineTerminalJourney-startup-prof.txt'))
     if len(profiles)!=1:raise SystemExit('Expected one successful device collection; found '+str(len(profiles)))
     data=profiles[0].read_text()
-    if 'Ldev/shulhi/rex/' not in data:raise SystemExit('Collection does not contain Rexlet code')
+    if 'Ldev/lemon/rex/' not in data:raise SystemExit('Collection does not contain Rexlet code')
     # Startup-profile rules are also valid Baseline Profile rules. This single offline
     # startup-to-terminal journey covers both, including Compose and JNI decoding.
     for name in ['baseline-prof.txt','startup-prof.txt']:

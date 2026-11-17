@@ -22,11 +22,11 @@ val revision=gitOutput("rev-parse","--short=10","HEAD").takeIf {it.matches(Regex
 val modified=gitOutput("status","--porcelain","--untracked-files=no").isNotBlank()
 
 android {
-    namespace = "dev.shulhi.rex"
+    namespace = "dev.lemon.rex"
     ndkVersion = "30.0.16248370"
     compileSdk { version = release(37) }
     defaultConfig {
-        applicationId = "dev.shulhi.rex"
+        applicationId = "dev.lemon.rex"
         minSdk = 28
         targetSdk = 37
         versionCode = 105

@@ -22,8 +22,9 @@ rexling/
 
 The probe keeps its original investigation implementation and evidence for protocol
 experiments. The app uses the maintained `rexling-core` crate, through `rexling-jni`.
-The crate alias inside JNI remains `rex_core`; Android's package `dev.shulhi.rex`
-and native-library name are unchanged, preserving installed app data and updates.
+The crate alias inside JNI remains `rex_core`; the native-library name is
+unchanged. The Android application ID is `dev.lemon.rex`, so this fork installs
+alongside the upstream `dev.shulhi.rex` app with its own data and history.
 
 ## Install on Android
 

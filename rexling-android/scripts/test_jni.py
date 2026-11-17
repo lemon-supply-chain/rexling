@@ -25,10 +25,10 @@ def main():
     jdk = studio if studio.exists() else Path(env["JAVA_HOME"])
     output = ROOT / ".build/jni-smoke"
     output.mkdir(parents=True, exist_ok=True)
-    run([jdk / "bin/javac", "-encoding", "UTF-8", "-d", output, ROOT / "tools/jni-smoke/dev/shulhi/rex/NativeBridge.java"])
+    run([jdk / "bin/javac", "-encoding", "UTF-8", "-d", output, ROOT / "tools/jni-smoke/dev/lemon/rex/NativeBridge.java"])
     extension = "dylib" if platform.system() == "Darwin" else "so"
     library = CORE / f".build/rust/debug/librex_android.{extension}"
-    run([jdk / "bin/java", "--enable-native-access=ALL-UNNAMED", f"-Drex.native.library={library}", "-cp", output, "dev.shulhi.rex.NativeBridge"])
+    run([jdk / "bin/java", "--enable-native-access=ALL-UNNAMED", f"-Drex.native.library={library}", "-cp", output, "dev.lemon.rex.NativeBridge"])
 
 
 if __name__ == "__main__":

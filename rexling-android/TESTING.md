@@ -42,7 +42,7 @@ Circular navigation checks (from the monorepo root):
 
 ```sh
 ANDROID_SERIAL=emulator-5554 ./rexling-android/scripts/gradle.sh :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=dev.shulhi.rex.SessionHeaderLoopTest,dev.shulhi.rex.PaneChromeTest
+  -Pandroid.testInstrumentationRunnerArguments.class=dev.lemon.rex.SessionHeaderLoopTest,dev.lemon.rex.PaneChromeTest
 ```
 
 Use a dedicated emulator. The nine checks cover both wrap directions, two-item
@@ -56,7 +56,7 @@ Opt-in host allocation check (from the monorepo root):
 ```sh
 REXLINK_RENDER_BENCHMARK=1 REXLINK_RENDER_BENCHMARK_OUTPUT=/tmp/rexlink-render-benchmark.json \
   ./rexling-android/scripts/gradle.sh :app:testDebugUnitTest \
-  --tests dev.shulhi.rex.RenderWorkBenchmarkTest --rerun-tasks --no-daemon
+  --tests dev.lemon.rex.RenderWorkBenchmarkTest --rerun-tasks --no-daemon
 ```
 
 This uses ThreadMXBean on the build JDK and includes test-loop overhead. It is
