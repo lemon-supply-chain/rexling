@@ -114,6 +114,28 @@ Tests and verification ensure that:
 4. **Haptic Feedback**:
    - Standardized `HapticFeedbackType.TextHandleMove` and `LongPress` across dock keys, repeat keys, joystick interactions, and shortcut selections.
 
+### 3.7 Program-Driven IME Anchor
+
+Because the PTY keeps its full-height grid, the keyboard viewport is positioned entirely by
+`TerminalKeyboardFocus` (`TerminalView.keyboardFocus`) and `terminalImePan`. That anchor used to
+require a reported hardware cursor, so programs that hide the cursor (`?25` DECSET/DECRST) left
+the viewport anchored at the top of the grid and their prompt or composer stayed behind the IME.
+Neither `pi` (which paints a reverse-video fake caret with `\x1B[7m` and always writes
+`\x1B[?25l`) nor `cursor-agent` ever reports a cursor, and neither emits OSC 133 semantic prompt
+metadata, so the semantic-zone fallbacks cannot help.
+
+`TerminalImeAnchor.kt` resolves the anchor per program from a data table:
+
+- `ImeAnchor.CURSOR`: only the reported cursor moves the viewport (shells, editors, monitors).
+- `ImeAnchor.CONTENT`: the reported cursor still wins; without one the last painted row anchors
+  the viewport, so a hidden caret reveals its own editor above the keyboard.
+- `ImeAnchorRule` matches executable base names and install-path fragments against
+  `ProgramIdentity.matchNames`. Adding a program is one entry in `TerminalImeAnchors.rules`;
+  unknown or pending programs keep `CURSOR`, which never moves a viewport on its own.
+- Scrollback (`scroll.below > 0`) keeps the current view for both anchors, and content whose last
+  painted row is already visible does not pan (`terminalImePan` caps the shift at `covered` and at
+  the anchor row height).
+
 ---
 
 ## 4. Verification & Testing
@@ -125,4 +147,5 @@ Tests and verification ensure that:
   - Run via: `cd rexling-core && cargo test`
 - **Android unit tests**:
   - `TerminalRowWindowTest`: Verifies top/bottom clipping, origin offsets, continuity across height transitions, and touch coordinate inversion.
+  - `TerminalImePanTest` / `TerminalImeAnchorTest`: Verifies that editor cursor moves do not recenter a settled viewport, that hidden-caret programs (pi, cursor-agent) anchor on the last painted row, and that every other program keeps the cursor anchor.
   - Run via: `cd rexling-android && ./gradlew testDebugUnitTest`

@@ -142,6 +142,7 @@ import dev.chrisbanes.haze.hazeSource
                                 if(retiring || block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
                                 view.interactive=center
                                 view.keyboardSuggestions=programs[block.id]?.kind!=ProgramKind.NEOVIM
+                                view.imeAnchor=TerminalImeAnchors.anchor(programs[block.id])
                                 view.controlled=center && controlled && block.id==liveBlock
                                 view.imageInputTarget=imageTarget
                                 view.onImage=if(center && block.id==liveBlock) onImage else {_,release->release();false}

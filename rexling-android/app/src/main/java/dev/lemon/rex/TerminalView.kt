@@ -106,11 +106,13 @@ class TerminalView(context: Context) : View(context) {
         get()=currentScreen
         set(value) {setScreen(value,false)}
     internal var onKeyboardFocus: (TerminalKeyboardFocus?)->Unit={}
+    /** Chosen by program identity: a hidden caret still has to reveal its editor above the IME. */
+    internal var imeAnchor: ImeAnchor = ImeAnchor.CURSOR
+        set(value) {if(field!=value) {field=value;reportCursorViewport()}}
     internal val keyboardFocus: TerminalKeyboardFocus? get() {
         val frame=screen ?: return null
-        if(frame.scroll.below>0) return null
-        val row=frame.cursorY?.takeIf {it in 0 until frame.rows} ?: return null
-        val lastText=frame.lines.indexOfLast {cells->cells.any {cell->cell.width>0 && cell.text.any {it!='\u0000' && !it.isWhitespace()}}}
+        val row=frame.imeAnchorRow(imeAnchor) ?: return null
+        val lastText=frame.lastPaintedRow()
         val bottom=insetTop+(row+1)*cellHeight+insetBottom
         return TerminalKeyboardFocus(insetTop+row*cellHeight,bottom,
             max(bottom,insetTop+(lastText+1)*cellHeight+insetBottom))
