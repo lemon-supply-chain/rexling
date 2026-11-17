@@ -136,6 +136,14 @@ metadata, so the semantic-zone fallbacks cannot help.
   painted row is already visible does not pan (`terminalImePan` caps the shift at `covered` and at
   the anchor row height).
 
+### 3.8 Predictive Local Echo & Cursor Coordinates
+
+To minimize typing latency over mobile high-latency connections, Rexling implements Mosh-style local echo (`prediction.rs`):
+
+- **Cursor Tracking**: Ghostty reports both drawn (`cursor`) and known viewport positions (`cursor_at`). Programs that hide the hardware cursor (`pi`, `cursor-agent`) park their caret at their input prompt; tracking `cursor_at` enables local echo predictions even when the drawn cursor is hidden.
+- **Engine Coordination**: Typed characters are drawn optimistically and confirmed or dropped upon server frames.
+- **Defensive Server Lifecycle**: Predictive echo commands (`command("prediction", ...)`) are guarded so that unconfigured or empty server profiles (`endpoint.isBlank()`) do not send premature RPCs to the engine, and error banners are suppressed on empty workspaces where no active servers exist.
+
 ---
 
 ## 4. Verification & Testing
@@ -144,6 +152,7 @@ metadata, so the semantic-zone fallbacks cannot help.
   - `a_resize_holds_frames_until_the_repaint_burst_goes_quiet` (verifies settling debounce logic).
   - `resize_keeps_an_at_bottom_viewport_pinned_to_new_output`.
   - `resize_keeps_a_scrolled_viewport_on_its_row`.
+  - `prediction::tests` (verifies predictive echo epoch confirmation, hidden-cursor tracking, backspace and overflow handling).
   - Run via: `cd rexling-core && cargo test`
 - **Android unit tests**:
   - `TerminalRowWindowTest`: Verifies top/bottom clipping, origin offsets, continuity across height transitions, and touch coordinate inversion.
