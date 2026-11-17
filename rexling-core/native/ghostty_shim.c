@@ -396,7 +396,8 @@ int rp_frame(RpTerminal *t, RpFrame *frame, CellFn callback, void *userdata) {
   GET(GHOSTTY_RENDER_STATE_DATA_OVERSCAN,&captured);
   frame->overscan_above=captured.above;frame->overscan_below=captured.below;
   frame->cursor_x=cursor.viewport_x; frame->cursor_y=cursor.viewport_y;
-  frame->cursor_visible=cursor.visible && cursor.viewport_has_value;
+  // Bit 0: drawn cursor. Bit 1: position known even when hidden, as TUIs park it for IMEs.
+  frame->cursor_visible=(cursor.visible && cursor.viewport_has_value) | (cursor.viewport_has_value<<1);
   frame->cursor_style=(uint8_t)cursor.visual_style;frame->cursor_blinking=cursor.blinking;
   // A restored terminal can have command boundaries while its cursor is in output.
   if(!(frame->input_flags&2) && !t->semantic_scanned && !t->semantic_seen) {

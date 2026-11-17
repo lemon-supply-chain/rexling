@@ -98,11 +98,13 @@ pub struct Cell {
     pub width: u8,
     pub hyperlink: Option<String>,
 }
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Frame {
     pub columns: u16,
     pub rows: u16,
     pub cursor: Option<(u16, u16)>,
+    /// The cursor position even while hidden; TUIs such as pi park it at their input.
+    pub cursor_at: Option<(u16, u16)>,
     pub cursor_style: u8,
     pub cursor_blinking: bool,
     pub foreground: [u8; 3],
@@ -412,7 +414,8 @@ impl Terminal {
         Ok(Frame {
             columns: raw.columns,
             rows: raw.rows,
-            cursor: (raw.cursor_visible != 0).then_some((raw.cursor_x, raw.cursor_y)),
+            cursor: (raw.cursor_visible & 1 != 0).then_some((raw.cursor_x, raw.cursor_y)),
+            cursor_at: (raw.cursor_visible & 2 != 0).then_some((raw.cursor_x, raw.cursor_y)),
             cursor_style: raw.cursor_style,
             cursor_blinking: raw.cursor_blinking != 0,
             foreground: raw.foreground,

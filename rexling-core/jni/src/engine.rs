@@ -226,6 +226,8 @@ struct Actor {
     sessions: Value,
     windows: Value,
     screen: Option<Arc<Frame>>,
+    /// Predictive local echo; `screen` is the server frame with its guesses drawn over it.
+    predictor: crate::prediction::Predictor,
     selected_session: String,
     selected_block: String,
     navigation_id: u64,
@@ -292,6 +294,7 @@ impl Actor {
             sessions: json!([]),
             windows: json!([]),
             screen: None,
+            predictor: crate::prediction::Predictor::new(),
             selected_session: String::new(),
             selected_block: String::new(),
             navigation_id: 0,
@@ -503,11 +506,20 @@ impl Actor {
                         self.program_task=Some(program_task(self.endpoint.clone().unwrap(),self.selected_session.clone(),ids));
                         self.program_refresh=tokio::time::Instant::now()+Duration::from_secs(4);
                     }
+                    if self.predictor.expire(std::time::Instant::now()) {self.dirty=true;}
                     if self.visible && (self.dirty || animation_at.is_some_and(|at|at<=now)) {
                         self.dirty=false;animation_at=None;
                         if let Some(replica)=self.replica.as_mut().filter(|r|r.ready()) {
                             match replica.terminal().and_then(|t|if t.render_ready()? {t.frame().map(Some)} else {Ok(None)}) {
-                                Ok(Some(frame))=>{animation_at=frame.next_image_delay_ms.map(|ms|now+Duration::from_millis(ms));self.screen=Some(Arc::new(frame));self.publish_frame();}
+                                Ok(Some(frame))=>{
+                                    animation_at=frame.next_image_delay_ms.map(|ms|now+Duration::from_millis(ms));
+                                    let frame=Arc::new(frame);
+                                    let target=self.input_target();
+                                    self.predictor.retarget(&prediction_key(&target));
+                                    self.predictor.observe(frame.clone(),std::time::Instant::now());
+                                    self.screen=Some(self.predictor.display(frame));
+                                    self.publish_frame();
+                                }
                                 Ok(None)=>{self.dirty=true;}
                                 Err(e)=>{self.error=e.to_string();self.publish();}
                             }
@@ -528,6 +540,7 @@ impl Actor {
     }
     async fn disconnect(&mut self) {
         self.commands.clear();self.input_acks.clear();
+        self.predictor.reset();
         self.connect_task=None;self.other_owner=false;
         self.preview_task = None;
         self.summary_task = None;
@@ -551,6 +564,7 @@ impl Actor {
     fn lose_connections(&mut self) {
         self.progress_reports.clear();self.activity_dirty=true;
         self.commands.clear();self.input_acks.clear();
+        self.predictor.reset();
         self.connect_task=None;self.other_owner=false;
         self.preview_task = None;
         self.summary_task = None;
@@ -893,6 +907,12 @@ impl Actor {
             if encoded.is_empty() {return Ok(());}
             encoded.as_str()
         } else {value["text"].as_str().context("text required")?};
+        if value["type"] == "input" {
+            let program = crate::prediction::program(&self.programs[target.block.as_str()]);
+            self.predictor.input(&prediction_key(&target), text, program, std::time::Instant::now());
+        } else if !click {
+            self.predictor.reset();
+        }
         if !click && let Some(replica)=self.replica.as_mut().filter(|r|r.ready()) {replica.terminal()?.scroll_to_bottom();self.dirty=true;}
         // Unlike terminal.write, block.event is serialized by Rex on this connection.
         // An unidentified key with text preserves our already-encoded input bytes;
@@ -954,6 +974,11 @@ impl Actor {
                 self.windows = json!([]);
                 self.sessions = json!([]);
                 self.publish();
+            }
+            "prediction" => {
+                let mode=value["mode"].as_str().and_then(crate::prediction::Mode::parse).context("prediction mode must be off, slow or always")?;
+                self.predictor.set_mode(mode);
+                self.dirty=true;
             }
             "retry" | "network" => {
                 let network=value["type"]=="network";
@@ -1651,6 +1676,8 @@ fn clear_ownership_error(error: &mut String) {
     if matches!(error.as_str(),"Take control before typing"|"Take control before typing or resizing") {error.clear();}
 }
 fn same_process(a: &Value,b: &Value) -> bool {a["pid"].is_number() && a["name"].is_string() && a["pid"]==b["pid"] && a["name"]==b["name"]}
+/// Predictions belong to one pane on one connection.
+fn prediction_key(target: &Target) -> String {format!("{}\n{}\n{}",target.session,target.block,target.connection)}
 fn display_title(event: &Value) -> String {event["title"].as_str().unwrap_or("").chars().filter(|c|!c.is_control()).take(256).collect()}
 fn program_working(process: &Value, status: &Value) -> bool {
     let foreground=&process["foreground"];

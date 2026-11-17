@@ -268,7 +268,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
             client.visible=profile.id==activeServerId
             if(activityVisible) client.activity(true)
             palette?.let(client::updateTerminalTheme)
-            client.updatePredictiveEcho(predictiveEcho)
+            if(profile.endpoint.isNotBlank()) client.updatePredictiveEcho(predictiveEcho)
             if(!foreground) client.pause()
             observers[profile.id]=viewModelScope.launch {
                 client.chromeState.collect {state->

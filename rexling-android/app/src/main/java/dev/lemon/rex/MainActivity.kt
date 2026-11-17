@@ -331,7 +331,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                     if(blocks.isEmpty() && state.connected && !state.creating && state.sessions.isEmpty()) {
                         EmptySessionContent(model.activeServer.label,ready,{newSession=true},Modifier.weight(1f).fillMaxWidth())
                     }
-                    if(state.error.isNotBlank() && state.phase !in listOf("connecting","reconnecting")) Text(state.error,Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(10.dp),
+                    if(model.servers.isNotEmpty() && state.error.isNotBlank() && state.phase !in listOf("connecting","reconnecting")) Text(state.error,Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(10.dp),
                         color=MaterialTheme.colorScheme.onErrorContainer,fontSize=11.sp,maxLines=3,overflow=TextOverflow.Ellipsis)
                     if(blocks.isNotEmpty()) {
                         Box(Modifier.weight(1f).fillMaxWidth().padding(bottom=3.dp)) {

@@ -292,6 +292,7 @@ mod wire_tests {
             columns: 100,
             rows: 50,
             cursor: Some((0, 0)),
+            cursor_at: Some((0, 0)),
             cursor_style: 1,
             cursor_blinking: false,
             foreground: [255; 3],
