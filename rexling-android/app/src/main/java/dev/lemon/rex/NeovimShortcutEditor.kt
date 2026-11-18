@@ -30,7 +30,7 @@ internal object NeovimShortcutEditor {
         val result=nodes.flatMap {node->if(node.id!=source) listOf(node) else if(node.group==null) emptyList() else listOf(node.copy(shortcuts=node.shortcuts.filterIndexed {index,_->index!=child}))}.toMutableList()
         if(item.group.isBlank()) {
             val at=if(old?.group==null && old!=null) nodes.indexOf(old).coerceAtMost(result.size) else result.size
-            result.add(at,NeovimEditNode(id=if(old?.group==null) old?.id ?: UUID.randomUUID().toString() else UUID.randomUUID().toString(),shortcuts=listOf(item.copy(group=""))))
+            result.add(at,NeovimEditNode(id=old?.takeIf {it.group==null}?.id ?: UUID.randomUUID().toString(),shortcuts=listOf(item.copy(group=""))))
         } else {
             val at=result.indexOfFirst {it.group==item.group}
             require(at>=0) {"Choose an existing group."}

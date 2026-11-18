@@ -108,8 +108,6 @@ pub struct Frame {
     pub cursor: Option<(u16, u16)>,
     /// Viewport position even when the application hides its cursor glyph.
     pub cursor_position: Option<(u16,u16)>,
-    /// Alias for cursor_position for backward compatibility with local predictor.
-    pub cursor_at: Option<(u16,u16)>,
     pub cursor_style: u8,
     pub cursor_blinking: bool,
     pub foreground: [u8; 3],
@@ -433,7 +431,6 @@ impl Terminal {
             rows: raw.rows,
             cursor: (raw.cursor_visible != 0).then_some((raw.cursor_x, raw.cursor_y)),
             cursor_position: (raw.cursor_has_position != 0).then_some((raw.cursor_x,raw.cursor_y)),
-            cursor_at: (raw.cursor_has_position != 0).then_some((raw.cursor_x,raw.cursor_y)),
             cursor_style: raw.cursor_style,
             cursor_blinking: raw.cursor_blinking != 0,
             foreground: raw.foreground,

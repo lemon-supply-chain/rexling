@@ -56,9 +56,10 @@ internal object NetworkSettings {
     fun selectedKey(endpoint: String)=keyLibrary().selected(endpoint)
     fun hasKey(endpoint: String)=selectedKey(endpoint)!=null
     fun keyEndpoints(id: String)=keyLibrary().endpoints(id)
+    private fun refreshLibrary(library: SshKeyLibrary) {sshKeys.value=library.list();sshKeyBindings.value=library.assigned()}
     private fun saveLibrary(library: SshKeyLibrary) {
         check(preferences.edit().putString("ssh_library",library.encode()).commit()) {"Could not save SSH keys"}
-        sshKeys.value=library.list();sshKeyBindings.value=library.assigned()
+        refreshLibrary(library)
     }
     private fun migrateKeys() {
         if(!preferences.contains("ssh_library")) {
@@ -68,7 +69,7 @@ internal object NetworkSettings {
             }
             check(preferences.edit().putString("ssh_library",library.encode()).remove("keys").commit()) {"Could not migrate SSH keys"}
         }
-        val library=keyLibrary();sshKeys.value=library.list();sshKeyBindings.value=library.assigned()
+        refreshLibrary(keyLibrary())
     }
     private fun command(type: String,body: JSONObject=JSONObject()): JSONObject = JSONObject(NativeBridge.networkCommand(body.put("type",type).toString()))
     fun initialize(application: Context) {

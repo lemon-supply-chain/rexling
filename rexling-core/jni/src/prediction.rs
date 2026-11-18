@@ -183,7 +183,7 @@ impl Predictor {
 
     fn eligible(frame: &Frame) -> bool {
         frame.input_flags & ALTERNATE_SCREEN == 0
-            && frame.cursor_at.is_some()
+            && frame.cursor_position.is_some()
             && frame.scroll_offset + frame.scroll_visible >= frame.scroll_total
     }
 
@@ -261,7 +261,7 @@ impl Predictor {
             return;
         }
         let hidden_cursor = frame.cursor.is_none();
-        let Some(origin) = frame.cursor_at else { return };
+        let Some(origin) = frame.cursor_position else { return };
         for c in text.chars() {
             if c == '\r' && program == Program::Pi && self.awaiting.is_none() {
                 // pi submits the message and clears its editor; wait for that frame, staying visible.
@@ -274,7 +274,7 @@ impl Predictor {
                 // Typed before pi redrew: we cannot tell where it lands, so fall back to hidden guesses.
                 self.tentative();
             }
-            let Some((x, y)) = self.cursor.or(frame.cursor_at) else { return };
+            let Some((x, y)) = self.cursor.or(frame.cursor_position) else { return };
             match c {
                 ' '..='~' => {
                     if x + 1 >= frame.columns {
@@ -358,7 +358,7 @@ impl Predictor {
             self.base.clone()
         };
         if let Some((origin, _)) = self.awaiting
-            && frame.cursor_at.is_some_and(|at| at != origin)
+            && frame.cursor_position.is_some_and(|at| at != origin)
         {
             // pi has handled Enter, so every earlier key too; leftovers would cover its cleared editor.
             self.awaiting = None;
@@ -390,7 +390,7 @@ impl Predictor {
                 self.cursor = y.checked_sub(shift).map(|y| (x, y));
             }
         }
-        let Some((cx, cy)) = frame.cursor_at else {
+        let Some((cx, cy)) = frame.cursor_position else {
             self.reset();
             return;
         };
@@ -543,7 +543,7 @@ mod tests {
             columns: COLS,
             rows: ROWS,
             cursor: visible.then_some(cursor),
-            cursor_at: Some(cursor),
+            cursor_position: Some(cursor),
             cursor_style: 1,
             cursor_blinking: true,
             foreground: [200; 3],
