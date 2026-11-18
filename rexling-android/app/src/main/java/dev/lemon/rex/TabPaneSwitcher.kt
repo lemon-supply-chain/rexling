@@ -67,15 +67,13 @@ import kotlinx.coroutines.launch
         return program.tabTitle(tab.label,block?.label.orEmpty(),windows.indexOf(tab)+1,titles[block?.id].orEmpty())
     }
     val drawerSurface=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
-    val closeSwitcherDescription=stringResource(R.string.a11y_close_tab_and_pane_switcher)
     val pagesDescription=stringResource(R.string.a11y_tab_and_pane_pages)
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,
         dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
         Column(drawerSurface.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
         DrawerHandle()
         Column(Modifier.fillMaxWidth().height(panelHeight).padding(bottom=4.dp)) {
-            Row(Modifier.fillMaxWidth().padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                Row(Modifier.weight(1f).height(48.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh,RoundedCornerShape(12.dp)).padding(4.dp).selectableGroup()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).height(48.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh,RoundedCornerShape(12.dp)).padding(4.dp).selectableGroup()) {
                 listOf("Tabs" to windows.size,"Panes" to panes.size).forEachIndexed {page,(label,count)->
                     val active=pager.currentPage==page
                     Row(Modifier.weight(1f).fillMaxHeight().background(if(active) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,RoundedCornerShape(9.dp))
@@ -86,8 +84,6 @@ import kotlinx.coroutines.launch
                             Text(count.toString(),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                }
-                IconButton(onClick=onClose,modifier=Modifier.semantics {contentDescription=closeSwitcherDescription}) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(18.dp))}
             }
             if(error.isNotBlank()) Text(error,Modifier.padding(horizontal=16.dp,vertical=4.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.error,maxLines=2,overflow=TextOverflow.Ellipsis)
             HorizontalPager(pager,Modifier.fillMaxWidth().weight(1f).semantics {contentDescription=pagesDescription},verticalAlignment=Alignment.Top) {page->

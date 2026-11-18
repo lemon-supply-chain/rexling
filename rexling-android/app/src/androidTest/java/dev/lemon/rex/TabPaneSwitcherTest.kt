@@ -93,7 +93,7 @@ class TabPaneSwitcherTest {
         ui.onNodeWithText("New pane").assertIsDisplayed()
         ui.onNodeWithContentDescription("Pane Plan next steps").assertIsSelected()
         capture("panes-light")
-        ui.onNodeWithContentDescription("Close tab and pane switcher").performClick()
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
         ui.runOnIdle {assertEquals(listOf("dismiss"),calls)}
     }
     @Test fun aMissingSelectedPaneCannotCreateASplit() {

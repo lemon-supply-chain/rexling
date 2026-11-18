@@ -431,7 +431,6 @@
     <string name="a11y_control">Control</string>
     <string name="a11y_control_shortcuts">Control shortcuts</string>
     <string name="a11y_control_letter">Control %1$s</string>
-    <string name="a11y_close_tab_and_pane_switcher">Close tab and pane switcher</string>
     <string name="a11y_tab_and_pane_pages">Tab and pane pages</string>
     <string name="label_layout_unavailable">Layout unavailable</string>
     <string name="label_float_pane">Float pane</string>

@@ -431,7 +431,6 @@
     <string name="a11y_control">Ctrl</string>
     <string name="a11y_control_shortcuts">Ctrl 快捷键</string>
     <string name="a11y_control_letter">Ctrl %1$s</string>
-    <string name="a11y_close_tab_and_pane_switcher">关闭标签与分屏切换</string>
     <string name="a11y_tab_and_pane_pages">标签与分屏页面</string>
     <string name="label_layout_unavailable">布局不可用</string>
     <string name="label_float_pane">浮动分屏</string>
