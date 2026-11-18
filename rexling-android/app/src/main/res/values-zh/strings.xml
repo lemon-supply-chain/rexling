@@ -521,4 +521,77 @@
     <string name="label_close_tab_confirm_one">关闭“%1$s”？这将结束其分屏中的程序。</string>
     <string name="label_close_tab_confirm_many">关闭“%1$s”？这将结束其 %2$d 个分屏中的所有程序。</string>
     <string name="label_close_pane_confirm">关闭“%1$s”？这将结束此分屏中运行的程序。</string>
+
+    <!-- Ctrl Shortcuts -->
+    <string name="ctrl_shortcuts_title">Ctrl 快捷键</string>
+    <string name="close_ctrl_shortcuts">关闭 Ctrl 快捷键设置</string>
+    <string name="ctrl_shortcuts_drag_hint">点击编辑 · 长按拖动排序</string>
+    <string name="add_shortcut">添加快捷键</string>
+    <string name="a11y_ctrl_shortcut_list">Ctrl 快捷键列表</string>
+    <string name="a11y_edit_ctrl_shortcut">编辑 Ctrl 快捷键 %1$s</string>
+    <string name="a11y_remove_ctrl_shortcut">移除 Ctrl 快捷键 %1$s</string>
+    <string name="move_up">上移</string>
+    <string name="move_down">下移</string>
+    <string name="add_ctrl_shortcut">添加 Ctrl 快捷键</string>
+    <string name="edit_ctrl_shortcut">编辑 Ctrl 快捷键</string>
+    <string name="cancel_ctrl_recording">取消录制 Ctrl 快捷键</string>
+    <string name="ctrl_recording_hint">首个按键已默认包含 Ctrl 修饰键，后续输入的按键将追加到序列中。</string>
+    <string name="no_keys_recorded">未录制任何按键</string>
+    <string name="press_keys">输入按键</string>
+    <string name="press_keys_placeholder">点击此处并按下按键</string>
+    <string name="ctrl_for_next_key">下一个按键添加 Ctrl</string>
+    <string name="undo">撤销</string>
+    <string name="clear">清除</string>
+    <string name="name_optional">名称（可选）</string>
+    <string name="a11y_prev_ctrl_page">上一页 Ctrl 快捷键</string>
+    <string name="a11y_next_ctrl_page">下一页 Ctrl 快捷键</string>
+
+    <!-- SSH Keys -->
+    <string name="no_key">无密钥</string>
+    <string name="no_key_tailscale">无密钥（Tailscale SSH）</string>
+    <string name="ssh_key_connect_without">当主机支持免密登录时无需密钥连接。</string>
+    <string name="ssh_key_saved_securely">已安全保存在此设备中</string>
+    <string name="paste_new_key">粘贴新密钥</string>
+    <string name="import_new_key">从文件导入</string>
+    <string name="close_ssh_keys">关闭 SSH 密钥设置</string>
+    <string name="ssh_keys_reuse_desc">在多台服务器间复用私钥。</string>
+    <string name="add_key">添加密钥</string>
+    <string name="no_ssh_keys_yet">暂无 SSH 密钥。可在此处或服务器设置中添加私钥。</string>
+    <string name="imported_key">已导入密钥</string>
+    <string name="not_assigned">未关联服务器</string>
+    <string name="server_count_one">1 台服务器</string>
+    <string name="server_count_many">%1$d 台服务器</string>
+    <string name="delete_ssh_key_desc">删除 SSH 密钥 %1$s</string>
+    <string name="ssh_keys_encryption_note">私钥在此手机上加密保存。移除服务器不会删除库中的密钥。</string>
+    <string name="rename_ssh_key">重命名 SSH 密钥</string>
+    <string name="delete_ssh_key_title">删除 SSH 密钥？</string>
+    <string name="delete_ssh_key_confirm_single">这将从此手机中彻底移除该密钥。</string>
+    <string name="delete_ssh_key_confirm_multi">有 %1$d 台服务器正在使用该密钥，其关联的密钥配置将被清空。</string>
+    <string name="paste_ssh_key_title">粘贴 SSH 密钥</string>
+    <string name="import_ssh_key_title">导入 SSH 密钥</string>
+    <string name="key_name">密钥名称</string>
+    <string name="key_name_placeholder">工作服务器密钥</string>
+    <string name="choose_file">选择文件</string>
+    <string name="ssh_key_dialog_note">在此设备上加密保存。同一个密钥可绑定至多台服务器。</string>
+    <string name="saving_with_ellipsis">正在保存…</string>
+    <string name="save_key">保存密钥</string>
+
+    <!-- Neovim Menu Options & Shortcuts -->
+    <string name="circular_wheel_hint">长按并滑动至按键，松开执行。在外部圆环上下滑动可翻页。</string>
+    <string name="enable_neovim_shortcuts">启用 Neovim 快捷键</string>
+    <string name="menu_appearance">菜单外观</string>
+    <string name="hold_and_drag_section">在分区内长按拖动排序</string>
+    <string name="add_group">添加分组</string>
+    <string name="rename_group">重命名分组</string>
+    <string name="group_name">分组名称</string>
+    <string name="groups">分组</string>
+    <string name="neovim_command">Neovim 命令</string>
+    <string name="command_mode_hint">在 Normal 模式下运行并自动按回车确认。</string>
+    <string name="key_sequence_hint">按顺序按下按键。只有选择时才会添加 Ctrl。</string>
+    <string name="ctrl_next">下键加 Ctrl</string>
+    <string name="alt_next">下键加 Alt</string>
+    <string name="group_format">分组：%1$s</string>
+    <string name="ungrouped">未分组</string>
+    <string name="command">命令</string>
+    <string name="key_sequence">按键序列</string>
 </resources>

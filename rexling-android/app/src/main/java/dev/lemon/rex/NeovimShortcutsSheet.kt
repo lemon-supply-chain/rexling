@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.res.stringResource
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.delay
 
@@ -62,7 +63,7 @@ private data class NeovimEditorRow(val id: String,val node: NeovimEditNode,val c
         return
     }
     if(options) {
-        SettingsDrawer("Neovim menu","Close Neovim menu settings",{options=false},hazeState,onBack={options=false},swipeToDismiss=false,backDescription="Back to Neovim shortcuts") {
+        SettingsDrawer(stringResource(R.string.shortcut_menu),"Close Neovim menu settings",{options=false},hazeState,onBack={options=false},swipeToDismiss=false,backDescription="Back to Neovim shortcuts") {
             Column(Modifier.fillMaxWidth().heightIn(max=600.dp).verticalScroll(rememberScrollState()).padding(16.dp)) {
                 NeovimMenuOptions(layout,onLayout,effect,onEffect,hapticsEnabled,onHaptics)
             }
@@ -83,26 +84,26 @@ private data class NeovimEditorRow(val id: String,val node: NeovimEditNode,val c
             drag.cross(amount,list);delay(16)
         }
     }
-    SettingsDrawer(current?.group ?: "Neovim shortcuts","Close Neovim shortcuts",onClose,hazeState,
+    SettingsDrawer(current?.group ?: stringResource(R.string.neovim_shortcuts),stringResource(R.string.close_shortcuts),onClose,hazeState,
         onBack=if(current!=null) ({groupId=null}) else null,swipeToDismiss=false,backDescription="Back to Neovim shortcuts") {
         Column(Modifier.fillMaxWidth().heightIn(max=620.dp).padding(horizontal=16.dp).padding(top=8.dp,bottom=12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             if(current==null) {
                 Row(Modifier.fillMaxWidth().toggleable(enabled,role=Role.Switch,onValueChange=onEnabled),verticalAlignment=Alignment.CenterVertically) {
-                    Text("Enable Neovim shortcuts",Modifier.weight(1f),style=SettingsType.row)
+                    Text(stringResource(R.string.enable_neovim_shortcuts),Modifier.weight(1f),style=SettingsType.row)
                     Switch(enabled,onCheckedChange=null)
                 }
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)).clickable {options=true}.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {  // alpha-ok item surface
                     Column(Modifier.weight(1f)) {
-                        Text("Menu appearance",style=SettingsType.row)
-                        Text(if(layout==NeovimShortcutLayout.CIRCULAR) "Circular · ${effect.label}" else "Grid",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.menu_appearance),style=SettingsType.row)
+                        Text(if(layout==NeovimShortcutLayout.CIRCULAR) "${stringResource(R.string.layout_circular)} · ${effect.label}" else stringResource(R.string.layout_grid),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     ChromeSymbol(ChromeIcon.RIGHT,Modifier.size(16.dp),MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                Text("Hold and drag within a section",Modifier.weight(1f),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                if(current==null) TextButton(onClick={renameId=null;groupDialog=true}) {Text("Add group",style=SettingsType.detail)}
-                TextButton(onClick={sourceId=null;sourceChild=null;editing=true}) {ChromeSymbol(ChromeIcon.ADD,Modifier.size(15.dp),MaterialTheme.colorScheme.primary);Spacer(Modifier.width(4.dp));Text("Add shortcut",style=SettingsType.detail)}
+                Text(stringResource(R.string.hold_and_drag_section),Modifier.weight(1f),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(current==null) TextButton(onClick={renameId=null;groupDialog=true}) {Text(stringResource(R.string.add_group),style=SettingsType.detail)}
+                TextButton(onClick={sourceId=null;sourceChild=null;editing=true}) {ChromeSymbol(ChromeIcon.ADD,Modifier.size(15.dp),MaterialTheme.colorScheme.primary);Spacer(Modifier.width(4.dp));Text(stringResource(R.string.add_shortcut),style=SettingsType.detail)}
             }
             LazyColumn(state=list,modifier=Modifier.fillMaxWidth().weight(1f,fill=false).heightIn(min=120.dp,max=380.dp)
                 .semantics {contentDescription="Neovim shortcut list"}.pointerInput(groupId) {
@@ -135,7 +136,7 @@ private data class NeovimEditorRow(val id: String,val node: NeovimEditNode,val c
                 if(rows.isEmpty() && current!=null) item {Text("Add a shortcut to this group.",Modifier.padding(12.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                 display.forEach {row->
                     if(current==null && row.group && row.id==display.firstOrNull {it.group}?.id) item(key="groups-heading") {
-                        Text("Groups",Modifier.padding(start=4.dp,top=8.dp,bottom=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.groups),Modifier.padding(start=4.dp,top=8.dp,bottom=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     item(key=row.id) {
                     val title=if(row.group) row.node.group.orEmpty() else row.shortcut!!.label
@@ -163,11 +164,11 @@ private data class NeovimEditorRow(val id: String,val node: NeovimEditNode,val c
             }
             error?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.error)}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
-                TextButton(onClick={update(NeovimShortcutEditor.fromItems(NeovimShortcuts.defaults));groupId=null}) {Text("Reset defaults",style=SettingsType.detail)}
+                TextButton(onClick={update(NeovimShortcutEditor.fromItems(NeovimShortcuts.defaults));groupId=null}) {Text(stringResource(R.string.reset_defaults),style=SettingsType.detail)}
                 Button(onClick={runCatching {
                     NeovimShortcutEditor.validate(nodes,populated=true)
                     onSave(NeovimShortcuts.editorText(NeovimShortcutEditor.flatten(nodes)))
-                }.fold(onSuccess={error=it;if(it==null) onClose()},onFailure={error=it.message})}) {Text("Save",style=SettingsType.row)}
+                }.fold(onSuccess={error=it;if(it==null) onClose()},onFailure={error=it.message})}) {Text(stringResource(R.string.save),style=SettingsType.row)}
             }
         }
     }
@@ -186,7 +187,7 @@ private data class NeovimEditorRow(val id: String,val node: NeovimEditNode,val c
 @Composable private fun NeovimGroupDialog(initial: String,onClose: ()->Unit,onSave: (String)->String?) {
     var name by rememberSaveable {mutableStateOf(initial)}
     var error by remember {mutableStateOf<String?>(null)}
-    AlertDialog(onDismissRequest=onClose,title={Text(if(initial.isEmpty()) "Add group" else "Rename group",style=SettingsType.row)},text={
-        Column {OutlinedTextField(name,{name=it;error=null},label={Text("Group name")},singleLine=true);error?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.error)}}
-    },confirmButton={TextButton(onClick={error=onSave(name)}) {Text("Done")}},dismissButton={TextButton(onClick=onClose) {Text("Cancel")}})
+    AlertDialog(onDismissRequest=onClose,title={Text(if(initial.isEmpty()) stringResource(R.string.add_group) else stringResource(R.string.rename_group),style=SettingsType.row)},text={
+        Column {OutlinedTextField(name,{name=it;error=null},label={Text(stringResource(R.string.group_name))},singleLine=true);error?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.error)}}
+    },confirmButton={TextButton(onClick={error=onSave(name)}) {Text(stringResource(R.string.done))}},dismissButton={TextButton(onClick=onClose) {Text(stringResource(R.string.cancel))}})
 }

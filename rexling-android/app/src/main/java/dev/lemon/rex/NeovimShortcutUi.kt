@@ -163,7 +163,7 @@ import kotlin.math.roundToInt
                     Text(stringResource(R.string.customize_shortcuts),Modifier.padding(horizontal=8.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.primary)
                 }
                 if(pages>1) Text("${pager.currentPage%pages+1}/$pages",Modifier.padding(horizontal=8.dp),fontFamily=MonoUi,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                ChromeButton(ChromeIcon.CLOSE,"Close $name shortcuts",modifier=Modifier.size(28.dp),onClick=onDismiss)
+                ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_shortcuts),modifier=Modifier.size(28.dp),onClick=onDismiss)
             }
         }
         }
@@ -175,31 +175,36 @@ import kotlin.math.roundToInt
 @Composable internal fun NeovimMenuOptions(layout: NeovimShortcutLayout,onLayout: (NeovimShortcutLayout)->Unit,
     effect: NeovimShortcutEffect,onEffect: (NeovimShortcutEffect)->Unit,hapticsEnabled: Boolean,onHaptics: (Boolean)->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text("Menu layout",style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.menu_layout),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 NeovimShortcutLayout.entries.forEach {choice->
                     FilterChip(selected=layout==choice,onClick={onLayout(choice)},
-                        label={Text(if(choice==NeovimShortcutLayout.GRID) "Grid" else "Circular",style=SettingsType.row)})
+                        label={Text(if(choice==NeovimShortcutLayout.GRID) stringResource(R.string.layout_grid) else stringResource(R.string.layout_circular),style=SettingsType.row)})
                 }
             }
             if(layout==NeovimShortcutLayout.CIRCULAR) {
-                Text("Opening effect",style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.opening_effect),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
                 FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     NeovimShortcutEffect.entries.forEach {choice->
-                        FilterChip(selected=effect==choice,onClick={onEffect(choice)},label={Text(choice.label,style=SettingsType.row)})
+                        FilterChip(selected=effect==choice,onClick={onEffect(choice)},label={Text(stringResource(when(choice) {
+                            NeovimShortcutEffect.FAN_OUT->R.string.effect_fan_out
+                            NeovimShortcutEffect.SPIN->R.string.effect_spin
+                            NeovimShortcutEffect.EXPAND->R.string.effect_expand
+                            NeovimShortcutEffect.NONE->R.string.effect_none
+                        }),style=SettingsType.row)})
                     }
                 }
-                Text(when(effect) {
-                    NeovimShortcutEffect.FAN_OUT->"Segments open clockwise in a wave."
-                    NeovimShortcutEffect.SPIN->"The wheel spins into place."
-                    NeovimShortcutEffect.EXPAND->"The wheel grows outward from the center."
-                    NeovimShortcutEffect.NONE->"Opens and closes immediately."
-                },style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(when(effect) {
+                    NeovimShortcutEffect.FAN_OUT->R.string.effect_fan_out_detail
+                    NeovimShortcutEffect.SPIN->R.string.effect_spin_detail
+                    NeovimShortcutEffect.EXPAND->R.string.effect_expand_detail
+                    NeovimShortcutEffect.NONE->R.string.effect_none_detail
+                }),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth().toggleable(hapticsEnabled,role=Role.Switch,onValueChange=onHaptics).padding(vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text("Selection haptics",Modifier.weight(1f),style=SettingsType.row)
+                    Text(stringResource(R.string.selection_haptics),Modifier.weight(1f),style=SettingsType.row)
                     Switch(checked=hapticsEnabled,onCheckedChange=null)
                 }
-                Text("Hold and slide to a segment; release to run. Swipe up/down on the outer ring for more pages.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.circular_wheel_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
     }
 }

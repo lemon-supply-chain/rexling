@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import dev.chrisbanes.haze.HazeState
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -61,19 +62,19 @@ import dev.chrisbanes.haze.HazeState
             error=onDone(it);if(error==null) keyboard?.hide()
         }.onFailure {error=it.message}
     }
-    SettingsDrawer(if(item==null) "Add Neovim shortcut" else "Edit Neovim shortcut","Cancel Neovim shortcut editing",{keyboard?.hide();onCancel()},hazeState,swipeToDismiss=false) {
+    SettingsDrawer(if(item==null) stringResource(R.string.add_shortcut) else stringResource(R.string.edit),stringResource(R.string.cancel),{keyboard?.hide();onCancel()},hazeState,swipeToDismiss=false) {
         Column(Modifier.fillMaxWidth().heightIn(max=600.dp).verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=8.dp,bottom=12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                FilterChip(commandMode,{commandMode=true;error=null},label={Text("Command",style=SettingsType.row)})
-                FilterChip(!commandMode,{commandMode=false;error=null},label={Text("Key sequence",style=SettingsType.row)})
+                FilterChip(commandMode,{commandMode=true;error=null},label={Text(stringResource(R.string.command),style=SettingsType.row)})
+                FilterChip(!commandMode,{commandMode=false;error=null},label={Text(stringResource(R.string.key_sequence),style=SettingsType.row)})
             }
             if(commandMode) {
-                OutlinedTextField(command,{command=it;error=null},Modifier.fillMaxWidth(),label={Text("Neovim command")},prefix={Text(":")},placeholder={Text("w")},singleLine=true,
+                OutlinedTextField(command,{command=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.neovim_command))},prefix={Text(":")},placeholder={Text("w")},singleLine=true,
                     keyboardOptions=KeyboardOptions(autoCorrectEnabled=false))
-                Text("Runs in Normal mode and confirms with Enter automatically.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.command_mode_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                Text("Press your keys in order. Ctrl is only added when you choose it.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                if(sequence.isBlank()) Text("No keys recorded",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant) else NeovimShortcutChips(sequence)
+                Text(stringResource(R.string.key_sequence_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(sequence.isBlank()) Text(stringResource(R.string.no_keys_recorded),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant) else NeovimShortcutChips(sequence)
                 OutlinedTextField("",{text->text.forEach {record(NeovimKeyRecorder.char(it))}},Modifier.fillMaxWidth().onPreviewKeyEvent {event->
                     val key=event.nativeKeyEvent
                     if(key.action!=KeyEvent.ACTION_DOWN) false else {
@@ -87,30 +88,31 @@ import dev.chrisbanes.haze.HazeState
                         }
                         if(token==null) false else {record(token,key.isCtrlPressed || ctrl,key.isAltPressed || alt);true}
                     }
-                },label={Text("Press keys")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,autoCorrectEnabled=false,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={record("<CR>")}))
+                },label={Text(stringResource(R.string.press_keys))},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,autoCorrectEnabled=false,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={record("<CR>")}))
                 FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
                     listOf("Space" to "<Space>","Tab" to "<Tab>","Esc" to "<Esc>","Enter" to "<CR>","↑" to "<Up>","↓" to "<Down>","←" to "<Left>","→" to "<Right>","Backspace" to "<BS>").forEach {(label,token)->
                         OutlinedButton(onClick={record(token)},contentPadding=PaddingValues(horizontal=10.dp,vertical=0.dp),modifier=Modifier.height(32.dp)) {Text(label,style=SettingsType.detail)}
                     }
                 }
                 FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                    FilterChip(ctrl,{ctrl=!ctrl;if(ctrl) alt=false},label={Text("Ctrl next",style=SettingsType.detail)})
-                    FilterChip(alt,{alt=!alt;if(alt) ctrl=false},label={Text("Alt next",style=SettingsType.detail)})
-                    TextButton(onClick={sequence=NeovimKeyRecorder.tokens(sequence).dropLast(1).joinToString("");error=null},enabled=sequence.isNotEmpty()) {Text("Undo",style=SettingsType.detail)}
-                    TextButton(onClick={sequence="";error=null},enabled=sequence.isNotEmpty()) {Text("Clear",style=SettingsType.detail)}
+                    FilterChip(ctrl,{ctrl=!ctrl;if(ctrl) alt=false},label={Text(stringResource(R.string.ctrl_next),style=SettingsType.detail)})
+                    FilterChip(alt,{alt=!alt;if(alt) ctrl=false},label={Text(stringResource(R.string.alt_next),style=SettingsType.detail)})
+                    TextButton(onClick={sequence=NeovimKeyRecorder.tokens(sequence).dropLast(1).joinToString("");error=null},enabled=sequence.isNotEmpty()) {Text(stringResource(R.string.undo),style=SettingsType.detail)}
+                    TextButton(onClick={sequence="";error=null},enabled=sequence.isNotEmpty()) {Text(stringResource(R.string.clear),style=SettingsType.detail)}
                 }
             }
-            OutlinedTextField(name,{name=it;error=null},Modifier.fillMaxWidth(),label={Text("Name (optional)")},singleLine=true)
+            OutlinedTextField(name,{name=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.name_optional))},singleLine=true)
+            val ungroupedText=stringResource(R.string.ungrouped)
             Box {
-                TextButton(onClick={groupMenu=true}) {Text("Group: ${group.ifBlank {"Ungrouped"}}",style=SettingsType.row);Spacer(Modifier.width(6.dp));ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(16.dp),MaterialTheme.colorScheme.primary)}
+                TextButton(onClick={groupMenu=true}) {Text(stringResource(R.string.group_format,group.ifBlank {ungroupedText}),style=SettingsType.row);Spacer(Modifier.width(6.dp));ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(16.dp),MaterialTheme.colorScheme.primary)}
                 DropdownMenu(groupMenu,{groupMenu=false}) {
-                    (listOf("")+groups).forEach {choice->DropdownMenuItem(text={Text(choice.ifBlank {"Ungrouped"},style=SettingsType.row)},onClick={group=choice;groupMenu=false})}
+                    (listOf("")+groups).forEach {choice->DropdownMenuItem(text={Text(choice.ifBlank {ungroupedText},style=SettingsType.row)},onClick={group=choice;groupMenu=false})}
                 }
             }
             error?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.error)}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
-                TextButton(onClick={keyboard?.hide();onCancel()}) {Text("Cancel",style=SettingsType.row)}
-                Button(onClick=::finish) {Text("Done",style=SettingsType.row)}
+                TextButton(onClick={keyboard?.hide();onCancel()}) {Text(stringResource(R.string.cancel),style=SettingsType.row)}
+                Button(onClick=::finish) {Text(stringResource(R.string.done),style=SettingsType.row)}
             }
         }
     }

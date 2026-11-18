@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -164,9 +165,11 @@ private const val CONTROL_SHORTCUT_PAGE_SIZE=12
                     }
                 }
                 if(pages>1) Row(Modifier.fillMaxWidth().height(28.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-                    TextButton(onClick={highlighted=-1;scope.launch {pager.animateScrollToPage(pager.currentPage-1)}},enabled=pager.currentPage>0,contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp).semantics {contentDescription="Previous Ctrl shortcuts page"}) {Text("↑",fontSize=13.sp)}
+                    val prevPageDesc=stringResource(R.string.a11y_prev_ctrl_page)
+                    val nextPageDesc=stringResource(R.string.a11y_next_ctrl_page)
+                    TextButton(onClick={highlighted=-1;scope.launch {pager.animateScrollToPage(pager.currentPage-1)}},enabled=pager.currentPage>0,contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp).semantics {contentDescription=prevPageDesc}) {Text("↑",fontSize=13.sp)}
                     Text("${pager.currentPage+1}/$pages",fontFamily=MonoUi,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick={highlighted=-1;scope.launch {pager.animateScrollToPage(pager.currentPage+1)}},enabled=pager.currentPage<pages-1,contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp).semantics {contentDescription="Next Ctrl shortcuts page"}) {Text("↓",fontSize=13.sp)}
+                    TextButton(onClick={highlighted=-1;scope.launch {pager.animateScrollToPage(pager.currentPage+1)}},enabled=pager.currentPage<pages-1,contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp).semantics {contentDescription=nextPageDesc}) {Text("↓",fontSize=13.sp)}
                 }
             }
             }
