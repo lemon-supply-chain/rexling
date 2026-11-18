@@ -112,7 +112,7 @@ fn program_progress(process: &Value, status: &Value) -> Option<u64> {
 ### Dynamic Countdown & Progress Pie Icon
 When a foreground command reports `progress` (e.g., `timer` countdown or build tasks), Rexling bridges this progress into `terminalProgress`:
 - In `rexling-core`: Foreground OSC 7501 `progress` merges into `terminalProgress` exposed to the frontend whenever no conflicting OSC 9;4 sequence overrides it.
-- In `rexling-android`: For programs without static catalog icon artwork in `program_tiles.json` (such as `timer`), `PaneProgramTile` in `ProgramStack.kt` automatically renders a dynamic **Countdown / Progress Pie Tile** (`CountdownIcon`). The dial visually sweeps from 12 o'clock clockwise based on current percentage, eliminating the need to create static tile/glyph artwork mappings for countdown/timer CLI utilities.
+- In `rexling-android`: For programs without static catalog icon artwork in `program_tiles.json` (such as `timer`), `PaneProgramTile` in `ProgramStack.kt` renders a dynamic **Countdown / Progress Pie Tile** (`CountdownIcon`) — but only where live `progress` data exists (tab strip, session header). The dial visually sweeps from 12 o'clock clockwise based on current percentage, eliminating the need to create static tile/glyph artwork mappings for countdown/timer CLI utilities. Surfaces without progress data (activity rows, pane switcher, floating dock) always show the program's own icon; a static dial with no data would be meaningless there.
 
 ## 3. Shell Script Wrappers, Subshells & Compound Commands (`mole`, `mo`)
 

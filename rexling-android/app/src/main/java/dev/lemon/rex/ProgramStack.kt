@@ -100,8 +100,9 @@ import androidx.compose.ui.unit.dp
                 Offset(inset,inset),Size((size.width-inset*2).coerceAtLeast(0f),(size.height-inset*2).coerceAtLeast(0f)),
                 CornerRadius((radius.toPx()-inset).coerceAtLeast(0f)),style=Stroke(stroke))
         },contentAlignment=Alignment.Center) {
-        val isTimer = program.executable == "timer" || program.candidates.any { ProgramIdentity.baseName(it) == "timer" }
-        if ((progress != null && (progress.percent != null || progress.busy)) || isTimer) {
+        // The dial is a live progress visualization; surfaces without progress
+        // data (activity rows, switchers, docks) keep the program's own icon.
+        if (progress != null && (progress.percent != null || progress.busy)) {
             CountdownIcon(progress, Modifier.size(if(large) 19.dp else 13.dp), ink)
         } else {
             ProgramIcon(program,Modifier.size(if(large) 19.dp else 13.dp),ink)
