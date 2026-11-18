@@ -5,6 +5,7 @@ No rasterization: SVG masks are monochrome alpha logos and can be drawn as tinte
 paths. Unsupported SVG features fail generation instead of silently losing art.
 """
 import base64
+import colorsys
 import hashlib
 import json
 import re
@@ -75,14 +76,28 @@ def mix(first, second, amount):
     return "#" + "".join(f"{round(x*(1-amount)+y*amount):02X}" for x, y in zip(a, b))
 
 
+def shade(color, factor):
+    """Scale HSV value without changing hue, so warm plates stay warm."""
+    r, g, b = (int(color[i:i+2], 16) / 255 for i in (1, 3, 5))
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    r, g, b = colorsys.hsv_to_rgb(h, s, max(0.0, min(1.0, v * factor)))
+    return "#" + "".join(f"{round(channel*255):02X}" for channel in (r, g, b))
+
+
 SURFACE_ATTRIBUTES = {"x1": "0", "y1": "0", "x2": "0", "y2": "1"}
 
 
+def flat_plate(plate, accent):
+    """Small tiles use the plain brand plate; the runtime adds the pixel rim."""
+    return {"op": "path", "path": plate, "evenOdd": False,
+            "paint": {"color": accent, "alpha": 1.0}}
+
+
 def surface(plate, accent):
-    """Body ramp, keel shadow, top sheen and rim light, all shaped by the plate path."""
-    top = mix(accent, "#FFFFFF", .14)
-    bottom = mix(mix(accent, "#050A14", .14), "#123A66", .063)
-    dark = mix(mix(accent, "#000000", .35), "#0B1220", .45)
+    """Body ramp, keel shadow and top sheen for the detailed tile tier."""
+    top = mix(accent, "#FFF3E6", .14)
+    bottom = shade(accent, .86)
+    dark = shade(accent, .38)
 
     def fill(stops):
         return {"op": "path", "path": plate, "evenOdd": False,
@@ -98,16 +113,7 @@ def surface(plate, accent):
     sheen = fill([{"offset": "0", "stop-color": "#FFFFFF", "stop-opacity": ".10"},
                   {"offset": ".25", "stop-color": "#FFFFFF", "stop-opacity": ".06"},
                   {"offset": ".42", "stop-color": "#FFFFFF", "stop-opacity": "0"}])
-    rim = {"op": "path", "path": plate, "evenOdd": False,
-           "paint": {"gradient": "linearGradient", "attributes": dict(SURFACE_ATTRIBUTES),
-                     "stops": [{"offset": "0", "stop-color": "#FFFFFF", "stop-opacity": ".45"},
-                               {"offset": ".40", "stop-color": "#FFFFFF", "stop-opacity": ".14"},
-                               {"offset": "1", "stop-color": "#FFFFFF", "stop-opacity": "0"}],
-                     "alpha": 1.0, "stroke": True, "strokeWidth": 1.0,
-                     "strokeCap": "round", "strokeJoin": "round"}}
-    # The rim is clipped so its outer half cannot bleed past the plate edge.
-    return [{"op": "save"}, body, keel, sheen, {"op": "restore"},
-            {"op": "save"}, {"op": "clip", "path": plate}, rim, {"op": "restore"}]
+    return [{"op": "save"}, body, keel, sheen, {"op": "restore"}]
 
 
 def compile_icon(root, ink=None, crop=True):
@@ -212,10 +218,15 @@ def compile_icon(root, ink=None, crop=True):
         prelude = leading(commands)
         symbol = balanced(commands[state["symbol"]:])
         surface_commands = surface(state["plate"], accent)
-        # The plate half is rebuilt from the derived material; the artwork keeps
-        # ownership of the logo only, so no baked shadow or plate gradient survives.
-        return prelude + surface_commands + symbol, {
-            "symbol": len(prelude) + len(surface_commands),
+        # Two plate tiers share one stream: flat for 18/27dp, ceramic for 34dp.
+        # The runtime rim is drawn in device pixels, so it is not baked here.
+        flat = flat_plate(state["plate"], accent)
+        return prelude + [flat] + surface_commands + symbol, {
+            "layers": {
+                "flat": len(prelude),
+                "surface": len(prelude) + 1,
+                "symbol": len(prelude) + 1 + len(surface_commands),
+            },
             "accent": accent,
         }
     return commands, {"symbol": None, "accent": None}
@@ -299,19 +310,20 @@ def build():
     compiled.update({path.stem.replace("-", "_"): compile_icon(ET.parse(path).getroot())
                     for path in sorted((OVERLAY / "tiles").glob("*.svg"))})
     icons = {name: commands for name, (commands, _) in compiled.items()}
-    symbols = {name: meta["symbol"] for name, (_, meta) in compiled.items()}
+    layers = {name: meta["layers"] for name, (_, meta) in compiled.items()}
     accents = {name: meta["accent"] for name, (_, meta) in compiled.items()}
     glyphs = {p.stem.replace("-", "_"): compile_glyph(ET.parse(p).getroot())
               for folder in (SOURCE / "glyphs", OVERLAY / "glyphs") for p in sorted(folder.glob("*.svg"))}
     manifest = json.loads((OVERLAY / "manifest.json").read_text())
     validate(manifest, icons, glyphs)
-    for name, index in symbols.items():
-        assert 0 < index < len(icons[name]), f"Symbol split of {name} is out of range"
+    for name, layer in layers.items():
+        assert (0 < layer["flat"] < layer["surface"] < layer["symbol"] < len(icons[name])
+                ), f"Layer split of {name} is out of range"
     outlines = {icons[name][next(i for i, c in enumerate(icons[name]) if c["op"] == "path")]["path"]
                 for name in icons}
     assert len(outlines) == 1, "Every tile must share one plate outline"
     payload = {"width": 61, "height": 48, "plate": outlines.pop(), "icons": icons, "glyphs": glyphs,
-               "symbols": symbols, "accents": accents,
+               "layers": layers, "accents": accents,
                "skins": manifest["skins"], "aliases": manifest["aliases"]}
     index_payload = {
         "icons": list(icons.keys()),

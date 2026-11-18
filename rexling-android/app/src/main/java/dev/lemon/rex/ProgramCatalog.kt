@@ -72,8 +72,8 @@ internal object ProgramCatalog {
 
     fun glyphs(assets: AssetManager): JSONObject = fullCatalog(assets).getJSONObject("glyphs")
 
-    /** Command index where a tile's plate ends and its logo begins. */
-    fun symbols(assets: AssetManager): JSONObject = fullCatalog(assets).optJSONObject("symbols") ?: JSONObject()
+    /** Command offsets for the flat plate, ceramic surface and logo of each tile. */
+    fun layers(assets: AssetManager): JSONObject = fullCatalog(assets).optJSONObject("layers") ?: JSONObject()
 
     /** Plate colour of each tile, used to derive tile and symbol shadow tones. */
     fun accents(assets: AssetManager): JSONObject = fullCatalog(assets).optJSONObject("accents") ?: JSONObject()

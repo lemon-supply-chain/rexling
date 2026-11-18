@@ -279,6 +279,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                 blocks.map {state.programs[it.id] ?: ProgramIdentity.Loading},blocks.indexOfFirst {it.id==chosen}.coerceAtLeast(0),state.directories[displayedBlock].orEmpty(),{picker="sessions"},model::selectSessionTarget,model::jumpLastSession,
                 serverIcons=model.sessionTargets.associate {it.key to it.server.icon}+(currentSessionKey to model.activeServer.icon),
                 working=chosen in state.workingBlocks,isPaneWorking={index->blocks.getOrNull(index)?.id in state.workingBlocks},
+                progress=state.terminalProgress[chosen],
                 title=if(model.servers.isEmpty()) stringResource(R.string.app_name) else (state.programs[chosen] ?: ProgramIdentity.Loading).paneTitle(blocks.firstOrNull {it.id==chosen}?.label.orEmpty(),state.titles[chosen].orEmpty()),menu={
                     Box {
                         ChromeButton(ChromeIcon.MORE,stringResource(R.string.terminal_menu)){menu=true}

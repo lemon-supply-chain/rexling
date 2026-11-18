@@ -319,6 +319,7 @@ struct Actor {
     title_owners: Value,
     title_events: BTreeMap<String, Value>,
     process_events: BTreeMap<String, Value>,
+    status_progress: Value,
     program_refresh: tokio::time::Instant,
     preview_updates: BTreeMap<String, Arc<Frame>>,
     session_details: Value,
@@ -371,6 +372,7 @@ impl Actor {
             title_owners: json!({}),
             title_events: BTreeMap::new(),
             process_events: BTreeMap::new(),
+            status_progress: json!({}),
             program_refresh: tokio::time::Instant::now(),
             preview_updates: BTreeMap::new(),
             session_details: json!({}),
@@ -391,8 +393,16 @@ impl Actor {
             shared.revision += 1;
             shared.frame=self.screen.clone();
             shared.key=format!("{}:{}",self.selected_session,self.selected_block);
+            let mut terminal_progress = crate::progress::selected(&self.progress_reports, &self.selected_session);
+            if let (Some(map), Some(status_map)) = (terminal_progress.as_object_mut(), self.status_progress.as_object()) {
+                for (id, val) in status_map {
+                    if !map.contains_key(id) {
+                        map.insert(id.clone(), val.clone());
+                    }
+                }
+            }
             shared.json=json!({"phase":self.phase,"endpoint":self.server,
-                "terminalProgress":crate::progress::selected(&self.progress_reports,&self.selected_session),"identity":self.identity,"error":self.error,"notice":self.notice,"clipboard":self.clipboard,"sessions":self.sessions,
+                "terminalProgress":terminal_progress,"identity":self.identity,"error":self.error,"notice":self.notice,"clipboard":self.clipboard,"sessions":self.sessions,
                 "windows":self.windows,"selectedSession":self.selected_session,
                 "selectedBlock":self.selected_block,"navigationId":self.navigation_id,"tabMoveId":self.tab_move_id,"paneMoveId":self.pane_move_id,"connectionEpoch":self.connection_epoch,"otherOwner":self.other_owner,"controlled":self.controlled,"creating":self.creating,"sessionDetails":self.session_details,"programs":self.programs,"directories":self.directories,"titles":self.titles,"working":self.working,"activityError":self.activity_error,"activityPartial":self.activity_partial,"activityLoading":(self.activity_open || self.monitoring) && (self.activity_task.is_some() || self.activity_full),"attentionCount":self.attention_count}).to_string();
             shared
@@ -602,6 +612,7 @@ impl Actor {
         self.session_details = json!({});self.activity=json!([]);self.activity_dirty=true;self.activity_panes=json!([]);self.activity_titles.clear();self.attention_count=0;self.activity_pending.clear();self.activity_inflight.clear();self.activity_full=false;self.activity_error.clear();self.activity_partial=false;
         self.programs = json!({});
         self.directories = json!({});self.titles=json!({});self.working=json!([]);self.title_owners=json!({});self.title_events.clear();self.process_events.clear();
+        self.status_progress = json!({});
         self.retry = None;
         self.control_token = None;
         self.data_resume = None;
@@ -752,10 +763,12 @@ impl Actor {
             self.program_task = None;
             self.programs = json!({});
             self.directories = json!({});self.titles=json!({});self.working=json!([]);self.title_owners=json!({});self.title_events.clear();self.process_events.clear();
+            self.status_progress = json!({});
             self.program_refresh = tokio::time::Instant::now();
         }
         self.windows = next;
         let live: BTreeSet<_>=self.windows.as_array().into_iter().flatten().flat_map(|w|w["blocks"].as_array().into_iter().flatten()).filter_map(|b|b["id"].as_str().map(str::to_owned)).collect();
+        if let Some(map)=self.status_progress.as_object_mut() {map.retain(|k,_| live.contains(k));}
         let before=self.progress_reports.len();
         self.progress_reports.retain(|_,r|r["session"]!=self.selected_session || r["block"].as_str().is_some_and(|id|live.contains(id)));
         if self.progress_reports.len()!=before {self.activity_dirty=true;}
@@ -788,6 +801,7 @@ impl Actor {
         self.programs=details["programs"].clone();self.directories=details["directories"].clone();
         self.titles=details["titles"].clone();self.working=details["working"].clone();
         self.title_owners=details["owners"].clone();
+        if let Some(prog)=details.get("progress").cloned() {self.status_progress=prog;}
         for (id,owner) in &self.process_events {
             if !same_process(&self.title_owners[id],owner) {self.titles[id]=json!("");}
             self.title_owners[id]=owner.clone();
@@ -804,7 +818,10 @@ impl Actor {
             "progress_report" => {if crate::progress::update(&mut self.progress_reports,&self.selected_session,id,payload) {self.activity_dirty=true;}},
             "process_changed" => {
                 let owner=json!({"pid":payload["foreground"]["pid"],"name":payload["foreground"]["name"]});
-                if !same_process(&self.title_owners[id],&owner) && self.progress_reports.remove(&crate::activity::pane_key(&self.selected_session,id)).is_some() {self.activity_dirty=true;}
+                if !same_process(&self.title_owners[id],&owner) {
+                    if self.progress_reports.remove(&crate::activity::pane_key(&self.selected_session,id)).is_some() {self.activity_dirty=true;}
+                    if let Some(map)=self.status_progress.as_object_mut() {map.remove(id);}
+                }
                 self.title_owners[id]=owner.clone();self.process_events.insert(id.into(),owner);
                 if self.title_events.get(id).is_some_and(|event|!same_process(&self.title_owners[id],&event["owner"])) {
                     self.title_events.remove(id);self.titles[id]=json!("");
@@ -818,7 +835,11 @@ impl Actor {
                 if same_process(&self.title_owners[id],&payload["owner"]) {self.titles[id]=json!(display_title(payload));}
                 if crate::activity::apply_title(&mut self.activity,&self.selected_session,id,payload) {self.activity_dirty=true;}
             }
-            "child_exited" => {if self.progress_reports.remove(&crate::activity::pane_key(&self.selected_session,id)).is_some() {self.activity_dirty=true;}self.program_refresh=tokio::time::Instant::now();},
+            "child_exited" => {
+                if self.progress_reports.remove(&crate::activity::pane_key(&self.selected_session,id)).is_some() {self.activity_dirty=true;}
+                if let Some(map)=self.status_progress.as_object_mut() {map.remove(id);}
+                self.program_refresh=tokio::time::Instant::now();
+            },
             "program_status_changed" | "program_status_removed" => self.program_refresh=tokio::time::Instant::now(),
             _=>()
         }
@@ -1149,6 +1170,7 @@ impl Actor {
                     self.data=None;self.data_resume=None;self.replica=None;self.screen=None;self.controlled=false;
                     self.preview_task=None;self.program_task=None;self.summary_task=None;
                     self.programs=json!({});self.directories=json!({});self.titles=json!({});self.working=json!([]);self.title_owners=json!({});self.title_events.clear();self.process_events.clear();self.preview_updates.clear();
+                    self.status_progress = json!({});
                 }
                 self.sessions=self.control.as_mut().context("not connected")?.call("session.list",json!({})).await?["sessions"].clone();
                 self.creating=false;self.notice="Session closed".into();self.publish();
@@ -1253,6 +1275,7 @@ impl Actor {
                 self.program_task = None;
                 self.programs = json!({});
                 self.directories = json!({});self.titles=json!({});self.working=json!([]);self.title_owners=json!({});self.title_events.clear();self.process_events.clear();
+                self.status_progress = json!({});
                 self.program_refresh = tokio::time::Instant::now();
                 self.preview_updates.clear();
                 let session = value["id"]
@@ -1614,6 +1637,7 @@ impl Actor {
                 self.preview_task=None;self.program_task=None;self.summary_task=None;self.preview_updates.clear();
                 self.programs=json!({});self.directories=json!({});self.titles=json!({});self.working=json!([]);
                 self.title_owners=json!({});self.title_events.clear();self.process_events.clear();
+                self.status_progress = json!({});
                 self.sessions=self.control.as_mut().context("not connected")?.call("session.list",json!({})).await?["sessions"].clone();
                 Ok(false)
             }
@@ -1748,6 +1772,22 @@ fn program_working(process: &Value, status: &Value) -> bool {
         status["records"].as_array().into_iter().flatten().any(|record|
             record["owner"]["pid"]==foreground["pid"] && record["owner"]["name"]==foreground["name"] && record["state"]=="working")
 }
+fn program_progress(process: &Value, status: &Value) -> Option<u64> {
+    let foreground = &process["foreground"];
+    if !foreground["pid"].is_number() || !foreground["name"].is_string() {
+        return None;
+    }
+    status["records"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|record| {
+            record["owner"]["pid"] == foreground["pid"]
+                && record["owner"]["name"] == foreground["name"]
+                && record["state"] == "working"
+        })
+        .find_map(|record| record["progress"].as_u64().filter(|p| *p <= 100))
+}
 pub(crate) fn program_title(process: &Value, status: &Value, terminal: &Value) -> String {
     let foreground=&process["foreground"];
     let owned=|record: &Value| foreground["pid"].is_number() && foreground["name"].is_string()
@@ -1794,6 +1834,7 @@ fn program_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> Progra
             let mut titles = serde_json::Map::new();
             let mut working = Vec::new();
             let mut owners = serde_json::Map::new();
+            let mut progress = serde_json::Map::new();
             for id in ids.into_iter().take(64) {
                 if let Ok(process) = control.terminal(&session, &id, "process", json!({})).await {
                     let status = control
@@ -1803,13 +1844,16 @@ fn program_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> Progra
                     let terminal=control.terminal(&session,&id,"title",json!({})).await.unwrap_or(Value::Null);
                     owners.insert(id.clone(),json!({"pid":process["foreground"]["pid"],"name":process["foreground"]["name"]}));
                     if program_working(&process,&status) {working.push(id.clone());}
+                    if let Some(p) = program_progress(&process, &status) {
+                        progress.insert(id.clone(), json!({"state": "set", "progress": p}));
+                    }
                     titles.insert(id.clone(),json!(program_title(&process,&status,&terminal)));
                     directories.insert(id.clone(), json!(program_directory(&process)));
                     programs.insert(id, program_candidates(&process, &status));
                 }
             }
             let _ = control.close().await;
-            Ok::<_, anyhow::Error>(json!({"programs":programs,"directories":directories,"titles":titles,"working":working,"owners":owners}))
+            Ok::<_, anyhow::Error>(json!({"programs":programs,"directories":directories,"titles":titles,"working":working,"owners":owners,"progress":progress}))
         })
         .await
         .context("program metadata timed out")?
@@ -3100,6 +3144,37 @@ while True:
         runtime.block_on(actor.event(event("remove",Value::Null))).unwrap();assert!(actor.progress_reports.is_empty());assert_eq!(shared.lock().unwrap().activity.as_ref(),&json!([]));
         runtime.block_on(actor.event(event("indeterminate",Value::Null))).unwrap();actor.lose_connections();actor.publish();
         assert!(actor.progress_reports.is_empty());assert_eq!(shared.lock().unwrap().activity.as_ref(),&json!([]));
+    }
+
+    #[test] fn program_status_progress_populates_terminal_progress_and_clears() {
+        let process = json!({"foreground":{"pid":100,"name":"timer"}});
+        let status = json!({"records":[{"owner":{"pid":100,"name":"timer"},"state":"working","progress":65}]});
+        assert_eq!(program_progress(&process, &status), Some(65));
+        let done_status = json!({"records":[{"owner":{"pid":100,"name":"timer"},"state":"done","progress":100}]});
+        assert_eq!(program_progress(&process, &done_status), None);
+
+        let shared=Arc::new(Mutex::new(Shared{revision:0,json:String::new(),pending_previews:BTreeMap::new(),frame:None,key:String::new(),wire:crate::updates::WireBase::default(),activity:Arc::default()}));
+        let mut actor=Actor::new(shared.clone(),Arc::new(crate::updates::Updates::default()));
+        actor.selected_session="s".into();
+        actor.windows=json!([{"blocks":[{"id":"b1"}]}]);
+        actor.apply_program_details(json!({
+            "programs": {"b1": ["timer"]},
+            "directories": {"b1": "/tmp"},
+            "titles": {"b1": "Countdown"},
+            "working": ["b1"],
+            "owners": {"b1": {"pid": 100, "name": "timer"}},
+            "progress": {"b1": {"state": "set", "progress": 65}}
+        }));
+        actor.publish();
+        let state: Value = serde_json::from_str(&shared.lock().unwrap().json).unwrap();
+        assert_eq!(state["terminalProgress"]["b1"]["progress"], 65);
+        assert_eq!(state["terminalProgress"]["b1"]["state"], "set");
+
+        // When child exits, status_progress is cleared
+        actor.program_event("b1", "child_exited", &json!({}));
+        actor.publish();
+        let state_after: Value = serde_json::from_str(&shared.lock().unwrap().json).unwrap();
+        assert!(state_after["terminalProgress"]["b1"].is_null());
     }
 
     #[test] fn semantic_copy_is_local_and_uses_the_frozen_viewport_and_target() {

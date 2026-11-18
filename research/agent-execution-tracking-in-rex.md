@@ -73,7 +73,7 @@ printf '\033]7501;state=working:app=agy:title=<base64_title>\007'
 | `error` | Failure encountered | Retained in activity ledger as an error event |
 | `idle` | Waiting at prompt | Clears working indicator |
 
-### Native Working Detection
+### Native Working & Progress Detection
 In `rexling-core/jni/src/engine.rs`:
 ```rust
 fn program_working(process: &Value, status: &Value) -> bool {
@@ -90,7 +90,29 @@ fn program_working(process: &Value, status: &Value) -> bool {
                     && record["state"] == "working"
             })
 }
+
+fn program_progress(process: &Value, status: &Value) -> Option<u64> {
+    let foreground = &process["foreground"];
+    if !foreground["pid"].is_number() || !foreground["name"].is_string() {
+        return None;
+    }
+    status["records"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|record| {
+            record["owner"]["pid"] == foreground["pid"]
+                && record["owner"]["name"] == foreground["name"]
+                && record["state"] == "working"
+        })
+        .find_map(|record| record["progress"].as_u64().filter(|p| *p <= 100))
+}
 ```
+
+### Dynamic Countdown & Progress Pie Icon
+When a foreground command reports `progress` (e.g., `timer` countdown or build tasks), Rexling bridges this progress into `terminalProgress`:
+- In `rexling-core`: Foreground OSC 7501 `progress` merges into `terminalProgress` exposed to the frontend whenever no conflicting OSC 9;4 sequence overrides it.
+- In `rexling-android`: For programs without static catalog icon artwork in `program_tiles.json` (such as `timer`), `PaneProgramTile` in `ProgramStack.kt` automatically renders a dynamic **Countdown / Progress Pie Tile** (`CountdownIcon`). The dial visually sweeps from 12 o'clock clockwise based on current percentage, eliminating the need to create static tile/glyph artwork mappings for countdown/timer CLI utilities.
 
 ## 3. Shell Script Wrappers, Subshells & Compound Commands (`mole`, `mo`)
 

@@ -57,4 +57,23 @@ class ProgramCatalogDataTest {
             assertTrue(glyphs.has(indexGlyphs.getString(i)))
         }
     }
+
+    @Test fun everyTileDeclaresFlatSurfaceAndSymbolLayers() {
+        val icons = root.getJSONObject("icons")
+        val layers = root.getJSONObject("layers")
+        assertEquals(icons.length(), layers.length())
+        for (name in icons.keys()) {
+            val layer = layers.getJSONObject(name)
+            val commands = icons.getJSONArray(name)
+            val flat = layer.getInt("flat")
+            val surface = layer.getInt("surface")
+            val symbol = layer.getInt("symbol")
+            assertTrue("$name flat", flat in 1 until surface)
+            assertTrue("$name surface", surface < symbol)
+            assertTrue("$name symbol", symbol < commands.length())
+            assertEquals("path", commands.getJSONObject(flat).getString("op"))
+            assertEquals("path", commands.getJSONObject(surface + 1).getString("op"))
+            assertTrue("$name flat paint", commands.getJSONObject(flat).getJSONObject("paint").has("color"))
+        }
+    }
 }

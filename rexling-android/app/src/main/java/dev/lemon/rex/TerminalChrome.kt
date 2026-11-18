@@ -206,7 +206,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
     programs: List<ProgramIdentity>, paneIndex: Int, directory: String,
     onSessions: ()->Unit, onSelect: (String)->Unit, onLast: ()->Unit, title: String="", working: Boolean=false,
     isPaneWorking: (Int)->Boolean={if(it==paneIndex) working else false},
-    expanded: Boolean=false, serverIcons: Map<String,ServerIcon> = emptyMap(), menu: @Composable ()->Unit) {
+    expanded: Boolean=false, serverIcons: Map<String,ServerIcon> = emptyMap(), progress: TerminalProgress?=null, menu: @Composable ()->Unit) {
     val program=programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
     val anyWorking=working || programs.indices.any(isPaneWorking)
     val marquee=rememberRainbowMarquee(anyWorking)
@@ -282,7 +282,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
                     val y=if(iconDragging) iconDragY else iconSettle.value
                     val progress=(abs(y)/iconTravel).coerceIn(0f,1f)
                     translationY=y;scaleX=1f-.06f*progress;scaleY=scaleX;alpha=1f-.25f*progress
-                }) {ProgramStack(programs,paneIndex,framed=true,fixedSlot=true,marquee=marquee,isPaneWorking=isPaneWorking)}
+                }) {ProgramStack(programs,paneIndex,framed=true,fixedSlot=true,marquee=marquee,isPaneWorking=isPaneWorking,progress=progress)}
             }
             Spacer(Modifier.width(7.dp))
         }
@@ -517,7 +517,7 @@ internal val MonoUi = FontFamily(Font(R.font.jetbrains_mono_regular),Font(R.font
                         Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal=6.dp),
                             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(showTitle) Arrangement.spacedBy(2.dp) else Arrangement.Center) {
                             Box(Modifier.semantics {testTag="Tab program icon ${w.id}"}) {
-                                ProgramStack(programs,pane,fixedSlot=true,marquee=marquee,isPaneWorking={isPaneWorking(w,it)})
+                                ProgramStack(programs,pane,fixedSlot=true,marquee=marquee,isPaneWorking={isPaneWorking(w,it)},progress=progress)
                                 if(unread>0) {
                                     val layers=programs.size.coerceIn(1,3)
                                     val painted=if(layers==1) 22f else 21f+4f*(layers-1)

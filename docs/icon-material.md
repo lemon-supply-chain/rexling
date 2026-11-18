@@ -1,152 +1,155 @@
 # Program Tile Material Design
 
-Design direction and implementation plan for the skeuomorphic program tiles used in
-the tab bar, pane captions, floating dock and session header. This document replaces
-the earlier attempt that applied the generic frosted-glass SVG recipe directly.
+Design and implementation notes for the program tiles used in the tab bar, pane
+captions, floating dock and session header. The catalog contains 162 compiled
+tile artworks; unknown programs fall back to a procedural plate.
 
-Scope: 162 compiled tile artworks, two rendering paths (baked vector artwork and
-procedural skin), three real display sizes, one light and one dark chrome.
+Scope: two material tiers, one light and one dark chrome, and the compact sizes
+used by the chrome.
 
 ---
 
-## 1. Constraints that shape the design
+## 1. Constraints
 
 | Constraint | Consequence |
 | --- | --- |
-| Tiles render at 18dp, 27dp and 34dp only | Detail below ~0.5dp is invisible. No layered micro-texture, no multi-stop gloss bands. |
-| Vector catalog supports paths, solid fills and linear/radial gradients only | No `feGaussianBlur`, `feTurbulence`, `feComposite` in the artwork stream. Blur must be pre-rendered or faked. |
-| Hardware canvas has no blur filter below API 31 | Shadows are cached software-rendered bitmaps, not per-frame effects. |
-| 162 brand-coloured logos | A single primary colour would destroy identity. Material must be derived from each tile's own plate colour. |
-| Redraw happens every frame while a tile animates | Material must be static per tile: zero extra allocations, no `saveLayer` unless it replaces a cheaper path. |
-| Artwork carries its own rounded edge inset ~10% | Never clip the artwork; never paint over its silhouette edge. |
+| Tiles render at roughly 18–27dp and 34dp | Compact tiles cannot carry a multi-layer material. |
+| Vector catalog supports paths, solid fills and linear/radial gradients only | No runtime SVG filters; blur is pre-rendered or absent. |
+| Hardware canvas has no blur filter below API 31 | Contact shadows are cached software-rendered bitmaps. |
+| 162 brand-coloured logos | Material is derived from each tile's own plate colour. |
+| Redraw happens every frame while a tile animates | Material is static per tile; no per-frame shader or bitmap rebuilds. |
+| Artwork carries its own squircle edge inset | Never clip the plate to a rounded rectangle; use the artwork outline. |
 
 ---
 
-## 2. Material language
+## 2. Two tiers
 
-One language, three intensities. Physically it reads as a **matte ceramic disc with a
-chromed top edge**, lit from directly above.
+The tile is one object, but it is not rendered with the same stack at every
+size. The cues that make a 34dp tile read as ceramic collapse into subpixel
+haze at 18dp.
 
-Order from back to front:
+### Compact: below 30dp
 
-1. **Contact shadow** — the tile sits on the surface. Blurred, tinted with the plate
-   colour darkened to 20% value, never pure black.
-2. **Body** — vertical ramp: top lightened and warmed, middle at brand colour, bottom
-   darkened and cooled. Hue moves a few degrees, not just lightness, so the ramp looks
-   like a lit curved surface instead of a gradient fill.
-3. **Keel** — inner shadow along the bottom third, cool dark, tight. Sells the pressed
-   edge without a second visible outline.
-4. **Rim light** — a 1px bright edge along the top and sides, fading out by mid height.
-   This line is what makes a flat plate read as a physical object.
-5. **Sheen** — very low opacity white wash over the top 40% (direction A) or a defined
-   specular band (direction B). Off for the matte paper direction.
-6. **Symbol** — brand colours stay. Instead of recolouring, it gains a tight contact
-   shadow below and a thin bright edge on its upper contour.
-7. **Grain** — 1 texel per device pixel noise, 6–10% alpha, only at 34dp and above.
-   Below that it aliases into mush and costs sharpness.
+1. Contact shadow, sized for the tile.
+2. Flat brand plate.
+3. One device-pixel rim along the top and sides, fading by mid height.
 
-Legibility rule: at 18dp only 1, 3 and 4 survive; 5 drops to a whisper; 7 is disabled.
+No body ramp, no keel, no sheen, no symbol shadow or rim. The plate stays close
+to the brand colour, and the rim is the only material cue.
+
+### Detailed: 30dp and above
+
+1. Contact shadow.
+2. Body ramp: a warm top, the brand colour at mid height, and a darker bottom
+   derived from the same hue. The ramp does not mix every accent toward a
+   shared blue.
+3. Keel: a soft dark gradient in the bottom quarter.
+4. Rim: one device-pixel inner edge, brightest at the top.
+5. Sheen: a low white wash over the top 40%.
+6. Symbol: brand colours stay; the logo gains a tight dark shadow below and a
+   one-pixel bright offset above.
+7. Grain: reserved for a later pass; not implemented.
+
+Legibility rule: the compact tier is the default. The detailed tier is only
+used when the tile is at least 30dp wide.
 
 ---
 
-## 3. Directions
+## 3. Directions considered
 
-| | A · frosted ceramic (recommended) | B · soft glass | C · embossed paper |
+The original exploration compared three material languages:
+
+| | A · frosted ceramic (shipped basis) | B · soft glass | C · embossed paper |
 | --- | --- | --- | --- |
 | Read | Matte disc, machined edge | Glossy domed lens | Stamped paper label |
-| Body ramp | ±14% lightness, ±6° hue | ±25%, wider hue travel | ±6%, nearly flat |
-| Rim light | 0.45α, 1.1u | 0.58α, 1.4u | 0.30α, 0.9u, top only |
-| Keel | 0.22α, bottom 26% | 0.30α, bottom 30% | 0.14α, bottom 22% |
+| Body ramp | ±14% lightness, hue preserved | ±25%, wide hue travel | ±6%, nearly flat |
+| Rim light | 1 device pixel | 1.4u | 0.9u, top only |
+| Keel | 0.22α, bottom quarter | 0.30α | 0.14α |
 | Sheen | 0.10α flat wash | 0.22α + specular band | none |
-| Contact shadow | dy 1.4, blur 2.2, 0.34α | dy 1.8, blur 3.0, 0.44α | dy 0.8, blur 1.6, 0.22α |
-| Symbol shadow | dy 1.6, blur 1.6, 0.42α | dy 2.0, blur 2.2, 0.52α | dy 1.0, blur 1.0, 0.28α |
-| Grain | 6% at ≥34dp | 5% at ≥34dp | 3% at ≥34dp |
-| Risk | Needs careful rim at 18dp | Plastic, dated; fights the flat app chrome | Reads as a button, weak on dark chrome |
+| Risk | Rim must be pixel-calibrated | Plastic, dated; fights flat chrome | Reads as a button |
 
-A is recommended: it keeps the existing flat app language, survives 18dp, and the
-brand colour still owns the tile.
-
-Reference render: `.preview/preview.html` (generated from the real compiled logo paths,
-same plate geometry, three sizes on light and dark chrome).
+A is the basis for the detailed tier. B is no longer used by the procedural
+fallback: it had a 34% white wash and a 1dp white border, which made terminal
+tiles look like a different product from the catalog tiles.
 
 ---
 
-## 4. Where each layer comes from
+## 4. Layer sources
 
-Surface layers are **baked at build time** because they are pure gradient/path work
-and the rasteriser already supports them. Anything requiring blur or silhouette
-extraction happens at **runtime**.
-
-| Layer | Produced by | Notes |
-| --- | --- | --- |
-| Body ramp | `scripts/build_program_vectors.py` | Replace the artwork's own plate fill (first path inside the plate clip) with a 3-stop ramp derived from `accents[name]`. |
-| Keel | compiler | Extra `path(plate)` fill with a bottom-up gradient, emitted right after the plate group. |
-| Rim light | compiler | `path(plate)` stroke with a top-to-bottom fading gradient; no geometry needed beyond the plate path already used for the clip. |
-| Sheen | compiler | One extra gradient rect, plate-clipped. |
-| Contact shadow | runtime, cached | Rendered once per (tile, size) into a small bitmap with a software canvas and `BlurMaskFilter`, then drawn as a bitmap. Works on API 28–37 identically. |
-| Symbol shadow | runtime | The symbol half of the stream is already split out; replay it into a `saveLayer` with a `SRC_IN` colour filter at the dark accent tone. |
-| Symbol rim light | runtime | Draw the symbol picture four times at ±0.5px in pure white inside a layer, masked by the symbol's own alpha. |
-| Grain | runtime, cached | 64×64 deterministic speckle bitmap, `BitmapShader` repeat, 1 texel per device pixel. |
-
-The compiler already knows the plate path (it is the first `clip` in the stream) and
-the plate colour (emitted as `accents`), so layers 1–4 need no per-icon geometry work.
-
----
-
-## 5. Implementation steps
-
-1. `build_program_vectors.py`: emit `plate` (3 gradient stops per tile) and `extras`
-   (keel, rim, sheen commands) alongside the existing `symbols`/`accents`.
-   Regenerate `program_tiles.json`.
-2. `ProgramVectorPicture`: split the replayed picture into three parts —
-   `surface` (body + keel + rim + sheen), `symbol`, and drop the baked shadow paths
-   that the new contact shadow replaces.
-3. Add `TileShadow` cache: keyed by tile name + pixel size, holding the blurred plate
-   silhouette bitmap plus its offset.
-4. `drawTile()` becomes: shadow bitmap, surface, symbol shadow, symbol, symbol rim.
-5. Delete the current sheen/blur approximations that conflict with the new layers.
-6. Keep the busy marquee ring and the busy light wash untouched; they are separate
-   signals layered on top of the tile.
-
----
-
-## 6. Size table
-
-Material constants are expressed in tile units (1u = tile height / 48) and clamped to
-device pixels, so 18dp and 34dp look like the same object at different scales.
-
-| | 18dp | 27dp | 34dp |
+| Layer | Tier | Produced by | Notes |
 | --- | --- | --- | --- |
-| Rim | 1.1u (0.41dp) | 1.1u (0.62dp) | 1.1u (0.78dp) |
-| Keel height | 26% | 27% | 28% |
-| Contact shadow dy / blur | 0.5dp / 0.8dp | 0.8dp / 1.2dp | 1.0dp / 1.6dp |
-| Symbol shadow dy / blur | 0.22dp / 0.35dp | 0.35dp / 0.5dp | 0.45dp / 0.7dp |
-| Sheen | 0.08α | 0.10α | 0.10α |
-| Grain | off | off | 6% |
+| Flat plate | Compact | `scripts/build_program_vectors.py` | One path filled with the accent. |
+| Body ramp | Detailed | `scripts/build_program_vectors.py` | Three stops: warm top, accent, HSV-shaded bottom. |
+| Keel | Detailed | `scripts/build_program_vectors.py` | Bottom-quarter gradient in the accent's own dark tone. |
+| Sheen | Detailed | `scripts/build_program_vectors.py` | Top-40% white wash. |
+| Rim | Both | `ProgramVectorPicture.drawRim` | A 2px stroke clipped to the inner half, so one device pixel remains visible at every density. |
+| Contact shadow | Both | `TileShadow` | Cached bitmap per tile and pixel size; blur and offset are tiered. |
+| Symbol shadow | Detailed | `ProgramVectorPicture` | Color-filtered replays, clipped to the plate. |
+| Symbol rim | Detailed | `ProgramVectorPicture` | One device-pixel white offset above the logo. |
+| Grain | Detailed | — | Not implemented. |
 
-Every value is clamped with `max(0.5f, value)` in device pixels so a 1× density screen
-still shows the rim.
+The build emits one command stream per tile with three offsets:
+
+```json
+{"flat": 1, "surface": 2, "symbol": 7}
+```
+
+`ProgramVectorPicture` records the flat plate, the ceramic surface and the
+symbol as separate pictures, so switching tiers costs no per-frame work.
+
+---
+
+## 5. Size table
+
+| | Compact (<30dp) | Detailed (>=30dp) |
+| --- | --- | --- |
+| Plate | Flat accent | Body ramp + keel + sheen |
+| Rim | 1 device px | 1 device px |
+| Contact shadow dy / blur | 0.5 / 0.8dp at 22dp; 0.8 / 1.2dp up to 29dp | 1.0 / 1.6dp |
+| Symbol shadow / rim | off | on |
+| Grain | off | not implemented |
+
+The rim is deliberately expressed in device pixels, not artwork units. A 1u
+stroke on a 61-unit artboard becomes 0.3–0.8px at the sizes used by the chrome
+and never reads as an edge.
+
+---
+
+## 6. Procedural fallback
+
+Unknown programs keep the same plate language as the catalog:
+
+- a solid or three-stop vertical gradient derived from the skin colours;
+- no white top wash and no 1dp white border;
+- a one-pixel inner rim with the same top-to-bottom falloff;
+- a single Compose shadow, not a second shadow stacked on the material shadow.
+
+`TERMINAL`, `SSH` and `TMUX` skins intentionally have no tile, so executable
+and candidate artwork can still win. Their fallback plate is now flat rather
+than glossy.
 
 ---
 
 ## 7. Non-goals
 
 - No single brand colour for all tiles.
-- No full-gradient fill over the logo: the earlier white-to-accent fill destroyed
-  multi-colour logos (`git`, `kube`, `claude`).
+- No full-gradient fill over the logo.
 - No clipping of the artwork silhouette; the plate edge belongs to the artwork.
-- No per-frame blur, no per-frame `BitmapShader` rebuild, no animation inside the
-  material.
+- No per-frame blur, no per-frame `BitmapShader` rebuild, no animation inside
+  the material.
 - No drop shadow on glyph-only tiles; they have no plate.
 
 ---
 
 ## 8. Verification
 
-1. `python3 scripts/build_program_vectors.py --check` — catalog and sources agree.
-2. Offline strip: render the tile ladder (18/27/34dp, light + dark chrome) to PNG with
-   the preview generator, diff against the previous iteration before touching the app.
-3. Instrumented check on device: `ProgramTileRenderingTest`, then a screenshot of the
-   tab bar in both themes with a long session title and three busy tabs.
-4. Frame budget: `TerminalPerformanceTest` with four busy tabs, compare jank counts
-   against the current build; the material must be draw-phase only.
+1. `python3 scripts/build_program_vectors.py --check` — catalog and sources agree,
+   and every tile declares `flat < surface < symbol`.
+2. `ProgramCatalogDataTest` — layer offsets and plate paint are present.
+3. Instrumented check on device: `ProgramTileRenderingTest`, then a screenshot
+   of the tab bar in both themes with a long session title and three busy tabs.
+4. Frame budget: `TerminalPerformanceTest` with four busy tabs; the compact tier
+   must not allocate layers per draw.
+
+The previous `.preview/preview.html` reference was not checked in. Regenerate an
+18/27/34dp ladder before changing material constants again.

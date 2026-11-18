@@ -23,7 +23,8 @@ import kotlin.math.max
 /** Cached vector drawing commands, replayed at the final pixel size and angle. */
 internal class ProgramVectorPicture private constructor(
     private val key: String,
-    private val plate: Picture,
+    private val flat: Picture,
+    private val surface: Picture?,
     private val symbol: Picture?,
     private val width: Float,
     private val height: Float,
@@ -40,38 +41,57 @@ internal class ProgramVectorPicture private constructor(
         colorFilter=PorterDuffColorFilter(Color.WHITE,PorterDuff.Mode.SRC_IN)
         alpha=84
     }
+    private val rimPaint=Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style=Paint.Style.STROKE
+        strokeCap=Paint.Cap.ROUND
+        strokeJoin=Paint.Join.ROUND
+        shader=outline?.let { path->
+            val bounds=RectF();path.computeBounds(bounds,true)
+            val stops=if(luminance(accent)>.72f) intArrayOf(
+                Color.argb(30,0,0,0),Color.argb(14,0,0,0),Color.argb(0,0,0,0))
+            else intArrayOf(
+                Color.argb(115,255,255,255),Color.argb(36,255,255,255),Color.argb(0,255,255,255))
+            LinearGradient(0f,bounds.top,0f,bounds.bottom,
+                stops,floatArrayOf(0f,.4f,1f),Shader.TileMode.CLAMP)
+        }
+    }
 
     fun draw(canvas: Canvas,width: Float,height: Float,rotation: Float=0f) {
         val save=canvas.save()
         canvas.rotate(rotation,width/2,height/2)
         canvas.scale(width/this.width,height/this.height)
-        canvas.drawPicture(plate)
+        canvas.drawPicture(flat)
         symbol?.let(canvas::drawPicture)
         canvas.restoreToCount(save)
     }
 
     /**
-     * Tile material: contact shadow, baked plate surface, then the logo lifted off
-     * the surface by a soft shadow below it and a thin lit edge above it.
+     * Tile material: flat plate at 18/27dp, ceramic surface at 34dp, a rim
+     * calibrated in device pixels, and a logo that gains depth only when the
+     * tile is large enough to resolve it.
      */
     fun drawTile(canvas: Canvas,width: Float,height: Float,rotation: Float=0f) {
         val density=Resources.getSystem().displayMetrics.density.coerceAtLeast(1f)
         val symbol=symbol
         val outline=outline
+        val detailed=width/density>=DETAILED_WIDTH_DP
         val save=canvas.save()
         canvas.rotate(rotation,width/2,height/2)
         canvas.scale(width/this.width,height/this.height)
         val unitsToPx=(width/this.width).coerceAtLeast(.01f)
         if(outline!=null) contactShadow(canvas,width,height,unitsToPx,density,outline)
-        canvas.drawPicture(plate)
+        canvas.drawPicture(if(detailed && surface!=null) surface else flat)
+        if(outline!=null) drawRim(canvas,outline,unitsToPx)
         if(symbol!=null) {
             // Everything the logo adds is clipped to the plate so nothing can spill
             // past the rounded edge.
             val clipped=canvas.save()
             if(outline!=null) canvas.clipPath(outline)
-            offsetSymbol(canvas,symbol,SHADOW_DY,symbolShadow)
-            offsetSymbol(canvas,symbol,SHADOW_DY*1.6f,symbolShadowSoft)
-            offsetSymbol(canvas,symbol,-RIM_DY/unitsToPx,symbolRim)
+            if(detailed) {
+                offsetSymbol(canvas,symbol,SHADOW_DY,symbolShadow)
+                offsetSymbol(canvas,symbol,SHADOW_DY*1.6f,symbolShadowSoft)
+                offsetSymbol(canvas,symbol,-RIM_DY/unitsToPx,symbolRim)
+            }
             canvas.drawPicture(symbol)
             canvas.restoreToCount(clipped)
         }
@@ -79,15 +99,29 @@ internal class ProgramVectorPicture private constructor(
     }
 
     private fun offsetSymbol(canvas: Canvas,symbol: Picture,dy: Float,paint: Paint) {
-        val layer=canvas.saveLayer(0f,0f,width,height,paint)
+        val layer=canvas.saveLayer(0f,0f,this.width,this.height,paint)
         canvas.translate(0f,dy)
         canvas.drawPicture(symbol)
         canvas.restoreToCount(layer)
     }
 
+    private fun drawRim(canvas: Canvas,outline: Path,unitsToPx: Float) {
+        val layer=canvas.save()
+        canvas.clipPath(outline)
+        rimPaint.strokeWidth=2f/unitsToPx
+        canvas.drawPath(outline,rimPaint)
+        canvas.restoreToCount(layer)
+    }
+
     private fun contactShadow(canvas: Canvas,width: Float,height: Float,unitsToPx: Float,density: Float,outline: Path) {
+        val widthDp=width/density
+        val (blurDp,dyDp)=when {
+            widthDp>=30f -> 1.6f to 1.0f
+            widthDp>=24f -> 1.2f to .8f
+            else -> .8f to .5f
+        }
         val image=TileShadow.get("$key:${width.toInt()}x${height.toInt()}",outline,
-            width.toInt(),height.toInt(),unitsToPx,max(1f,1.5f*density),.9f*density,dark,.3f) ?: return
+            width.toInt(),height.toInt(),unitsToPx,max(1f,blurDp*density),dyDp*density,dark,.3f) ?: return
         canvas.drawBitmap(image.bitmap,Matrix().apply {
             setScale(1f/unitsToPx,1f/unitsToPx)
             postTranslate(-image.pad/unitsToPx,-image.pad/unitsToPx)
@@ -96,7 +130,8 @@ internal class ProgramVectorPicture private constructor(
 
     companion object {
         private const val SHADOW_DY=1.2f
-        private const val RIM_DY=.45f
+        private const val RIM_DY=1f
+        private const val DETAILED_WIDTH_DP=30f
         private const val DEFAULT_ACCENT=0xFF3B78F0.toInt()
         private val cache=mutableMapOf<String,ProgramVectorPicture>()
         private val glyphCache=mutableMapOf<String,ProgramVectorPicture>()
@@ -104,7 +139,7 @@ internal class ProgramVectorPicture private constructor(
             val commands=ProgramCatalog.icons(assets).getJSONArray(name)
             val prelude=preludeMatrix(commands)
             record(name,commands,61f,48f,
-                symbolStart=ProgramCatalog.symbols(assets).optInt(name,-1),
+                layers=ProgramCatalog.layers(assets).optJSONObject(name),
                 accent=ProgramCatalog.accents(assets).optString(name).takeIf(String::isNotEmpty)
                     ?.let {runCatching {Color.parseColor(it)}.getOrDefault(DEFAULT_ACCENT)} ?: DEFAULT_ACCENT,
                 outline=ProgramCatalog.plate(assets)?.let {Path(it).apply {transform(prelude)}})
@@ -114,15 +149,22 @@ internal class ProgramVectorPicture private constructor(
             record("$name:$tint",glyph.getJSONArray("commands"),glyph.getDouble("width").toFloat(),glyph.getDouble("height").toFloat(),tint)
         }
         private fun record(key: String,commands: JSONArray,width: Float,height: Float,tint: Int?=null,
-            symbolStart: Int=-1,accent: Int=DEFAULT_ACCENT,outline: Path?=null): ProgramVectorPicture {
+            layers: JSONObject?=null,accent: Int=DEFAULT_ACCENT,outline: Path?=null): ProgramVectorPicture {
             // A tile stream opens with global transforms (the artwork crop) before any
-            // save, so the symbol half has to replay that prelude as well.
+            // save, so every layer has to replay that prelude as well.
             var prelude=0
             while(prelude<commands.length() && commands.getJSONObject(prelude).getString("op") !in setOf("save","restore")) prelude++
-            val split=if(tint==null && symbolStart in 1 until commands.length()) symbolStart else -1
-            val plate=replay(commands,width,height,tint,0,if(split<0) commands.length() else split)
-            val symbol=if(split<0) null else replay(commands,width,height,tint,split,commands.length(),prelude)
-            return ProgramVectorPicture(key,plate,symbol,width,height,accent,if(split<0) null else outline)
+            val flatStart=if(tint==null) layers?.optInt("flat",prelude) ?: prelude else 0
+            val surfaceStart=if(tint==null) layers?.optInt("surface",-1) ?: -1 else -1
+            val symbolStart=if(tint==null) layers?.optInt("symbol",-1) ?: -1 else -1
+            val flatEnd=if(surfaceStart>=0) surfaceStart else commands.length()
+            val flat=replay(commands,width,height,tint,flatStart,flatEnd,if(tint==null) prelude else 0)
+            val surface=if(surfaceStart>=0 && symbolStart>surfaceStart)
+                replay(commands,width,height,tint,surfaceStart,symbolStart,prelude) else null
+            val symbol=if(symbolStart>=0)
+                replay(commands,width,height,tint,symbolStart,commands.length(),prelude) else null
+            return ProgramVectorPicture(key,flat,surface,symbol,width,height,accent,
+                if(symbol==null) null else outline)
         }
         private fun replay(commands: JSONArray,width: Float,height: Float,tint: Int?,from: Int,to: Int,prelude: Int=0): Picture {
             val picture=Picture();val canvas=picture.beginRecording(width.toInt(),height.toInt())
@@ -163,6 +205,8 @@ internal class ProgramVectorPicture private constructor(
             val hsv=FloatArray(3);Color.colorToHSV(color,hsv);hsv[2]*=.2f
             return Color.HSVToColor(Color.alpha(color),hsv)
         }
+        private fun luminance(color: Int): Float =
+            (.299f*Color.red(color)+.587f*Color.green(color)+.114f*Color.blue(color))/255f
         /** Shadows lean neutral so a brand hue never tints the surrounding surface. */
         private fun neutral(color: Int): Int = Color.rgb(
             (Color.red(color)*.45f).toInt().coerceIn(0,255),

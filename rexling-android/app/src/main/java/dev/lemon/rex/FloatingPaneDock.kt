@@ -71,7 +71,7 @@ import androidx.compose.ui.unit.dp
                 if(grouped) stateDescription=if(expanded) "Expanded" else "Collapsed"
             },contentAlignment=Alignment.Center) {
             val index=panes.indexOfFirst {it.id==active}.coerceAtLeast(0)
-            ProgramStack(panes.map {programs[it.id] ?: ProgramIdentity.Loading},index,fixedSlot=true,floatingShadow=true,highlighted=active!=null)
+            ProgramStack(panes.map {programs[it.id] ?: ProgramIdentity.Loading},index,fixedSlot=true,highlighted=active!=null)
         }
     }
 }

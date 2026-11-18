@@ -46,6 +46,9 @@ class ProgramIdentityTest {
         assertTrue(ProgramIdentity.resolve(listOf("zsh")).isShell)
         assertTrue(ProgramIdentity.resolve(listOf("bash")).isShell)
         assertTrue(ProgramIdentity.resolve(listOf("fish")).isShell)
+        val timer = ProgramIdentity.resolve(listOf("/Users/xiaobo/.cargo/bin/timer", "zsh"))
+        assertEquals("timer", timer.executable)
+        assertFalse(timer.isShell)
     }
     @Test fun usesExecutableMetadataAndFallsBackWithoutGuessingFromTitles() {
         assertEquals(ProgramKind.NEOVIM,ProgramIdentity.resolve(listOf("/usr/local/bin/nvim")).kind)
