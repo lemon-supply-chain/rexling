@@ -490,7 +490,7 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
                     val progress=paneProgress(w)
                     val indicatorColor=terminalProgressColor(progress)
                     val busy=paneWorking(w) || progress?.busy==true
-                    val workPhase=rememberWorkingPhase(animateWorking && if(progress!=null) progress.busy && progress.percent==null else active && busy)
+                    val workPhase=rememberWorkingPhase(animateWorking && active && if(progress!=null) progress.busy && progress.percent==null else busy)
                     val programs=panePrograms(w)
                     val pane=selectedPane(w)
                     val program=programs.getOrNull(pane) ?: ProgramIdentity.Loading
@@ -505,7 +505,7 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
                     Column(Modifier.height(45.dp).width(width)
                         .drawWithContent {
                             drawContent()
-                            if(active || progress!=null) {
+                            if(active) {
                                 val origin=Offset(0f,size.height-2.dp.toPx());val bar=Size(size.width,2.dp.toPx())
                                 if(progress!=null) {
                                     drawWorkingBar(barTrack,origin,bar)
