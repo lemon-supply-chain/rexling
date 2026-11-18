@@ -55,6 +55,9 @@ class MainActivity : ComponentActivity() {
     private val model: RexModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The stored in-app appearance decides the window colour before Compose draws,
+        // so a light appearance does not flash the dark theme's background.
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(windowBackgroundColor()))
         consumeAlert(intent)
         enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         // The IME inset animates frame by frame. Its end is the only moment the terminal
@@ -88,6 +91,19 @@ class MainActivity : ComponentActivity() {
             RexTheme(dark,model.theme(dark)) {RexApp(model)}
         }
     }
+    /** Window background for the stored appearance; matches Theme.Rex and values-night. */
+    private fun windowBackgroundColor(): Int {
+        val stored=runCatching {Appearance.valueOf(getSharedPreferences("rex",0).getString("appearance","SYSTEM")!!)}
+            .getOrDefault(Appearance.SYSTEM)
+        val dark=when(stored) {
+            Appearance.DARK->true
+            Appearance.LIGHT->false
+            Appearance.SYSTEM->(resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK)==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+        }
+        return if(dark) 0xff090c11.toInt() else 0xfff3f4f9.toInt()
+    }
+
     private fun consumeAlert(intent: Intent?) {
         AlertDestinations(BackgroundAlerts.preferences(this)).consume(intent?.data)?.let(model::openAlert)
         intent?.data=null
@@ -98,36 +114,16 @@ class MainActivity : ComponentActivity() {
     override fun onStop(){if(!isChangingConfigurations) BackgroundAlerts.foreground.value=false;model.pause();super.onStop()}
 }
 
-@Composable internal fun RexTheme(dark: Boolean,theme: AppTheme,content: @Composable ()->Unit) {
+@Composable internal fun RexTheme(dark: Boolean,theme: AppTheme,motionEnabled: Boolean = android.animation.ValueAnimator.areAnimatorsEnabled(),content: @Composable ()->Unit) {
     val scheme=remember(dark,theme) {rexColorScheme(dark,theme)}
-    MaterialTheme(colorScheme=scheme) {
+    MaterialTheme(colorScheme=scheme,typography=RexTokens.type,shapes=RexTokens.shapes) {
         CompositionLocalProvider(
             LocalTerminalPalette provides theme.terminal,
             LocalContentColor provides scheme.onSurface,
+            LocalMotionEnabled provides motionEnabled,
             content=content
         )
     }
-}
-
-/** The app colour scheme for one appearance, shared with tests that check every preset. */
-internal fun rexColorScheme(dark: Boolean,theme: AppTheme): androidx.compose.material3.ColorScheme {
-    val base=if(dark) darkColorScheme(primary=Color(0xff315cf4),onPrimary=Color.White,
-        background=Color(0xff090c11),surface=Color(0xff141922),onSurface=Color(0xffe5e9f2),
-        surfaceVariant=Color(0xff232934),onSurfaceVariant=Color(0xff969fb1),outline=Color(0xff2b3341))
-    else lightColorScheme(primary=Color(0xff3156f4),onPrimary=Color.White,
-        background=Color(0xfff3f4f9),surface=Color(0xfffdfdff),onSurface=Color(0xff171b26),
-        surfaceVariant=Color(0xffe9ebf2),onSurfaceVariant=Color(0xff62697c),outline=Color(0xffd8dce8))
-    val container = if(dark) Color(0xff1b212c) else Color(0xffeceef5)
-    val primaryContainer = if(dark) Color(0xff17254d) else Color(0xffe4eaff)
-    val onPrimaryContainer = if(dark) Color(0xffbed0ff) else Color(0xff193dba)
-    val scheme = base.copy(surfaceTint=Color.Transparent,
-        surfaceDim=base.background,surfaceBright=base.surfaceVariant,
-        surfaceContainerLowest=base.background,surfaceContainerLow=base.surface,
-        surfaceContainer=container,surfaceContainerHigh=container,surfaceContainerHighest=base.surfaceVariant,
-        primaryContainer=primaryContainer,onPrimaryContainer=onPrimaryContainer,
-        secondary=base.primary,onSecondary=base.onPrimary,secondaryContainer=primaryContainer,onSecondaryContainer=onPrimaryContainer,
-        tertiary=base.primary,onTertiary=base.onPrimary,tertiaryContainer=primaryContainer,onTertiaryContainer=onPrimaryContainer)
-    return scheme.withPreset(theme)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,14 +132,14 @@ internal fun rexColorScheme(dark: Boolean,theme: AppTheme): androidx.compose.mat
     val noticeHaze=remember {HazeState()}
     val captureNotice=rememberBackdropCapture(PortForwards.linkNotice!=null)
     Box(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalKeepScreenAwake provides model.keepScreenAwake) {
+        CompositionLocalProvider(LocalKeepScreenAwake provides model.keepScreenAwake, LocalKeyboardSuggestions provides model.keyboardSuggestions) {
             Box(Modifier.fillMaxSize().then(if(captureNotice) Modifier.hazeSource(noticeHaze) else Modifier)) {
                 key(model.activeServerId) {RexWorkspace(model,client)}
             }
         }
         ForwardLinkUi(Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(end=12.dp,bottom=116.dp),hazeState=noticeHaze)
     }
-    if(model.notificationNotice.isNotBlank()) AlertDialog(onDismissRequest={model.notificationNotice=""},title={Text("Notification")},text={Text(model.notificationNotice)},confirmButton={TextButton(onClick={model.notificationNotice=""}) {Text("OK")}})
+    if(model.notificationNotice.isNotBlank()) AlertDialog(onDismissRequest={model.notificationNotice=""},title={Text(stringResource(R.string.label_notification))},text={Text(model.notificationNotice)},confirmButton={TextButton(onClick={model.notificationNotice=""}) {Text(stringResource(R.string.label_ok))}})
 }
 
 private data class TerminalCloseTarget(val session: String,val id: String,val label: String,val tab: Boolean,val blocks: List<String>)
@@ -155,7 +151,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
     val displayedSession=navigation.session ?: state.selectedSession
     val currentSessionKey=sessionKey(model.activeServerId,displayedSession)
     val sessionStrip=SessionCatalog.strip(model.sessionTargets,SessionTarget(model.activeServer,
-        SessionItem(displayedSession,state.sessions.firstOrNull {it.id==displayedSession}?.label ?: if(state.connected) "No session" else state.phase)))
+        SessionItem(displayedSession,state.sessions.firstOrNull {it.id==displayedSession}?.label ?: if(state.connected) stringResource(R.string.label_no_session) else state.phase)))
     val displayedBlock=navigation.block ?: state.selectedBlock
     val changingSession=navigation.session!=null && navigation.session!=state.selectedSession
     val windows=if(changingSession) emptyList() else client.orderedWindows(state)
@@ -300,7 +296,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                 menu=false;pasteClipboard()
                             })
                             TerminalMenuItem(stringResource(R.string.attach_image),ChromeIcon.IMAGE,enabled=controlled && model.images.state==null,onClick={menu=false;chooseImage()})
-                            TerminalMenuItem("Port forwarding",ChromeIcon.SERVER,enabled=true,onClick={menu=false;forwards=true})
+                            TerminalMenuItem(stringResource(R.string.port_forwarding),ChromeIcon.SERVER,enabled=true,onClick={menu=false;forwards=true})
                             TerminalMenuItem(stringResource(R.string.servers_connected_format,model.connectedCount),ChromeIcon.SERVER,enabled=true,onClick={menu=false;servers=true})
                             TerminalMenuItem(stringResource(R.string.refresh_sessions),ChromeIcon.REFRESH,enabled=state.connected,onClick={menu=false;client.refresh()})
                         }
@@ -416,6 +412,7 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
             minimizeFloatingPanes=model.minimizeFloatingPanes,onMinimizeFloatingPanes=model::changeMinimizeFloatingPanes,
             onNetwork={openSettings(SettingsRoute.Network)},
             keepScreenAwake=model.keepScreenAwake,onKeepScreenAwake=model::changeKeepScreenAwake,onToolbar={openSettings(SettingsRoute.KeyboardToolbar)},
+            keyboardSuggestionsEnabled=model.keyboardSuggestions,onKeyboardSuggestions=model::changeKeyboardSuggestions,
             language=model.language,onLanguage={openSettings(SettingsRoute.Language)},
             terminalPadding=model.terminalPadding,onTerminalPadding=model::changeTerminalPadding,extendPadding=model.extendPadding,onExtendPadding=model::changeExtendPadding,
             predictiveEcho=model.predictiveEcho,onPredictiveEcho=model::changePredictiveEcho,hazeState=workspaceHaze)
@@ -445,7 +442,7 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
     pendingShortcut?.let {(profile,item,target)->
         ShortcutConfirmDialog(profile,item,onConfirm={pendingShortcut=null;client.shortcut(model.shortcutProfiles,profile,item,target)},onDismiss={pendingShortcut=null})
     }
-    if(model.images.notice.isNotEmpty()) AlertDialog(onDismissRequest={model.images.notice=""},title={Text("Image upload")},text={Text(model.images.notice)},confirmButton={TextButton(onClick={model.images.notice=""}) {Text("OK")}})
+    if(model.images.notice.isNotEmpty()) AlertDialog(onDismissRequest={model.images.notice=""},title={Text(stringResource(R.string.label_image_upload))},text={Text(model.images.notice)},confirmButton={TextButton(onClick={model.images.notice=""}) {Text(stringResource(R.string.label_ok))}})
     if(forwards) PortForwardSheet(model.forwardServers(),model.activeServerId,workspaceHaze,onClose={forwards=false},onStart={id->
         val saved=PortForwards.items.firstOrNull {it.id==id}
         val target=model.forwardServers().firstOrNull {it.profile.id==saved?.serverId && it.profile.endpoint==saved.endpoint}
@@ -469,8 +466,9 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
         onDockPane={tab,id,anchor,split->client.editTerminal(displayedSession,tab,id,"dock_pane",anchor=anchor,split=split)},error=state.error,hazeState=workspaceHaze)
     closeTarget?.let {target->
         AlertDialog(onDismissRequest={closeTarget=null},title={Text(if(target.tab) stringResource(R.string.close_tab_title) else stringResource(R.string.close_tab))},
-            text={Text(if(target.tab) "Close “${target.label}”? This ends every program in its ${target.blocks.size} pane${if(target.blocks.size==1) "" else "s"}."
-                else "Close “${target.label}”? This ends the program running in this pane.")},
+            text={Text(if(!target.tab) stringResource(R.string.label_close_pane_confirm,target.label)
+                else if(target.blocks.size==1) stringResource(R.string.label_close_tab_confirm_one,target.label)
+                else stringResource(R.string.label_close_tab_confirm_many,target.label,target.blocks.size))},
             confirmButton={TextButton(enabled=ready,onClick={closeTarget=null
                 if(target.tab) client.closeTab(target.session,target.id,target.blocks) else client.closePane(target.session,target.id)
             }) {Text(stringResource(R.string.close),color=MaterialTheme.colorScheme.error)}},
@@ -505,7 +503,7 @@ private fun getClipboard(context: Context)=context.getSystemService(Context.CLIP
                 ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_sessions),onClick=onClose)
             }
             BasicTextField(search,{search=it},Modifier.fillMaxWidth().padding(horizontal=16.dp).heightIn(min=40.dp)
-                .clip(RoundedCornerShape(12.dp)).background(scheme.surfaceVariant.copy(alpha=.45f)).padding(horizontal=12.dp,vertical=10.dp),
+                .clip(RoundedCornerShape(12.dp)).background(scheme.surfaceContainerHigh).padding(horizontal=12.dp,vertical=10.dp),
                 textStyle=SettingsType.row.copy(color=scheme.onSurface),singleLine=true,
                 cursorBrush=androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox={field->Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -564,7 +562,7 @@ private fun getClipboard(context: Context)=context.getSystemService(Context.CLIP
     val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {granted->
         if(granted) {model.setBackgroundAlerts(true);denied=false} else denied=true
     }
-    SettingsDrawer("Background alerts","Close background alerts",onClose,hazeState) {
+    SettingsDrawer(stringResource(R.string.background_alerts),stringResource(R.string.a11y_close_background_alerts),onClose,hazeState) {
         Column(Modifier.fillMaxWidth().heightIn(max=600.dp).verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=8.dp,bottom=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.background_alerts_desc_1),style=SettingsType.body)
             Text(stringResource(R.string.background_alerts_desc_2),style=SettingsType.body)

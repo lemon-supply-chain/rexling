@@ -49,7 +49,16 @@ class TerminalView(context: Context) : View(context) {
         get()=awake.mode
         set(value) {awake.mode=value}
     override fun onAttachedToWindow() {super.onAttachedToWindow();awake.update();refreshCursorBlink()}
-    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {super.onWindowFocusChanged(hasWindowFocus);awake.update();refreshCursorBlink()}
+    private var imeDirty = false
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        awake.update()
+        refreshCursorBlink()
+        if (hasWindowFocus && controlled && imeDirty) {
+            imeDirty = false
+            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.restartInput(this)
+        }
+    }
     override fun onWindowVisibilityChanged(visibility: Int) {super.onWindowVisibilityChanged(visibility);awake.update();refreshCursorBlink()}
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {if(event.actionMasked==MotionEvent.ACTION_DOWN) awake.activity();return super.dispatchTouchEvent(event)}
     var interactive = true
@@ -133,9 +142,18 @@ class TerminalView(context: Context) : View(context) {
         if(resetCursor) refreshCursorBlink()
         if(onDisplayFrame) invalidate() else postInvalidateOnAnimation()
     }
-    var keyboardSuggestions: Boolean = true
+    var keyboardSuggestions: Boolean = false
         set(value) {
-            if(field!=value) {field=value;if(controlled && hasFocus()) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)}
+            if(field!=value) {
+                field=value
+                if(controlled) {
+                    if(hasFocus() && hasWindowFocus()) {
+                        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.restartInput(this)
+                    } else {
+                        imeDirty=true
+                    }
+                }
+            }
         }
     var controlled: Boolean = false
         set(value) {
@@ -734,8 +752,12 @@ class TerminalView(context: Context) : View(context) {
     override fun onCheckIsTextEditor() = controlled
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         if (!controlled) return null
-        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or (if(keyboardSuggestions) InputType.TYPE_TEXT_FLAG_AUTO_CORRECT else InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
-        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_ACTION_NONE
+        outAttrs.inputType = if(keyboardSuggestions) {
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_AUTO_CORRECT
+        } else {
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING or EditorInfo.IME_ACTION_NONE
         outAttrs.contentMimeTypes=imageMimeTypes.copyOf()
         val imageTarget=imageInputTarget()
         val pending=composing
@@ -743,7 +765,7 @@ class TerminalView(context: Context) : View(context) {
         android.text.Selection.setSelection(editor,editor.length)
         imeEditable=editor
         outAttrs.initialSelStart=editor.length;outAttrs.initialSelEnd=editor.length
-        if(android.os.Build.VERSION.SDK_INT>=30) outAttrs.setInitialSurroundingText(editor)
+        if(keyboardSuggestions && android.os.Build.VERSION.SDK_INT>=30) outAttrs.setInitialSurroundingText(editor)
         val connection=object : BaseInputConnection(this, true) {
             private var batchDepth=0
             private var pendingCommit=false

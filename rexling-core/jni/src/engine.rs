@@ -494,7 +494,16 @@ impl Actor {
                                 self.update_apcs();
                             }
                         }
-                        Err(e)=>self.recover(e),
+                        Err(e)=>{
+                            if is_data_stream_closed(&e) {
+                                self.data=None;self.data_resume=None;self.replica=None;self.screen=None;
+                                self.selected_block.clear();self.controlled=false;
+                                self.notice="That terminal has closed".into();
+                                let _=self.refresh_view().await;self.publish();
+                            } else {
+                                self.recover(e);
+                            }
+                        }
                     }
                 },
                 result=async {match &mut self.preview_task {Some(task)=>task.await,None=>pending().await}}=>{
@@ -563,9 +572,11 @@ impl Actor {
                     if self.phase=="connected" && self.program_task.is_none() && !self.selected_session.is_empty()
                         && self.program_refresh<=tokio::time::Instant::now()
                     {
-                        let ids=self.windows.as_array().into_iter().flatten().flat_map(|w|
+                        let ids: Vec<String> = self.windows.as_array().into_iter().flatten().flat_map(|w|
                             w["blocks"].as_array().into_iter().flatten().filter_map(|b|b["id"].as_str().map(str::to_owned))).collect();
-                        self.program_task=Some(program_task(self.endpoint.clone().unwrap(),self.selected_session.clone(),ids));
+                        if !ids.is_empty() {
+                            self.program_task=Some(program_task(self.endpoint.clone().unwrap(),self.selected_session.clone(),ids));
+                        }
                         self.program_refresh=tokio::time::Instant::now()+Duration::from_secs(4);
                     }
                     if self.predictor.expire(std::time::Instant::now()) {self.dirty=true;}
@@ -674,36 +685,47 @@ impl Actor {
         self.backoff = 1;
         if !self.selected_session.is_empty() {
             let session = self.selected_session.clone();
-            let attached = self.control.as_mut().unwrap().attach(&session).await?;
-            self.set_view(&attached["view"]);
-            if !self.selected_block.is_empty() {
-                let block = self.selected_block.clone();
-                self.apply_theme().await?;
-                let mut recovered = None;
-                if resumed && let Some(state) = self.data_resume.take() {
-                    recovered = state.connect(&endpoint).await.ok();
+            let attached = match self.control.as_mut().unwrap().attach(&session).await {
+                Ok(attached) => Some(attached),
+                Err(error) if missing_terminal(&error) => {
+                    self.selected_session.clear();
+                    self.selected_block.clear();
+                    self.windows = json!([]);
+                    None
                 }
-                self.data = if let Some(data) = recovered {
-                    Some(data)
-                } else {
-                    let data = Data::open(
-                        &endpoint,
-                        self.control.as_mut().unwrap(),
-                        &session,
-                        &block,
-                        Trace::default(),
-                    )
-                    .await?;
-                    self.replica = Some(Replica::new(data.nonce));
-                    Some(data)
-                };
-                self.data_resume = None;
-                self.notice = if resumed {
-                    "Connection restored"
-                } else {
-                    "Connected; terminal state refreshed"
+                Err(error) => return Err(error),
+            };
+            if let Some(attached) = attached {
+                self.set_view(&attached["view"]);
+                if !self.selected_block.is_empty() {
+                    let block = self.selected_block.clone();
+                    self.apply_theme().await?;
+                    let mut recovered = None;
+                    if resumed && let Some(state) = self.data_resume.take() {
+                        recovered = state.connect(&endpoint).await.ok();
+                    }
+                    self.data = if let Some(data) = recovered {
+                        Some(data)
+                    } else {
+                        let data = Data::open(
+                            &endpoint,
+                            self.control.as_mut().unwrap(),
+                            &session,
+                            &block,
+                            Trace::default(),
+                        )
+                        .await?;
+                        self.replica = Some(Replica::new(data.nonce));
+                        Some(data)
+                    };
+                    self.data_resume = None;
+                    self.notice = if resumed {
+                        "Connection restored"
+                    } else {
+                        "Connected; terminal state refreshed"
+                    }
+                    .into();
                 }
-                .into();
             }
         }
         self.publish();
@@ -1758,6 +1780,10 @@ fn program_candidates(process: &Value, status: &Value) -> Value {
 }
 fn missing_terminal(error: &anyhow::Error) -> bool {
     error.downcast_ref::<rex_core::control::RpcError>().is_some_and(|e|matches!(e.code.as_str(),"not_found"|"session_not_found"))
+}
+fn is_data_stream_closed(error: &anyhow::Error) -> bool {
+    let msg = error.to_string();
+    msg.contains("4000") || msg.contains("block closed") || msg.contains("code: 1000")
 }
 fn clear_ownership_error(error: &mut String) {
     if matches!(error.as_str(),"Take control before typing"|"Take control before typing or resizing") {error.clear();}
@@ -3401,6 +3427,69 @@ while True:
             assert_eq!(view["windows"][0]["label"],"Renamed tab");assert_eq!(view["windows"][0]["layers"].as_array().unwrap().len(),1);
         }));
         runtime.block_on(writer.call("session.destroy",json!({"session_id":id}))).unwrap();runtime.block_on(writer.close()).unwrap();result.unwrap();
+    }
+
+    #[test]
+    fn block_closed_error_detection_matches_rex_wire_protocol() {
+        assert!(is_data_stream_closed(&anyhow::Error::msg("WebSocket closed: Some(CloseFrame { code: 4000, reason: \"block closed\" })")));
+        assert!(is_data_stream_closed(&anyhow::Error::msg("WebSocket closed: Some(CloseFrame { code: 1000, reason: \"\" })")));
+        assert!(is_data_stream_closed(&anyhow::Error::msg("block closed")));
+        assert!(!is_data_stream_closed(&anyhow::Error::msg("connection reset by peer")));
+        assert!(!is_data_stream_closed(&anyhow::Error::msg("timeout")));
+    }
+
+    fn actor_turns(commands: Vec<Value>, wait: Duration) -> (u32, Duration) {
+        let shared = Arc::new(Mutex::new(Shared {
+            revision: 0,
+            json: String::new(),
+            pending_previews: BTreeMap::new(),
+            frame: None,
+            key: String::new(),
+            wire: crate::updates::WireBase::default(),
+            activity: Arc::default(),
+        }));
+        let (tx, rx) = mpsc::channel(8);
+        for command in commands {
+            tx.try_send(command).unwrap();
+        }
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let actor = Actor::new(shared, Arc::new(crate::updates::Updates::default()));
+        let stopper = std::thread::spawn(move || {
+            std::thread::sleep(wait);
+            let _ = tx.blocking_send(json!({"type":"shutdown"}));
+        });
+        let mut run = Box::pin(actor.run(rx));
+        let mut polls = 0u32;
+        let mut longest = Duration::ZERO;
+        runtime.block_on(std::future::poll_fn(|cx| {
+            let started = std::time::Instant::now();
+            let result = run.as_mut().poll(cx);
+            polls += 1;
+            longest = longest.max(started.elapsed());
+            result
+        }));
+        stopper.join().unwrap();
+        (polls, longest)
+    }
+
+    #[test]
+    fn an_actor_without_a_data_stream_sleeps_between_maintenance_turns() {
+        let (polls, longest) = actor_turns(Vec::new(), Duration::from_millis(300));
+        assert!(polls < 20, "idle actor ran {polls} turns in 300 ms");
+        assert!(longest < Duration::from_millis(50), "idle actor held the thread for {longest:?}");
+    }
+
+    #[test]
+    fn a_reconnecting_actor_waits_for_its_backoff_without_spinning() {
+        let (polls, longest) = actor_turns(
+            vec![json!({"type":"connect","server":"http://127.0.0.1:1"})],
+            Duration::from_millis(400),
+        );
+        assert!(polls < 40, "reconnecting actor ran {polls} turns in 400 ms");
+        assert!(longest < Duration::from_millis(100), "reconnecting actor held the thread for {longest:?}");
     }
 
 }

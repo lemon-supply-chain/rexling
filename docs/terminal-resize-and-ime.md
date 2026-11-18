@@ -160,6 +160,16 @@ Terminal padding (`insetTop`, `insetBottom`, `insetHorizontal`) provides comfort
 
 `TerminalEdgePolicies.policy(identity)` resolves the policy from `ProgramIdentity`, strictly defaulting to `NON_EDITOR` for shells, CLI utilities, and unclassified programs.
 
+### 3.10 Keyboard Suggestions and Auto-Correction Policy
+
+Soft keyboards (like Gboard) naturally attempt dictionary lookups, predictive word suggestions, and auto-corrections when typing in text fields. While helpful in messaging apps, auto-correcting CLI commands (`git`, `grep`, `kubectl`, option flags, Unix paths) leads to unwanted replacements and corrupted terminal input.
+
+- **Configurable Preference**: A "Keyboard suggestions" (`keyboard_suggestions`) toggle in Preferences (Keyboard section) controls this behavior. It defaults to `false` (disabled) so terminal commands are passed verbatim without dictionary intervention.
+- **IME Connection Flags**:
+  - When suggestions are **disabled** (`keyboardSuggestions = false`): Modern IMEs (such as Gboard and Samsung Keyboard) ignore `TYPE_TEXT_FLAG_NO_SUGGESTIONS` on standard `TYPE_CLASS_TEXT` fields. `TerminalView.onCreateInputConnection` configures `InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS` alongside `EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING`. This forces the keyboard to treat the stream as raw literal characters without predictive spell-checking or dictionary replacement, while omitting `setInitialSurroundingText` and clearing context in `commitPending()`.
+  - When suggestions are **enabled** (`keyboardSuggestions = true`): Non-Neovim programs request `InputType.TYPE_TEXT_FLAG_AUTO_CORRECT` with `TYPE_TEXT_FLAG_MULTI_LINE` and retain surrounding text for multi-word completions. Neovim always retains `TYPE_TEXT_FLAG_NO_SUGGESTIONS` regardless of preference to prevent command-mode key sequence corruption.
+- **Dynamic Reconfiguration**: Toggling the preference marks active editors and invokes `InputMethodManager.restartInput()` immediately or upon regaining window focus (`onWindowFocusChanged`), cleanly updating the soft keyboard's state without requiring manual keyboard dismissals.
+
 ---
 
 ## 4. Verification & Testing

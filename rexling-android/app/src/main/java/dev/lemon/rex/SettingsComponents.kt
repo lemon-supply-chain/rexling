@@ -45,14 +45,14 @@ internal object SettingsType {
 @Composable internal fun SettingsSection(title: String,compact: Boolean=true,content: @Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(title,Modifier.padding(start=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
-        Surface(shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),contentColor=MaterialTheme.colorScheme.onSurface) {
+        Surface(shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),color=MaterialTheme.colorScheme.surfaceContainerHigh,contentColor=MaterialTheme.colorScheme.onSurface) {
             Column(Modifier.fillMaxWidth(),content=content)
         }
     }
 }
 
 @Composable internal fun SettingsDivider() {
-    HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))
+    HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant)
 }
 
 internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK }
@@ -78,7 +78,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
 
 @Composable private fun SettingsIcon(glyph: SettingsGlyph) {
     val color=MaterialTheme.colorScheme.primary
-    Surface(shape=RoundedCornerShape(11.dp),color=color.copy(alpha=.09f)) {
+    Surface(shape=RoundedCornerShape(11.dp),color=color.copy(alpha=.09f)) {  // alpha-ok decorative glyph tile
         Box(Modifier.size(36.dp),contentAlignment=Alignment.Center) {
             if(glyph==SettingsGlyph.FONT) Text("Aa",style=SettingsType.row,color=color)
             else Canvas(Modifier.size(20.dp)) {

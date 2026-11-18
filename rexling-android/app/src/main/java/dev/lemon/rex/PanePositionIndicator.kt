@@ -36,7 +36,7 @@ internal fun paneIndicatorMarks(index: Int,count: Int,offset: Float): List<PaneI
 /** Progress is read in the draw phase; terminal views do not remeasure for the indicator. */
 @Composable internal fun PanePositionIndicator(index: Int,count: Int,offset: ()->Float,modifier: Modifier=Modifier) {
     val active=MaterialTheme.colorScheme.primary
-    val inactive=MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.35f)
+    val inactive=MaterialTheme.colorScheme.onSurfaceVariant
     val visible=minOf(count.coerceAtLeast(0),7)
     val trackWidth=if(visible==0) 0f else visible*5f+(visible-1)*4f+10f
     Canvas(modifier.width(trackWidth.dp).height(14.dp)) {
@@ -66,7 +66,7 @@ internal fun paneIndicatorMarks(index: Int,count: Int,offset: Float): List<PaneI
                 cubicTo(middle,cy+neck*.2f,middle,cy+neck*.2f,left,cy+neck)
                 close()
             }
-            drawPath(path,active.copy(alpha=.6f*strength))
+            drawPath(path,active.copy(alpha=.6f*strength))  // alpha-ok transient fade
         }
     }
 }

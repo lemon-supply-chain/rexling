@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
                 val status=model.serverStatuses[server.id] ?: ServerStatus()
                 var menu by remember(server.id) {mutableStateOf(false)}
                 Row(Modifier.fillMaxWidth().padding(bottom=4.dp).heightIn(min=56.dp).clip(RoundedCornerShape(12.dp))
-                    .background(if(selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha=.65f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f))
+                    .background(if(selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
                     .clickable {onDismiss();model.connectServer(server.id)}.padding(start=12.dp,top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
                     Box(Modifier.size(7.dp).background(if(status.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,RoundedCornerShape(4.dp)))
                     Spacer(Modifier.width(11.dp))
@@ -76,7 +76,7 @@ import kotlinx.coroutines.launch
                         if(status.error.isNotBlank()) Text(status.error,style=SettingsType.detail,maxLines=2,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.error)
                     }
                     Box {
-                        ChromeButton(ChromeIcon.MORE,"Server actions for ${server.label}") {menu=true}
+                        ChromeButton(ChromeIcon.MORE,stringResource(R.string.a11y_server_actions,server.label)) {menu=true}
                         DropdownMenu(menu,{menu=false},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
                             TerminalMenuItem(stringResource(R.string.edit),ChromeIcon.EDIT,onClick={menu=false;editing=server;editor=true})
                             if(status.maintained) TerminalMenuItem(stringResource(R.string.disconnect),ChromeIcon.UNPLUG,onClick={menu=false;model.disconnectServer(server.id)})
@@ -126,7 +126,7 @@ import kotlinx.coroutines.launch
             OutlinedTextField(endpoint,{endpoint=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.server_url))},singleLine=true,textStyle=SettingsType.body,
                 keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri),placeholder={Text("https://host.tailnet.ts.net",fontSize=11.sp)})
             Text(if(endpoint.startsWith("ssh://")) stringResource(R.string.ssh_target_hint) else stringResource(R.string.https_target_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            if(runCatching {ServerProfile.normalizeEndpoint(endpoint)}.isSuccess) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.5f)).padding(12.dp)) {
+            if(runCatching {ServerProfile.normalizeEndpoint(endpoint)}.isSuccess) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp)) {
                 Text(stringResource(R.string.connection_network),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Box {
                     TextButton(enabled=!busy,onClick={routesOpen=true},contentPadding=PaddingValues(horizontal=0.dp,vertical=4.dp)) {Text(stringResource(route.labelRes),style=SettingsType.row);Text(" ▾")}

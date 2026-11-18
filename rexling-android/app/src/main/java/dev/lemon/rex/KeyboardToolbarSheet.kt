@@ -42,6 +42,8 @@ import dev.chrisbanes.haze.HazeState
     var toolbarBounds by remember {mutableStateOf(Rect.Zero)}
     var paletteBounds by remember {mutableStateOf(Rect.Zero)}
     val slotBounds=remember {mutableMapOf<ToolbarKey,Rect>()}
+    val dropAreaDescription=stringResource(R.string.a11y_toolbar_drop_area)
+    val availableButtonsDescription=stringResource(R.string.a11y_available_toolbar_buttons)
     val availableBounds=remember {mutableMapOf<ToolbarKey,Rect>()}
     val density=LocalDensity.current
     val rtl=LocalLayoutDirection.current==LayoutDirection.Rtl
@@ -82,21 +84,22 @@ import dev.chrisbanes.haze.HazeState
                 Text(stringResource(R.string.keyboard_toolbar_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(stringResource(R.string.your_toolbar_format,draft.size,ToolbarLayout.MAX_KEYS),style=SettingsType.section,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth().height(48.dp).onGloballyPositioned {toolbarBounds=it.boundsInRoot()}
-                    .semantics {contentDescription="Your toolbar drop area"},horizontalArrangement=Arrangement.spacedBy(4.dp),verticalAlignment=Alignment.CenterVertically) {
+                    .semantics {contentDescription=dropAreaDescription},horizontalArrangement=Arrangement.spacedBy(4.dp),verticalAlignment=Alignment.CenterVertically) {
                     if(draft.isEmpty()) Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(11.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)),contentAlignment=Alignment.Center) {
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),contentAlignment=Alignment.Center) {
                         Text(stringResource(R.string.drag_buttons_here),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     draft.forEachIndexed {index,item->key(item.id) {
                         DisposableEffect(item) {onDispose {slotBounds.remove(item)}}
                         val highlighted=if(dragged!=null) overToolbar && targetIndex()==index else index==selected
+                        val slotDescription=stringResource(R.string.a11y_toolbar_slot,index+1,item.label)
                         Box(Modifier.weight(1f).height(40.dp).onGloballyPositioned {slotBounds[item]=it.boundsInRoot()}
                             .clip(RoundedCornerShape(11.dp)).background(if(highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-                            .border(if(highlighted) 1.dp else 0.dp,if(highlighted) MaterialTheme.colorScheme.primary.copy(alpha=.5f) else androidx.compose.ui.graphics.Color.Transparent,RoundedCornerShape(11.dp))
+                            .border(if(highlighted) 1.dp else 0.dp,if(highlighted) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,RoundedCornerShape(11.dp))
                             .graphicsLayer {alpha=if(dragged==item) .3f else 1f}
                             .clickable(role=Role.Tab) {selected=index}
                             .semantics {
-                                contentDescription="Toolbar slot ${index+1}: ${item.label}";this.selected=index==selected
+                                contentDescription=slotDescription;this.selected=index==selected
                                 customActions=buildList {
                                     if(index>0) add(CustomAccessibilityAction("Move left") {update(ToolbarLayout.move(draft,index,-1));selected=index-1;true})
                                     if(index<draft.lastIndex) add(CustomAccessibilityAction("Move right") {update(ToolbarLayout.move(draft,index,1));selected=index+1;true})
@@ -115,17 +118,18 @@ import dev.chrisbanes.haze.HazeState
                 }
                 LazyVerticalGrid(columns=GridCells.Fixed(4),modifier=Modifier.fillMaxWidth().weight(1f,fill=false).heightIn(min=96.dp,max=240.dp)
                     .onGloballyPositioned {paletteBounds=it.boundsInRoot()}
-                    .clip(RoundedCornerShape(12.dp)).background(if(overPalette && fromToolbar) MaterialTheme.colorScheme.errorContainer.copy(alpha=.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f))
-                    .semantics {contentDescription="Available toolbar buttons"},contentPadding=PaddingValues(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    .clip(RoundedCornerShape(12.dp)).background(if(overPalette && fromToolbar) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .semantics {contentDescription=availableButtonsDescription},contentPadding=PaddingValues(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     items(ToolbarKey.entries.filter {it !in draft},key={it.id}) {item->
+                        val availableButtonDescription=stringResource(R.string.a11y_available_button,item.label)
                         DisposableEffect(item) {onDispose {availableBounds.remove(item)}}
                         Column(Modifier.height(56.dp).onGloballyPositioned {availableBounds[item]=it.boundsInRoot()}
-                            .clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.6f))
+                            .clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
                             .graphicsLayer {alpha=if(dragged==item) .3f else 1f}
                             .clickable(role=Role.Button) {
                                 val result=if(draft.size<ToolbarLayout.MAX_KEYS) draft+item else ToolbarLayout.assign(draft,selected,item)
                                 update(result);selected=result.indexOf(item).coerceAtLeast(0)
-                            }.semantics {contentDescription="Available button: ${item.label}"},
+                            }.semantics {contentDescription=availableButtonDescription},
                             horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
                             if(item.icon!=null) ChromeSymbol(item.icon,Modifier.size(19.dp),MaterialTheme.colorScheme.primary)
                             Text(item.label,style=SettingsType.detail,maxLines=2,overflow=TextOverflow.Ellipsis)

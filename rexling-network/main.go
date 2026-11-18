@@ -249,6 +249,41 @@ func cancelLogin() error {
 	}
 	return nil
 }
+
+// Logout terminates Tailscale node registration, closes the node, clears local state, and suspends Tailscale.
+func logout() error {
+	tail.Lock()
+	defer tail.Unlock()
+	server := tail.server
+	state.Lock()
+	config := state.config
+	state.config.Suspended = true
+	state.Unlock()
+
+	var dir string
+	if server != nil {
+		dir = server.Dir
+		local, err := server.LocalClient()
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = local.Logout(ctx)
+			cancel()
+		}
+		server.Close()
+		tail.server = nil
+	} else if config.Directory != "" {
+		control := config.ControlURL
+		if control == "" {
+			control = "https://controlplane.tailscale.com"
+		}
+		sum := sha256.Sum256([]byte(control))
+		dir = filepath.Join(config.Directory, hex.EncodeToString(sum[:16]))
+	}
+	if dir != "" {
+		_ = os.RemoveAll(dir)
+	}
+	return nil
+}
 func hostIdentity(u *url.URL) string {
 	port := u.Port()
 	if port == "" {
@@ -467,6 +502,8 @@ func rexnet_command(raw *C.char) *C.char {
 			}
 		case "cancel_login":
 			err = cancelLogin()
+		case "logout":
+			err = logout()
 		case "import_key":
 			var key any
 			if request.Passphrase == "" {

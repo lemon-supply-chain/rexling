@@ -71,10 +71,11 @@ internal val ServerIcon.labelRes: Int get() = when(this) {
 }
 
 @Composable internal fun ServerIconPicker(selected: ServerIcon,compact: Boolean=false,onSelect: (ServerIcon)->Unit) {
+    val chooseIconDescription=stringResource(R.string.a11y_choose_server_icon)
     var open by remember {mutableStateOf(false)}
     Box {
-        Row((if(compact) Modifier.height(56.dp).width(52.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.6f)) else Modifier.fillMaxWidth())
-            .clickable(role=Role.Button) {open=true}.semantics {contentDescription="Choose server icon"}
+        Row((if(compact) Modifier.height(56.dp).width(52.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh) else Modifier.fillMaxWidth())
+            .clickable(role=Role.Button) {open=true}.semantics {contentDescription=chooseIconDescription}
             .padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(compact) Arrangement.Center else Arrangement.spacedBy(10.dp)) {
             ServerGlyph(selected,color=MaterialTheme.colorScheme.onSurface)
             if(!compact) {

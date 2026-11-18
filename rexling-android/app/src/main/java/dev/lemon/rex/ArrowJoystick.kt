@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -39,6 +40,7 @@ private val arrowIcons=mapOf("left" to ChromeIcon.LEFT,"down" to ChromeIcon.DOWN
 
 /** Claims the whole press/slide gesture; a neutral center pauses repeat without releasing. */
 @Composable internal fun ArrowJoystickDockKey(enabled: Boolean,modifier: Modifier,onKey: (String)->Unit,readable: Boolean=enabled,inputKey: String="",keyboardVisible: Boolean=true,useJoystick: Boolean=true,onPrompt: ((Int)->Unit)?=null) {
+    val context=androidx.compose.ui.platform.LocalContext.current
     var active by remember(inputKey) {mutableStateOf(false)}
     var popupOpen by remember(inputKey) {mutableStateOf(false)}
     val available=enabled || onPrompt!=null
@@ -57,11 +59,17 @@ private val arrowIcons=mapOf("left" to ChromeIcon.LEFT,"down" to ChromeIcon.DOWN
     Box(modifier.fillMaxHeight().systemGestureExclusion().clip(RoundedCornerShape(11.dp))
         .background(if(active || popupOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
         .semantics {
-            contentDescription="Arrow keys";role=Role.Button;selected=active || popupOpen
-            stateDescription=if(popupOpen) "Arrow popup expanded" else if(active) direction?.let {"${it.replaceFirstChar(Char::uppercaseChar)} arrow"} ?: "Neutral" else if(useJoystick && enabled) "Hold and slide or double tap for arrows" else "Tap for arrows"
+            contentDescription=context.getString(R.string.a11y_arrow_keys);role=Role.Button;selected=active || popupOpen
+            stateDescription=when {
+                popupOpen->context.getString(R.string.a11y_arrow_popup_expanded)
+                active->direction?.let {context.getString(R.string.a11y_arrow_format,it.replaceFirstChar(Char::uppercaseChar))}
+                    ?: context.getString(R.string.a11y_state_neutral)
+                useJoystick && enabled->context.getString(R.string.a11y_arrow_hold_hint)
+                else->context.getString(R.string.a11y_arrow_tap_hint)
+            }
             if(available) {
-                onClick(label="Toggle arrow popup") {popupOpen=!popupOpen;true}
-                customActions=(if(enabled) arrowIcons.keys.toList() else emptyList()).map {key->CustomAccessibilityAction("${key.replaceFirstChar(Char::uppercaseChar)} arrow") {latest(key);true}}
+                onClick(label=context.getString(R.string.a11y_toggle_arrow_popup)) {popupOpen=!popupOpen;true}
+                customActions=(if(enabled) arrowIcons.keys.toList() else emptyList()).map {key->CustomAccessibilityAction(context.getString(R.string.a11y_arrow_format,key.replaceFirstChar(Char::uppercaseChar))) {latest(key);true}}
             } else disabled()
         }.pointerInput(enabled,available,inputKey,deadZone,useJoystick) {
             if(!available) return@pointerInput
@@ -119,17 +127,21 @@ private val arrowIcons=mapOf("left" to ChromeIcon.LEFT,"down" to ChromeIcon.DOWN
             }
         },contentAlignment=Alignment.Center) {
         ChromeSymbol(ChromeIcon.ARROWS,Modifier.size(20.dp),
-            (if(active || popupOpen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface).copy(alpha=if(readable) 1f else .38f))
+            when {
+                !readable->MaterialTheme.colorScheme.onSurfaceVariant
+                active || popupOpen->MaterialTheme.colorScheme.onPrimary
+                else->MaterialTheme.colorScheme.onSurface
+            })
         if(active && enabled && useJoystick && !popupOpen) Popup(popupPositionProvider=provider,properties=PopupProperties(focusable=false,dismissOnClickOutside=false,dismissOnBackPress=false,clippingEnabled=false)) {
             ArrowJoystickFace(direction,displacement,if(keyboardVisible) 88.dp else 52.dp,if(keyboardVisible) 14.dp else 12.dp)
         }
         if(popupOpen && available) Popup(popupPositionProvider=popupProvider,onDismissRequest={popupOpen=false},
             properties=PopupProperties(focusable=false,dismissOnClickOutside=false,dismissOnBackPress=false)) {
-            SpeechBubble(popupProvider,Modifier.width(200.dp).semantics {contentDescription="Arrow key popup"},shadowElevation=0.dp) {
+            SpeechBubble(popupProvider,Modifier.width(200.dp).semantics {contentDescription=context.getString(R.string.a11y_arrow_key_popup)},shadowElevation=0.dp) {
                 Column(Modifier.padding(8.dp)) {
                     ArrowKeyPad(enabled,Modifier.fillMaxWidth().height(100.dp),latest,readable,inputKey)
                     if(onPrompt!=null) Row(Modifier.fillMaxWidth().padding(top=4.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                        listOf(-1 to "Prev command",1 to "Next command").forEach {(direction,label)->
+                        listOf(-1 to stringResource(R.string.label_prev_command),1 to stringResource(R.string.label_next_command)).forEach {(direction,label)->
                             Box(Modifier.weight(1f).height(32.dp).clip(RoundedCornerShape(8.dp))
                                 .clickable(role=Role.Button) {onPrompt(direction)},contentAlignment=Alignment.Center) {
                                 Text(label,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurface)
@@ -153,7 +165,8 @@ private fun joystickDirection(delta: Offset,deadZone: Float,previous: String?): 
 
 @Composable private fun ArrowJoystickFace(direction: String?,displacement: Offset,diameter: Dp,neutralRadius: Dp) {
     val accent=MaterialTheme.colorScheme.primary
-    Box(Modifier.size(diameter).semantics {contentDescription="Arrow joystick";stateDescription=direction ?: "Neutral"}) {
+    val context=androidx.compose.ui.platform.LocalContext.current
+    Box(Modifier.size(diameter).semantics {contentDescription=context.getString(R.string.a11y_arrow_joystick);stateDescription=direction ?: context.getString(R.string.a11y_state_neutral)}) {
         Canvas(Modifier.fillMaxSize()) {
             val r=size.minDimension/2
             drawCircle(Color(0xFF303846),r)
@@ -161,11 +174,11 @@ private fun joystickDirection(delta: Offset,deadZone: Float,previous: String?): 
                 val angle=when(it) {"right"->0f;"down"->90f;"left"->180f;else->270f}
                 drawArc(accent,startAngle=angle-45f,sweepAngle=90f,useCenter=true)
             }
-            drawCircle(Color.White.copy(alpha=.4f),r-1.dp.toPx(),style=Stroke(1.dp.toPx()))
+            drawCircle(Color.White.copy(alpha=.4f),r-1.dp.toPx(),style=Stroke(1.dp.toPx()))  // alpha-ok joystick rim
             drawCircle(Color(0xFF171C25),minOf(neutralRadius.toPx(),r*.36f))
             val distance=displacement.getDistance()
             val knob=if(distance>0) displacement*(minOf(r*.16f,distance*.18f)/distance) else Offset.Zero
-            drawCircle(Color.White.copy(alpha=.55f),minOf(4.dp.toPx(),r*.12f),center+knob)
+            drawCircle(Color.White.copy(alpha=.55f),minOf(4.dp.toPx(),r*.12f),center+knob)  // alpha-ok joystick knob
         }
 
     }

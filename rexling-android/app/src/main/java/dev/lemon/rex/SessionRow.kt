@@ -43,7 +43,7 @@ import kotlin.math.roundToInt
             Text(stringResource(R.string.close),color=MaterialTheme.colorScheme.error,fontSize=12.sp,fontWeight=FontWeight.SemiBold)
         }
         Row(Modifier.fillMaxWidth().offset {IntOffset(offset.roundToInt(),0)}
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=if(active) .8f else .35f))
+            .background(if(active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
             .draggable(rememberDraggableState {delta->position=(position+delta).coerceIn(-distance,distance)},Orientation.Horizontal,
                 enabled=!closing,onDragStarted={dragging=true;position=anchor},onDragStopped={
                     anchor=if(abs(position)>distance*.35f) if(position>0) distance else -distance else 0f

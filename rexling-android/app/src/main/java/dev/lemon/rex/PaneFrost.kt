@@ -27,7 +27,7 @@ import dev.chrisbanes.haze.hazeEffect
     val scheme=MaterialTheme.colorScheme
     val style=remember(scheme,active,darkSurface,tint,opacity,blur) {
         val surface=if(darkSurface) Color(0xff171a20) else scheme.surface
-        val resolvedTint=tint ?: if(active) scheme.primaryContainer else surface
+        val resolvedTint=tint ?: if(active) scheme.secondaryContainer else surface
         HazeStyle(backgroundColor=surface,tints=listOf(HazeTint(resolvedTint.copy(alpha=opacity ?: if(darkSurface || tint!=null) .60f else if(active) .46f else .32f))),
             blurRadius=blur,noiseFactor=.02f,fallbackTint=HazeTint(resolvedTint.copy(alpha=.92f)))
     }

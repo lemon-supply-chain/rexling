@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
     arrowJoystickEnabled: Boolean=true,onArrowJoystick: (Boolean)->Unit={},codexTitleAttention: Boolean=false,onCodexTitleAttention: (Boolean)->Unit={},
     minimizeFloatingPanes: Boolean=false,onMinimizeFloatingPanes: (Boolean)->Unit={},onNetwork: ()->Unit={},
     keepScreenAwake: KeepScreenAwake=KeepScreenAwake.SYSTEM,onKeepScreenAwake: (KeepScreenAwake)->Unit={},onToolbar: ()->Unit={},
+    keyboardSuggestionsEnabled: Boolean=false,onKeyboardSuggestions: (Boolean)->Unit={},
     language: String="system",onLanguage: ()->Unit={},
     terminalPadding: TerminalPadding=TerminalPadding.NORMAL,onTerminalPadding: (TerminalPadding)->Unit={},extendPadding: Boolean=true,onExtendPadding: (Boolean)->Unit={},
     predictiveEcho: PredictiveEcho=PredictiveEcho.SLOW,onPredictiveEcho: (PredictiveEcho)->Unit={},
@@ -91,6 +92,12 @@ import androidx.compose.ui.unit.dp
             }
             SettingsSection(stringResource(R.string.section_keyboard),compact=true) {
                 SettingsRow(stringResource(R.string.keyboard_toolbar),stringResource(R.string.keyboard_toolbar_detail),SettingsGlyph.COMMAND,onToolbar)
+                SettingsDivider()
+                Row(Modifier.fillMaxWidth().toggleable(keyboardSuggestionsEnabled,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onKeyboardSuggestions)
+                    .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.keyboard_suggestions),Modifier.weight(1f),style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
+                    Switch(checked=keyboardSuggestionsEnabled,onCheckedChange=null)
+                }
                 SettingsDivider()
                 Row(Modifier.fillMaxWidth().toggleable(arrowJoystickEnabled,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onArrowJoystick)
                     .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {

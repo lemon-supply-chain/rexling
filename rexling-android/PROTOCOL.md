@@ -864,3 +864,13 @@ The `RXT` tag is this project's own: upstream Rexling reuses the same four bytes
 
 The Android view moves its recorded row render nodes by the same offset and re-records a row when its text, styles, colors or links differ, ignoring only physical row numbers in that comparison.
 
+## Built-in Tailscale sign-out and node deregistration
+
+When built-in Tailscale is connected (`BackendState` is `Running`), the Network preferences sheet provides a **Sign out** action. Initiating sign out requests confirmation via a dialog. Upon confirmation:
+
+1. The Android client sends the `logout` command over the native bridge to `rexling-network`.
+2. The Go background daemon invokes `local.Logout(ctx)` via the Tailscale LocalClient to notify the control plane / coordination server and invalidate the node key.
+3. The daemon closes the `tsnet.Server` instance, cleans up all local cached state files in the control-server directory, and marks the configuration as suspended (`built_in_suspended`).
+4. Android updates preferences (`tailscale_suspended = true`, `tailscale_prepared = false`) and refreshes status, returning the UI state to unconfigured (`Off` / Not set up).
+
+

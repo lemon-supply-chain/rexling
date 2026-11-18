@@ -21,7 +21,10 @@ internal object ThemeCatalog {
             val palette=TerminalPalette(row.getBoolean("dark"),color(row.getString("background")),color(row.getString("foreground")),
                 color(row.getString("cursor")),List(256){color(ansi.getString(it))},color(row.getString("cursorText")))
             val ui=row.getJSONObject("ui");val colors=ui.keys().asSequence().associateWith {color(ui.getString(it))}
-            require(listOf("canvas","surface","surfaceSubtle","surfaceRaised","strokeSubtle","stroke","content","contentSecondary","accentSolid","accentOnSolid","accentContainer","accentOnContainer","dangerSolid","dangerOnSolid","dangerContainer","dangerOnContainer").all {it in colors})
+            require(listOf("canvas","surface","surfaceSubtle","surfaceRaised","strokeSubtle","stroke","content","contentSecondary","accentSolid","accentOnSolid","accentContainer","accentOnContainer",
+                "accentSecondary","accentOnSecondary","accentSecondaryContainer","accentOnSecondaryContainer",
+                "accentTertiary","accentOnTertiary","accentTertiaryContainer","accentOnTertiaryContainer",
+                "dangerSolid","dangerOnSolid","dangerContainer","dangerOnContainer").all {it in colors})
             AppTheme(id,name,palette,colors)
         }
         require((defaults+themes).map {it.id}.distinct().size==defaults.size+themes.size)

@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import androidx.compose.animation.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -60,13 +61,13 @@ internal val UploadPillText=SettingsType.row.copy(fontSize=12.sp,lineHeight=18.s
                 if(uploading) UploadPercentage(percent)
                 if(!success) IconButton(onClick=onCancel,modifier=Modifier.size(32.dp).semantics {
                     contentDescription=if(failed) "Dismiss upload error" else "Cancel image upload"
-                }) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(13.dp),ink.copy(alpha=.6f))}
+                }) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(13.dp),TransferInkMuted)}
             }
             if(failed) {
                 Text(status.error,Modifier.padding(start=8.dp,end=8.dp,bottom=if(retryable) 0.dp else 8.dp),
-                    style=SettingsType.detail,color=ink.copy(alpha=.75f))
+                    style=SettingsType.detail,color=TransferInkSoft)
                 if(retryable) TextButton(onClick=onRetry,modifier=Modifier.align(Alignment.End).padding(end=4.dp,bottom=2.dp),
-                    colors=ButtonDefaults.textButtonColors(contentColor=scheme.primary)) {Text("Retry",style=SettingsType.section)}
+                    colors=ButtonDefaults.textButtonColors(contentColor=scheme.primary)) {Text(stringResource(R.string.label_retry),style=SettingsType.section)}
             }
         }
     }
@@ -80,7 +81,7 @@ private fun uploadTextTransition() =
     val sweep by animateFloatAsState(progress.coerceIn(0f,1f)*360f,tween(240),label="Upload ring progress")
     val ringWidth by animateFloatAsState(if(success) 1.1f else 2f,tween(180),label="Upload ring weight")
     val check by animateFloatAsState(if(success) 1f else 0f,tween(180),label="Upload check")
-    val rotation=if(indeterminate) rememberInfiniteTransition(label="Upload activity").animateFloat(
+    val rotation=if(indeterminate && LocalMotionEnabled.current) rememberInfiniteTransition(label="Upload activity").animateFloat(
         0f,360f,infiniteRepeatable(tween(1100,easing=LinearEasing)),label="Upload ring rotation") else rememberUpdatedState(0f)
     Canvas(Modifier.size(14.dp).semantics {
         progressBarRangeInfo=if(indeterminate) ProgressBarRangeInfo.Indeterminate else ProgressBarRangeInfo(progress.coerceIn(0f,1f),0f..1f)
@@ -88,13 +89,13 @@ private fun uploadTextTransition() =
         val stroke=ringWidth.dp.toPx();val inset=stroke/2
         val origin=androidx.compose.ui.geometry.Offset(inset,inset)
         val extent=androidx.compose.ui.geometry.Size(size.width-stroke,size.height-stroke)
-        drawArc(color.copy(alpha=.14f),0f,360f,false,origin,extent,style=Stroke(stroke,cap=StrokeCap.Round))
+        drawArc(color.copy(alpha=.14f),0f,360f,false,origin,extent,style=Stroke(stroke,cap=StrokeCap.Round))  // alpha-ok progress ring track
         drawArc(color,-90f+rotation.value,if(indeterminate) 260f else sweep.coerceAtLeast(2f),false,origin,extent,
             style=Stroke(stroke,cap=StrokeCap.Round))
         if(check>0f) {
             val u=size.minDimension/18f
             val mark=androidx.compose.ui.graphics.Path().apply {moveTo(5f*u,9f*u);lineTo(8f*u,12f*u);lineTo(13f*u,6.5f*u)}
-            drawPath(mark,color.copy(alpha=check),style=Stroke(1.2f*u,cap=StrokeCap.Round))
+            drawPath(mark,color.copy(alpha=check),style=Stroke(1.2f*u,cap=StrokeCap.Round))  // alpha-ok check draw-on animation
         }
     }
 }
@@ -118,6 +119,13 @@ private fun uploadTextTransition() =
         Text("%",Modifier.alignByBaseline(),style=UploadPillText)
     }
 }
+
+/**
+ * Fixed inks for the transfer notice. They are pre-blended against the notice's
+ * own light-blue container, so muted text keeps AA without alpha on the color.
+ */
+internal val TransferInkMuted = androidx.compose.ui.graphics.Color(0xff6f788a)
+internal val TransferInkSoft = androidx.compose.ui.graphics.Color(0xff515b6d)
 
 /** Shared compact blue surface used by upload and forwarding notices. */
 @Composable internal fun TransferNoticeSurface(modifier: Modifier,hazeState: dev.chrisbanes.haze.HazeState?,

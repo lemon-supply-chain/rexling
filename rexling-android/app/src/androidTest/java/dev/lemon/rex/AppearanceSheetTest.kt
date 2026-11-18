@@ -25,7 +25,7 @@ class AppearanceSheetTest {
     private val themes=ThemeCatalog.load(app)
     @Test fun defaultRemainsFirstAndDarkThemeSelectionDoesNotChangeAppearanceMode() {
         var chosen="";var mode=Appearance.SYSTEM
-        ui.setContent {MaterialTheme {AppearanceSheet(mode,themes,ThemeCatalog.defaults[1],ThemeCatalog.defaults[0],{mode=it},{chosen=it},{})}}
+        ui.setContent {MaterialTheme {AppearanceSheet(mode,themes,ThemeCatalog.defaults[1],ThemeCatalog.defaults[0],{mode=it},{chosen=it},onClose={})}}
         ui.onNodeWithText("Dark theme").performClick()
         ui.onNodeWithContentDescription("Theme Rexling Default").assertIsSelected()
         ui.onNodeWithContentDescription("Theme Abyssal Trench").performClick()
@@ -33,7 +33,7 @@ class AppearanceSheetTest {
     }
     @Test fun fontSizeChangesOneSpAtATime() {
         val size=mutableIntStateOf(10)
-        ui.setContent {MaterialTheme {FontSizeDialog(size.intValue,{size.intValue=it},{})}}
+        ui.setContent {MaterialTheme {FontSizeDialog(size.intValue,{size.intValue=it},onClose={})}}
         ui.onNodeWithContentDescription("Increase font size").performClick();ui.onNodeWithText("11 sp").assertIsDisplayed()
         ui.onNodeWithContentDescription("Decrease font size").performClick();ui.onNodeWithText("10 sp").assertIsDisplayed()
         ui.onNodeWithContentDescription("Font size").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) {it(9f)}
@@ -108,7 +108,7 @@ class AppearanceSheetTest {
     @Test fun themedSheetsRenderInLightAndDark() {
         val selected=mutableStateOf(themes.first {it.id=="abyssal-trench"})
         ui.setContent {val theme=selected.value;MaterialTheme(colorScheme=(if(theme.terminal.dark) darkColorScheme() else lightColorScheme()).withPreset(theme)) {
-            Surface(Modifier.fillMaxSize()) {AppearanceSheet(Appearance.SYSTEM,themes,themes.first {it.id=="alpine-milk"},themes.first {it.id=="abyssal-trench"},{},{},{})}
+            Surface(Modifier.fillMaxSize()) {AppearanceSheet(Appearance.SYSTEM,themes,themes.first {it.id=="alpine-milk"},themes.first {it.id=="abyssal-trench"},{},{},onClose={})}
         }}
         for(id in listOf("abyssal-trench","alpine-milk")) {
             ui.runOnIdle {selected.value=themes.first {it.id==id}};ui.waitForIdle()

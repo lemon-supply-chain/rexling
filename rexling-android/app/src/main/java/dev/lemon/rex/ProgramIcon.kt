@@ -50,7 +50,7 @@ import kotlin.math.sin
     val progressColor = terminalProgressColor(progress)
     val percent = progress?.percent
 
-    val spin = if (percent == null && progress?.busy == true) {
+    val spin = if (percent == null && progress?.busy == true && LocalMotionEnabled.current) {
         val transition = rememberInfiniteTransition(label = "countdown_indeterminate")
         val angle by transition.animateFloat(
             initialValue = 0f,

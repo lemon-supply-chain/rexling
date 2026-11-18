@@ -3,6 +3,8 @@
 import argparse,json,hashlib
 from pathlib import Path
 
+from derive_theme_roles import derived_roles, ensure_readable
+
 def rgb(p):
     # Display-P3 and sRGB use the same transfer function. Convert linear primaries,
     # then encode and clip to the sRGB gamut used by our Android terminal renderer.
@@ -34,8 +36,12 @@ def main():
         for ink,background in [("accentOnSolid","accentSolid"),("dangerOnSolid","dangerSolid")]:
             if contrast(ui[ink],ui[background])<4.5:
                 ui[ink]=max(("#000000","#ffffff"),key=lambda c:contrast(c,ui[background]))
+        # Authored inks keep hue but must clear AA on the surfaces they sit on.
+        ensure_readable(ui)
+        # Selection and working need their own accents; see derive_theme_roles.py.
+        ui.update(derived_roles(ui,theme["dark"]))
     assert len({t["id"] for t in result})==len(result) and all(len(t["ansi"])==256 for t in result)
     target=Path(__file__).resolve().parents[1]/"app/src/main/assets/themes";target.mkdir(parents=True,exist_ok=True)
     (target/"rex-builtins.json").write_text(json.dumps(result,separators=(",",":"))+"\n")
-    (target/"SOURCE.json").write_text(json.dumps({"source":"Rex Beta.app / SuperUI_SuperDesignTokens.bundle / themes.json","sha256":hashlib.sha256(source).hexdigest(),"themes":len(result),"projection":"Numeric terminal and UI colors only; Display-P3 converted and clipped to sRGB. No network or Mac installation required at runtime.","conversion_reference":"https://www.w3.org/TR/css-color-4/#color-conversion-code"},indent=2)+"\n")
+    (target/"SOURCE.json").write_text(json.dumps({"source":"Rex Beta.app / SuperUI_SuperDesignTokens.bundle / themes.json","sha256":hashlib.sha256(source).hexdigest(),"themes":len(result),"projection":"Numeric terminal and UI colors only; Display-P3 converted and clipped to sRGB. No network or Mac installation required at runtime.","derived_roles":"accentSecondary and accentTertiary triads are derived from each authored accent in OKLCH; see scripts/derive_theme_roles.py.","conversion_reference":"https://www.w3.org/TR/css-color-4/#color-conversion-code"},indent=2)+"\n")
 if __name__=="__main__":main()

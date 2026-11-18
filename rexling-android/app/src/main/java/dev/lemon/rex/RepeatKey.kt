@@ -28,7 +28,7 @@ internal fun Modifier.repeatKey(enabled: Boolean,target: String,repeatIntervalMi
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         latest()
     }
-    background(if(pressed) MaterialTheme.colorScheme.primary.copy(alpha=.16f) else Color.Transparent)
+    background(if(pressed) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
         .semantics {role=Role.Button;if(enabled) onClick {fire();true} else disabled()}
         .pointerInput(enabled,target,repeatIntervalMillis) {
             if(!enabled) return@pointerInput

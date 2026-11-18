@@ -45,7 +45,8 @@ private const val GLINT_ARC = .055f
 private val RingThickness = 1.1.dp
 
 @Composable internal fun rememberRainbowMarquee(enabled: Boolean): RainbowMarquee? {
-    if(!enabled) return null
+    // The ring is decorative; the tab's working bar still carries the state.
+    if(!enabled || !LocalMotionEnabled.current) return null
     val transition=rememberInfiniteTransition(label="Rainbow marquee")
     val hue=transition.animateFloat(0f,1f,infiniteRepeatable(tween(4200,easing=LinearEasing)),label="Marquee hue")
     val glint=transition.animateFloat(0f,1f,infiniteRepeatable(tween(1700,easing=LinearEasing)),label="Marquee glint")

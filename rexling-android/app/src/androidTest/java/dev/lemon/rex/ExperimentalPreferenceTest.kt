@@ -24,4 +24,15 @@ class ExperimentalPreferenceTest {
         ui.runOnIdle {assertEquals(1,calls)}
         toggle.performClick().assertIsOff()
     }
+    @Test fun keyboardSuggestionsOptionTogglesIndependently() {
+        val enabled=mutableStateOf(false);var calls=0
+        ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {
+            PreferencesSheet({},{},{},{},{},keyboardSuggestionsEnabled=enabled.value,onKeyboardSuggestions={enabled.value=it;calls++})
+        }}
+        val toggle=ui.onNode(hasText("Keyboard suggestions") and isToggleable())
+        toggle.performScrollTo().assertIsOff().performClick().assertIsOn()
+        ui.runOnIdle {assertEquals(1,calls)}
+        toggle.performClick().assertIsOff()
+        ui.runOnIdle {assertEquals(2,calls)}
+    }
 }

@@ -40,6 +40,7 @@ import kotlin.math.roundToInt
 
 @Composable internal fun NeovimShortcutButton(items: List<NeovimShortcut>,target: String,enabled: Boolean,onChoose: (NeovimShortcut,String)->Unit,onCustomize: ()->Unit,modifier: Modifier=Modifier,
     position: Offset=Offset(0f,1f),onPosition: (Offset)->Unit={},bottomInset: Dp=10.dp,layout: NeovimShortcutLayout=NeovimShortcutLayout.GRID,effect: NeovimShortcutEffect=NeovimShortcutEffect.FAN_OUT,hapticsEnabled: Boolean=true,name: String="Neovim") {
+    val context=androidx.compose.ui.platform.LocalContext.current
     if(layout==NeovimShortcutLayout.CIRCULAR) {
         NeovimRadialShortcutButton(items,target,enabled,onChoose,modifier,position,onPosition,bottomInset,effect,hapticsEnabled,name)
         return
@@ -73,7 +74,7 @@ import kotlin.math.roundToInt
                 onDragCancel={dragged=null},
                 onDragEnd={dragged?.let {savePosition(Offset(if(maxX>0) it.x/maxX else 0f,if(maxY>0) it.y/maxY else 1f))}})
         }) {
-        Box(Modifier.fillMaxSize().semantics {contentDescription="$name shortcuts"}
+        Box(Modifier.fillMaxSize().semantics {contentDescription=context.getString(R.string.a11y_shortcuts_format,name)}
             .clickable(enabled=enabled,role=Role.Button) {open=!open},contentAlignment=Alignment.Center) {
             NeovimShortcutButtonFace(open,enabled,close=open)
         }
@@ -102,6 +103,7 @@ import kotlin.math.roundToInt
 
 /** Six cells at a time, using the same compact treatment as the Ctrl shortcut grid. */
 @Composable private fun NeovimShortcutPopup(items: List<NeovimShortcut>,onChoose: (NeovimShortcut)->Unit,onCustomize: ()->Unit,onDismiss: ()->Unit,width: Dp,name: String) {
+    val context=androidx.compose.ui.platform.LocalContext.current
     val provider=rememberSpeechBubblePositioner()
     var group by remember(items) {mutableStateOf("")}
     var rootPage by remember(items) {mutableIntStateOf(0)}
@@ -118,15 +120,19 @@ import kotlin.math.roundToInt
         val repeatBase=if(pages>1) Int.MAX_VALUE/2-(Int.MAX_VALUE/2)%pages else 0
         val initialPage=if(group.isEmpty()) rootPage.coerceAtMost((pages-1).coerceAtLeast(0)) else 0
         val pager=rememberPagerState(initialPage=repeatBase+initialPage,pageCount={if(pages>1) Int.MAX_VALUE else 1})
-        SpeechBubble(provider,Modifier.width(width).semantics {contentDescription="$name shortcut menu";stateDescription=if(group.isEmpty()) "Shortcuts" else "Group $group"}) {
+        SpeechBubble(provider,Modifier.width(width).semantics {
+            contentDescription=context.getString(R.string.a11y_shortcut_menu_format,name)
+            stateDescription=if(group.isEmpty()) context.getString(R.string.a11y_shortcuts_plain)
+                else context.getString(R.string.a11y_shortcut_group_format,group)
+        }) {
         Column(Modifier.padding(5.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
             if(hasGroups) Row(Modifier.fillMaxWidth().height(28.dp),verticalAlignment=Alignment.CenterVertically) {
-                if(group.isNotEmpty()) ChromeButton(ChromeIcon.LEFT,"Back to all shortcuts",modifier=Modifier.size(28.dp)) {group=""}
-                Text(group.ifEmpty {"Shortcuts"},Modifier.weight(1f).padding(horizontal=8.dp),fontSize=12.sp,fontWeight=FontWeight.Medium,
+                if(group.isNotEmpty()) ChromeButton(ChromeIcon.LEFT,stringResource(R.string.a11y_back_to_all_shortcuts),modifier=Modifier.size(28.dp)) {group=""}
+                Text(group.ifEmpty {stringResource(R.string.a11y_shortcuts_plain)},Modifier.weight(1f).padding(horizontal=8.dp),fontSize=12.sp,fontWeight=FontWeight.Medium,
                     maxLines=1,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
             VerticalPager(pager,Modifier.fillMaxWidth().height((rows*40+(rows-1)*2).dp)
-                .semantics {contentDescription="$name shortcut pages"},userScrollEnabled=pages>1) {page->
+                .semantics {contentDescription=context.getString(R.string.a11y_shortcut_pages_format,name)},userScrollEnabled=pages>1) {page->
                 Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(2.dp)) {
                     repeat(rows) {row->
                         Row(Modifier.fillMaxWidth().height(40.dp),horizontalArrangement=Arrangement.spacedBy(2.dp)) {
@@ -138,7 +144,7 @@ import kotlin.math.roundToInt
                                     .then(colors.categoryFill(item.category)?.let {Modifier.background(it)} ?: Modifier)
                                     .then(if(item is NeovimShortcutEntry.Group) Modifier.then(if(item.category==null) Modifier.background(colors.content.copy(alpha=.065f)) else Modifier)
                                         .border(1.5.dp,colors.categoryMarker(item.category) ?: Color.Transparent,RoundedCornerShape(24.dp))
-                                        .semantics {contentDescription="Shortcut group ${item.label}"} else Modifier)
+                                        .semantics {contentDescription=context.getString(R.string.a11y_shortcut_group_label,item.label)} else Modifier)
                                     .clickable(role=Role.Button) {when(item) {
                                         is NeovimShortcutEntry.Action->onChoose(item.shortcut)
                                         is NeovimShortcutEntry.Group->{rootPage=pager.currentPage%pages.coerceAtLeast(1);group=item.label}

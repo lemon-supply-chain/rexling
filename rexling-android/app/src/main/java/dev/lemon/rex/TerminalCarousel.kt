@@ -26,11 +26,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+
+internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
 
 @Composable internal fun TerminalCarousel(blocks: List<BlockItem>,selectedBlock: String,liveBlock: String,
     liveScreen: TerminalScreen?,frames: Map<String,TerminalScreen>,programs: Map<String,ProgramIdentity>,controlled: Boolean,fontSize: Float,
@@ -39,6 +42,7 @@ import dev.chrisbanes.haze.hazeSource
     onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,
     padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true,
     bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false) {
+    val context=androidx.compose.ui.platform.LocalContext.current
     val switchLayout=remember(paneLayout,blocks) {paneLayout.filter {p->blocks.any {it.id==p.id}}.sortedBy {it.layer}}
     val hasMinimap=blocks.all {b->switchLayout.any {it.id==b.id}}
     val localHaze=remember {HazeState()}
@@ -49,6 +53,7 @@ import dev.chrisbanes.haze.hazeSource
     val backdrop=MaterialTheme.colorScheme.background
     val scope=rememberCoroutineScope()
     val keepAwake=LocalKeepScreenAwake.current
+    val keyboardSuggestions=LocalKeyboardSuggestions.current
     val imeHandoff=remember {TerminalImeHandoff()}
     var visualId by remember(blocks.map {it.id}) {mutableStateOf(selectedBlock)}
     var drag by remember {mutableFloatStateOf(0f)}
@@ -141,7 +146,7 @@ import dev.chrisbanes.haze.hazeSource
                                 view.palette=palette;view.textSp=fontSize
                                 if(retiring || block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
                                 view.interactive=center
-                                view.keyboardSuggestions=programs[block.id]?.kind!=ProgramKind.NEOVIM
+                                view.keyboardSuggestions=keyboardSuggestions && programs[block.id]?.kind!=ProgramKind.NEOVIM
                                 view.imeAnchor=TerminalImeAnchors.anchor(programs[block.id])
                                 view.edgePolicy=TerminalEdgePolicies.policy(programs[block.id])
                                 view.controlled=center && controlled && block.id==liveBlock
@@ -170,7 +175,7 @@ import dev.chrisbanes.haze.hazeSource
                         }
                     }
                     if(center && (frame?.scroll?.below ?: 0)>0) {
-                        Text("↓ Latest",Modifier.align(Alignment.BottomEnd).padding(end=12.dp,bottom=(if(blocks.size>1) if(hasMinimap) 128.dp else 88.dp else 10.dp)+bottomControlsInset)
+                        Text(stringResource(R.string.label_latest),Modifier.align(Alignment.BottomEnd).padding(end=12.dp,bottom=(if(blocks.size>1) if(hasMinimap) 128.dp else 88.dp else 10.dp)+bottomControlsInset)
                             .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
                             .clickable(role=Role.Button,onClick=onBottom).padding(horizontal=12.dp,vertical=7.dp),
                             fontSize=11.sp,color=MaterialTheme.colorScheme.primary)
@@ -183,17 +188,17 @@ import dev.chrisbanes.haze.hazeSource
         if(blocks.size>1) {
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(28.dp)
                 .clickable(role=Role.Button,onClick=onPanes)
-                .semantics {contentDescription="Pane position indicator";stateDescription="Pane ${candidate+1} of ${blocks.size}"},contentAlignment=Alignment.Center) {
+                .semantics {contentDescription=context.getString(R.string.a11y_pane_position_indicator);stateDescription=context.getString(R.string.a11y_pane_of_format,candidate+1,blocks.size)},contentAlignment=Alignment.Center) {
                 PanePositionIndicator(index,blocks.size,offset={-drag/stride})
             }
         }
         if(showSwitch) {
             Column(Modifier.align(Alignment.BottomCenter).padding(bottom=34.dp)
                 .widthIn(max=(maxWidth-32.dp).coerceIn(80.dp,240.dp))
-                .semantics {contentDescription="Pane switch indicator";stateDescription=blocks[candidate].id},
+                .semantics {contentDescription=context.getString(R.string.a11y_pane_switch_indicator);stateDescription=blocks[candidate].id},
                 horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
                     if(hasMinimap) PaneSwitchMinimap(switchLayout,blocks[candidate].id,Modifier.size(56.dp,36.dp),hazeState=haze)
-                    Row(Modifier.paneFrost(haze,RoundedCornerShape(13.dp)).semantics {contentDescription="Pane switch caption"}.padding(horizontal=6.dp,vertical=4.dp),
+                    Row(Modifier.paneFrost(haze,RoundedCornerShape(13.dp)).semantics {contentDescription=context.getString(R.string.a11y_pane_switch_caption)}.padding(horizontal=6.dp,vertical=4.dp),
                         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
                         val block=blocks[candidate]
                         val program=programs[block.id] ?: ProgramIdentity.Loading

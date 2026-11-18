@@ -157,6 +157,7 @@ internal fun neovimWheelAnchorRange(pane: Rect,window: Rect,diameter: Float,edge
 
 @Composable internal fun NeovimRadialShortcutButton(items: List<NeovimShortcut>,target: String,enabled: Boolean,
     onChoose: (NeovimShortcut,String)->Unit,modifier: Modifier,position: Offset,onPosition: (Offset)->Unit,bottomInset: Dp,effect: NeovimShortcutEffect,hapticsEnabled: Boolean,name: String="Neovim") {
+    val context=androidx.compose.ui.platform.LocalContext.current
     val wheel=remember(target,items,effect) {NeovimWheelState(items)}
     DisposableEffect(wheel) {onDispose {wheel.close()}}
     val transition=key(wheel) {updateTransition(wheel.open && enabled,label="Neovim wheel visibility")}
@@ -201,10 +202,10 @@ internal fun neovimWheelAnchorRange(pane: Rect,window: Rect,diameter: Float,edge
             IntOffset(at.x.roundToInt(),at.y.roundToInt())
         }.size(48.dp).onGloballyPositioned {coordinates=it}.systemGestureExclusion()
             .semantics {
-                contentDescription="$name shortcuts";role=Role.Button
+                contentDescription=context.getString(R.string.a11y_shortcuts_format,name);role=Role.Button
                 if(enabled) {
                     onClick {if(wheel.open) wheel.center() else wheel.show();true}
-                    onLongClick(label="Steer $name shortcuts") {wheel.show();true}
+                    onLongClick(label=context.getString(R.string.a11y_steer_shortcuts,name)) {wheel.show();true}
                 } else disabled()
             }.pointerInput(enabled,wheel,range) {
                 if(!enabled) return@pointerInput
@@ -259,6 +260,7 @@ internal fun neovimWheelAnchorRange(pane: Rect,window: Rect,diameter: Float,edge
 }
 
 @Composable private fun NeovimShortcutWheel(wheel: NeovimWheelState,width: Dp,effect: NeovimShortcutEffect,reveal: State<Float>,onTick: ()->Unit,name: String,onChoose: (NeovimShortcut)->Unit) {
+    val context=androidx.compose.ui.platform.LocalContext.current
     val choose by rememberUpdatedState(onChoose)
     val config=LocalViewConfiguration.current
     val pageThreshold=with(LocalDensity.current) {28.dp.toPx()}
@@ -283,12 +285,19 @@ internal fun neovimWheelAnchorRange(pane: Rect,window: Rect,diameter: Float,edge
             1f to Color.Transparent,center=centre,radius=outer+reach),outer+reach,centre)
     }) {
     Box(Modifier.size(width).onGloballyPositioned {wheel.bounds=Rect(it.localToScreen(Offset.Zero),Size(it.size.width.toFloat(),it.size.height.toFloat()))}
-        .semantics {contentDescription="$name shortcut menu";stateDescription=if(!wheel.open) "Closing" else if(wheel.group.isEmpty()) "Shortcuts" else "Group ${wheel.group}"}) {
+        .semantics {
+            contentDescription=context.getString(R.string.a11y_shortcut_menu_format,name)
+            stateDescription=when {
+                !wheel.open->context.getString(R.string.a11y_closing)
+                wheel.group.isEmpty()->context.getString(R.string.a11y_shortcuts_plain)
+                else->context.getString(R.string.a11y_shortcut_group_format,wheel.group)
+            }
+        }) {
         Box(Modifier.fillMaxSize().systemGestureExclusion().semantics {
-            contentDescription="$name shortcut pages"
+            contentDescription=context.getString(R.string.a11y_shortcut_pages_format,name)
             if(wheel.open && wheel.pages>1) customActions=listOf(
-                CustomAccessibilityAction("Next shortcut page") {wheel.next(1);true},
-                CustomAccessibilityAction("Previous shortcut page") {wheel.next(-1);true})
+                CustomAccessibilityAction(context.getString(R.string.a11y_next_shortcut_page)) {wheel.next(1);true},
+                CustomAccessibilityAction(context.getString(R.string.a11y_previous_shortcut_page)) {wheel.next(-1);true})
         }.pointerInput(wheel,wheel.open) {
             awaitEachGesture {
                 val down=awaitFirstDown(pass=PointerEventPass.Initial);down.consume()

@@ -30,7 +30,7 @@ internal fun TerminalMenuItem(
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val iconColor = if (!enabled) scheme.onSurface.copy(alpha = .38f) else if (destructive) scheme.error else scheme.onSurfaceVariant
+    val iconColor = if (!enabled) scheme.onSurfaceVariant else if (destructive) scheme.error else scheme.onSurfaceVariant
     DropdownMenuItem(
         text = {
             Row(

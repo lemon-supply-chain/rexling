@@ -154,7 +154,7 @@ class BackgroundMonitorService: Service() {
         val open=PendingIntent.getActivity(this,1,Intent(this,MainActivity::class.java).setAction("dev.lemon.rex.OPEN_MONITOR").addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val stop=PendingIntent.getService(this,2,Intent(this,BackgroundMonitorService::class.java).setAction(STOP),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(this,BackgroundAlerts.MONITOR_CHANNEL).setSmallIcon(R.drawable.ic_notification).setContentTitle("Rexling · $title")
-            .setContentText("Task completions and attention alerts").setContentIntent(open).setOngoing(true).setShowWhen(false).setCategory(Notification.CATEGORY_SERVICE)
+            .setContentText(getString(R.string.notification_service_text)).setContentIntent(open).setOngoing(true).setShowWhen(false).setCategory(Notification.CATEGORY_SERVICE)
             .addAction(Notification.Action.Builder(null,"Stop",stop).build()).build()
     }
     override fun onTaskRemoved(rootIntent: Intent?) {stopSelf()}

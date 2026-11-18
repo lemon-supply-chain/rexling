@@ -35,6 +35,7 @@ import kotlinx.coroutines.withTimeoutOrNull
     var control by remember {mutableStateOf(NetworkSettings.controlUrl)}
     var error by remember {mutableStateOf<String?>(null)}
     var busy by remember {mutableStateOf(false)}
+    var confirmSignOut by remember {mutableStateOf(false)}
     val tailscale=status.optJSONObject("tailscale")
     val auth=tailscale?.optString("AuthURL").orEmpty()
     fun openLogin(url: String) {
@@ -68,7 +69,8 @@ import kotlinx.coroutines.withTimeoutOrNull
             if(server!=null && server.endpoint.isNotBlank()) ServerNetworkStatusCard(server.label,NetworkSettings.route(server.endpoint),serverConnected)
             Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 TailscaleStatusCard(if(!NetworkSettings.tailscaleEnabled) "Off" else tailscale?.optString("BackendState").orEmpty(),busy,
-                    peers=tailscalePeers(tailscale),networkError=if(NetworkSettings.tailscaleEnabled) status.optString("error") else "",onSignIn=::signIn)
+                    peers=tailscalePeers(tailscale),networkError=if(NetworkSettings.tailscaleEnabled) status.optString("error") else "",onSignIn=::signIn,
+                    onSignOut={confirmSignOut=true})
                 if(NetworkSettings.tailscaleEnabled && auth.isNotBlank() && tailscale?.optString("BackendState")!="Running") PendingTailscaleSignIn(busy,
                     onContinue={runCatching {openLogin(auth)}.onFailure {error=it.message}},
                     onCancel={busy=true;error=null;scope.launch {try {error=NetworkSettings.cancelLogin()} catch(failure: Exception) {error=failure.message} finally {busy=false}}})
@@ -79,6 +81,25 @@ import kotlinx.coroutines.withTimeoutOrNull
             Button(enabled=!busy,onClick={busy=true;scope.launch {error=NetworkSettings.prepareBuiltIn(control);busy=false}}) {Text(if(busy) stringResource(R.string.applying) else stringResource(R.string.apply))}
             error?.let {Text(it,color=MaterialTheme.colorScheme.error,style=SettingsType.detail)}
         }
+        if(confirmSignOut) SettingsConfirmDialog(
+            title=stringResource(R.string.tailscale_sign_out_title),
+            body=stringResource(R.string.tailscale_sign_out_confirm),
+            confirm=stringResource(R.string.sign_out),
+            onConfirm={
+                confirmSignOut=false
+                busy=true;error=null
+                scope.launch {
+                    try {
+                        error=NetworkSettings.logout()
+                    } catch(failure: Exception) {
+                        error=failure.message
+                    } finally {
+                        busy=false
+                    }
+                }
+            },
+            onDismiss={confirmSignOut=false}
+        )
     }
 }
 
@@ -139,25 +160,30 @@ internal fun tailscalePeers(status: org.json.JSONObject?): List<TailscalePeerSta
     }.sortedBy {it.name.lowercase()}.toList()
 }
 
-@Composable internal fun TailscaleStatusCard(state: String,busy: Boolean,peers: List<TailscalePeerStatus> = emptyList(),networkError: String="",onSignIn: ()->Unit) {
+@Composable internal fun TailscaleStatusCard(state: String,busy: Boolean,peers: List<TailscalePeerStatus> = emptyList(),networkError: String="",onSignIn: ()->Unit,onSignOut: ()->Unit={}) {
     SettingsSection(stringResource(R.string.builtin_tailscale)) {
         Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(tailscaleStatusLabelRes(state)),style=SettingsType.row)
                 Text(if(state=="Running") stringResource(R.string.tailscale_ready_desc) else if(state=="NeedsMachineAuth") stringResource(R.string.tailscale_machine_auth_desc) else if(state=="Off") stringResource(R.string.tailscale_off_desc) else stringResource(R.string.tailscale_browser_signin_desc),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if(state=="Running") ChromeSymbol(ChromeIcon.CHECK,Modifier.size(22.dp).testTag("Tailscale connected icon"),color=MaterialTheme.colorScheme.primary)
+            if(state=="Running") Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                ChromeSymbol(ChromeIcon.CHECK,Modifier.size(22.dp).testTag("Tailscale connected icon"),color=MaterialTheme.colorScheme.primary)
+                TextButton(enabled=!busy,onClick=onSignOut,modifier=Modifier.testTag("Tailscale sign out button")) {
+                    Text(stringResource(R.string.sign_out),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)
+                }
+            }
             else if(busy) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp)
             else TextButton(onClick=onSignIn) {Text(if(state=="Off") stringResource(R.string.set_up) else stringResource(R.string.sign_in),style=SettingsType.detail)}
         }
         if(state=="Running" && peers.isNotEmpty()) {
-            HorizontalDivider(Modifier.padding(horizontal=16.dp),color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))
+            HorizontalDivider(Modifier.padding(horizontal=16.dp),color=MaterialTheme.colorScheme.outlineVariant)
             Text(stringResource(R.string.active_connections),Modifier.padding(start=16.dp,top=12.dp,bottom=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.onSurfaceVariant)
             peers.forEach {peer->
                 Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                     ServerGlyph(ServerIcon.SERVER,Modifier.size(18.dp))
                     Text(peer.name,Modifier.weight(1f),style=SettingsType.row,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    Surface(shape=RoundedCornerShape(6.dp),color=MaterialTheme.colorScheme.primary.copy(alpha=.09f)) {
+                    Surface(shape=RoundedCornerShape(6.dp),color=MaterialTheme.colorScheme.primary.copy(alpha=.09f)) {  // alpha-ok decorative tint
                         Text(peer.route,Modifier.padding(horizontal=8.dp,vertical=4.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -184,7 +210,7 @@ internal fun tailscalePeers(status: org.json.JSONObject?): List<TailscalePeerSta
             source=String(output.toByteArray());pasted=false;passphrase="";error=null
         }}.onFailure {error=it.message}
     }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.5f)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
         Text(stringResource(R.string.ssh_key),style=SettingsType.row)
         Text(if(imported) stringResource(R.string.ssh_key_saved) else stringResource(R.string.ssh_key_optional),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(2.dp)) {
@@ -235,7 +261,7 @@ internal fun tailscalePeers(status: org.json.JSONObject?): List<TailscalePeerSta
     if(host!=null && hidden!=signature) AlertDialog(onDismissRequest={hidden=signature},title={Text(if(host.optString("previous").isEmpty()) stringResource(R.string.trust_ssh_host) else stringResource(R.string.ssh_host_key_changed))},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(host.optString("host"));Text(host.optString("type"),style=SettingsType.detail);Text(host.optString("fingerprint"),style=SettingsType.detail)
-            if(host.optString("previous").isNotEmpty()) Text("Previous: ${host.optString("previous")}",style=SettingsType.detail)
+            if(host.optString("previous").isNotEmpty()) Text(stringResource(R.string.label_previous_host_format,host.optString("previous")),style=SettingsType.detail)
             Text(stringResource(R.string.trust_host_verify_hint),style=SettingsType.detail)
         }
     },confirmButton={TextButton(onClick={scope.launch {NetworkSettings.trust(host.getString("host"),host.getString("fingerprint"))}}) {Text(stringResource(R.string.trust_host))}},dismissButton={TextButton(onClick={hidden=signature}) {Text(stringResource(R.string.cancel))}})

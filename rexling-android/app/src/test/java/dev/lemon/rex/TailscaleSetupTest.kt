@@ -40,4 +40,13 @@ class TailscaleSetupTest {
         assertEquals(ServerNetworkRoute.PHONE,ServerNetworkRoute.decode("future"))
         assertEquals(ServerNetworkRoute.BUILTIN,ServerNetworkRoute.decode("builtin"))
     }
+    @Test fun statusLabelResReturnsCorrectResourceForStates() {
+        assertEquals(R.string.tailscale_running,tailscaleStatusLabelRes("Running"))
+        assertEquals(R.string.tailscale_needs_login,tailscaleStatusLabelRes("NeedsLogin"))
+        assertEquals(R.string.tailscale_needs_machine_auth,tailscaleStatusLabelRes("NeedsMachineAuth"))
+        assertEquals(R.string.tailscale_off,tailscaleStatusLabelRes("Off"))
+        assertEquals(R.string.tailscale_stopped,tailscaleStatusLabelRes("Stopped"))
+        assertEquals(R.string.tailscale_starting,tailscaleStatusLabelRes("Starting"))
+        assertEquals(R.string.tailscale_not_connected,tailscaleStatusLabelRes("unknown"))
+    }
 }

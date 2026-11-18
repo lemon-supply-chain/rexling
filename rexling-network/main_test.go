@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -12,6 +14,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -272,5 +275,45 @@ func TestCancelledEnrollmentKeepsServerRoutesButDoesNotRestartTailscale(t *testi
 	c.Suspended = false
 	if !c.tailscaleEnabled() {
 		t.Fatal("explicit setup must be able to resume")
+	}
+}
+
+func TestLogoutSuspendsTailscaleAndClearsDirectory(t *testing.T) {
+	config := configuration{Enabled: true, ControlURL: "https://controlplane.tailscale.com"}
+	reset(t, config)
+	state.Lock()
+	if !state.config.tailscaleEnabled() {
+		state.Unlock()
+		t.Fatal("tailscale should be enabled initially")
+	}
+	dir := state.config.Directory
+	state.Unlock()
+
+	control := config.ControlURL
+	sum := sha256.Sum256([]byte(control))
+	stateDir := filepath.Join(dir, hex.EncodeToString(sum[:16]))
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	dummyFile := filepath.Join(stateDir, "tailscaled.state")
+	if err := os.WriteFile(dummyFile, []byte("dummy state"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := logout(); err != nil {
+		t.Fatalf("logout failed: %v", err)
+	}
+
+	state.Lock()
+	suspended := state.config.Suspended
+	enabled := state.config.tailscaleEnabled()
+	state.Unlock()
+
+	if !suspended || enabled {
+		t.Fatalf("expected suspended=true and enabled=false, got suspended=%v, enabled=%v", suspended, enabled)
+	}
+
+	if _, err := os.Stat(stateDir); !os.IsNotExist(err) {
+		t.Fatalf("expected state directory to be deleted, got err=%v", err)
 	}
 }

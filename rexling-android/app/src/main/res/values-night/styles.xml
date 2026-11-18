@@ -1,0 +1,11 @@
+<resources>
+    <!-- Dark counterpart of Theme.Rex; see values/styles.xml. -->
+    <style name="Theme.Rex" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">#FF315CF4</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#FF090C11</item>
+    </style>
+</resources>

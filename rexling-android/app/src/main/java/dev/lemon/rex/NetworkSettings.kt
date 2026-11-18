@@ -132,6 +132,15 @@ internal object NetworkSettings {
         status.value=command("status")
         error
     }}
+    suspend fun logout(): String? = withContext(Dispatchers.IO) {mutex.withLock {
+        val response=command("logout")
+        val error=response.optString("error").takeIf {it.isNotBlank()}
+        if(error==null) {
+            preferences.edit().putBoolean("tailscale_suspended",true).putBoolean("tailscale_prepared",false).commit()
+        }
+        status.value=command("status")
+        error
+    }}
     suspend fun refreshStatus()=withContext(Dispatchers.IO) {status.value=command("status")}
     suspend fun importKey(endpoint: String,text: String,passphrase: String): String? = withContext(Dispatchers.IO) {mutex.withLock {
         if(text.toByteArray().size>131072) return@withLock "SSH key is too large"

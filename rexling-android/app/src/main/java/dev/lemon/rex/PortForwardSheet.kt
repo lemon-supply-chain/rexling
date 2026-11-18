@@ -61,7 +61,7 @@ import dev.chrisbanes.haze.HazeState
                     }
                     items(entries,key={it.id}) {item->
                         val actionDesc=stringResource(if(item.running) R.string.stop_forward else R.string.start_forward)
-                        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),RoundedCornerShape(12.dp)).padding(start=4.dp,end=0.dp,top=4.dp,bottom=4.dp)) {
+                        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh,RoundedCornerShape(12.dp)).padding(start=4.dp,end=0.dp,top=4.dp,bottom=4.dp)) {
                             Row(Modifier.heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
                                 val stateColor=when(item.phase) {
                                     "active"->MaterialTheme.colorScheme.primary
@@ -73,19 +73,19 @@ import dev.chrisbanes.haze.HazeState
                                     IconButton(onClick={
                                         if(item.running) PortForwards.stop(context,item.id) else (onStart ?: {id: String->PortForwards.requestStart(context,id)})(item.id)
                                     },modifier=Modifier.fillMaxSize().semantics {contentDescription=actionDesc}) {
-                                        Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha=.09f)),contentAlignment=Alignment.Center) {
+                                        Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha=.09f)),contentAlignment=Alignment.Center) {  // alpha-ok decorative tint
                                             ChromeSymbol(if(item.running) ChromeIcon.STOP else ChromeIcon.PLAY,Modifier.size(19.dp),color=MaterialTheme.colorScheme.primary)
                                         }
                                     }
                                 }
                                 Spacer(Modifier.width(8.dp))
-                                Box(Modifier.size(6.dp).background(stateColor,CircleShape).semantics {contentDescription="Forward ${item.phase}"})
+                                Box(Modifier.size(6.dp).background(stateColor,CircleShape).semantics {contentDescription=context.getString(R.string.a11y_forward_phase,item.phase)})
                                 Spacer(Modifier.width(6.dp))
                                 Text("${item.boundPort.takeIf {it>0} ?: "auto"}",style=SettingsType.row.copy(fontFamily=MonoUi),color=MaterialTheme.colorScheme.onSurface)
                                 ChromeSymbol(ChromeIcon.RIGHT,Modifier.padding(horizontal=4.dp).size(16.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(item.target,Modifier.weight(1f),style=SettingsType.row.copy(fontFamily=MonoUi),color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
                                 Spacer(Modifier.width(8.dp))
-                                IconButton(onClick={PortForwards.remove(context,item.id)},modifier=Modifier.size(48.dp).semantics {contentDescription="Remove forward to ${item.target}"}) {
+                                IconButton(onClick={PortForwards.remove(context,item.id)},modifier=Modifier.size(48.dp).semantics {contentDescription=context.getString(R.string.a11y_remove_forward,item.target)}) {
                                     ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(18.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -95,7 +95,7 @@ import dev.chrisbanes.haze.HazeState
                                 TextButton(onClick={PortForwards.openBrowser(context,item.url)},modifier=Modifier.height(32.dp),contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp)) {Text(stringResource(R.string.open_link),style=SettingsType.detail)}
                                 IconButton(onClick={
                                     (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Forwarded URL",item.url))
-                                },modifier=Modifier.width(48.dp).height(32.dp).semantics {contentDescription="Copy forwarded URL"}) {
+                                },modifier=Modifier.width(48.dp).height(32.dp).semantics {contentDescription=context.getString(R.string.a11y_copy_forwarded_url)}) {
                                     ChromeSymbol(ChromeIcon.COPY,Modifier.size(19.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }

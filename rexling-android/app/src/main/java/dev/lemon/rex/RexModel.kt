@@ -136,6 +136,12 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         toolbarKeys=ToolbarLayout.normalize(keys)
         preferences.edit {putString("keyboard_toolbar",ToolbarLayout.encode(toolbarKeys))}
     }
+    internal var keyboardSuggestions by mutableStateOf(preferences.getBoolean("keyboard_suggestions",false))
+        private set
+    internal fun changeKeyboardSuggestions(enabled: Boolean) {
+        keyboardSuggestions=enabled
+        preferences.edit {putBoolean("keyboard_suggestions",enabled)}
+    }
     var fontSize by mutableIntStateOf(preferences.getInt("font_size",10).coerceIn(8,20))
         private set
     internal fun theme(dark: Boolean): AppTheme {

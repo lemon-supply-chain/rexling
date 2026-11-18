@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
@@ -25,6 +26,10 @@ import kotlinx.coroutines.delay
 @Composable internal fun ForwardLinkUi(modifier: Modifier=Modifier,hazeState: HazeState?=null) {
     val context=LocalContext.current
     val message=PortForwards.linkNotice
+    val openLinkDescription=stringResource(R.string.a11y_open_forwarded_link)
+    val forwardingStatusDescription=stringResource(R.string.a11y_forwarding_status)
+    val copyLinkDescription=stringResource(R.string.a11y_copy_forwarded_link)
+    val dismissNoticeDescription=stringResource(R.string.a11y_dismiss_forwarding_notice)
     LaunchedEffect(message) {
         if(message?.autoOpen==true) {
             if((context as? ComponentActivity)?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED)==true)
@@ -54,18 +59,18 @@ import kotlinx.coroutines.delay
                     else ChromeSymbol(ChromeIcon.RIGHT,Modifier.size(14.dp),color=MaterialTheme.colorScheme.primary)
                     Text(label,Modifier.weight(1f,fill=false).clip(RoundedCornerShape(4.dp))
                         .clickable(enabled=ready,role=Role.Button,onClick={PortForwards.openBrowser(context,message.url)})
-                        .semantics {contentDescription=if(ready) "Open forwarded link" else "Forwarding status"},
+                        .semantics {contentDescription=if(ready) openLinkDescription else forwardingStatusDescription},
                         style=UploadPillText,color=ink,maxLines=1,overflow=TextOverflow.Ellipsis)
                     if(ready) IconButton(onClick={
                         (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Forwarded link",message.url))
-                    },modifier=Modifier.size(32.dp).semantics {contentDescription="Copy forwarded link"}) {
+                    },modifier=Modifier.size(32.dp).semantics {contentDescription=copyLinkDescription}) {
                         ChromeSymbol(ChromeIcon.COPY,Modifier.size(13.dp),color=MaterialTheme.colorScheme.primary)
                     }
-                    IconButton(onClick={PortForwards.dismissLinkNotice()},modifier=Modifier.size(32.dp).semantics {contentDescription="Dismiss forwarding notice"}) {
-                        ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(13.dp),color=ink.copy(alpha=.6f))
+                    IconButton(onClick={PortForwards.dismissLinkNotice()},modifier=Modifier.size(32.dp).semantics {contentDescription=dismissNoticeDescription}) {
+                        ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(13.dp),color=TransferInkMuted)
                     }
                 }
-                if(message.error.isNotBlank()) Text(message.error,Modifier.padding(start=8.dp,end=8.dp,bottom=8.dp),style=SettingsType.detail,color=ink.copy(alpha=.75f))
+                if(message.error.isNotBlank()) Text(message.error,Modifier.padding(start=8.dp,end=8.dp,bottom=8.dp),style=SettingsType.detail,color=TransferInkSoft)
             }
         }
     }
@@ -73,12 +78,12 @@ import kotlinx.coroutines.delay
     val target=PortForwards.items.firstOrNull {it.id==conflict?.id}
     if(conflict!=null && target!=null) {
         val owner=PortForwards.items.firstOrNull {it.id==conflict.owner}
-        AlertDialog(onDismissRequest={PortForwards.cancelConflict()},title={Text("Phone port ${target.localPort} is unavailable",style=SettingsType.title)},
-            text={Text(if(owner!=null) "${owner.server} is forwarding ${owner.target} on this port. Choose another port, or stop that forward and reuse the port."
-                else "This port is reserved or in use by another app. Rexling can choose an available phone port.",style=SettingsType.body)},
+        AlertDialog(onDismissRequest={PortForwards.cancelConflict()},title={Text(stringResource(R.string.label_phone_port_unavailable,target.localPort),style=SettingsType.title)},
+            text={Text(if(owner!=null) stringResource(R.string.label_port_owner_desc,owner.server,owner.target)
+                else stringResource(R.string.label_port_busy_desc),style=SettingsType.body)},
             confirmButton={Column(horizontalAlignment=Alignment.End) {
-                TextButton(onClick={PortForwards.resolve(context,false)}) {Text("Choose another port")}
-                if(owner!=null) TextButton(onClick={PortForwards.resolve(context,true)}) {Text("Stop other forward & use port")}
-            }},dismissButton={TextButton(onClick={PortForwards.cancelConflict()}) {Text("Cancel")}})
+                TextButton(onClick={PortForwards.resolve(context,false)}) {Text(stringResource(R.string.label_choose_another_port))}
+                if(owner!=null) TextButton(onClick={PortForwards.resolve(context,true)}) {Text(stringResource(R.string.label_stop_other_forward))}
+            }},dismissButton={TextButton(onClick={PortForwards.cancelConflict()}) {Text(stringResource(R.string.cancel))}})
     }
 }

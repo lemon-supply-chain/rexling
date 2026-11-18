@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
         (112+count.coerceIn(1,7)*72+groups.coerceAtMost(5)*24+sources.count {it.error.isNotBlank() || it.partial}*32).dp.coerceIn(208.dp,620.dp)
     }
     val scheme=MaterialTheme.colorScheme
+    val context=androidx.compose.ui.platform.LocalContext.current
     val drawerSurface=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,
         dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
@@ -54,7 +55,7 @@ import androidx.compose.ui.unit.dp
                 ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_activity),onClick=onClose)
             }
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).height(40.dp).clip(RoundedCornerShape(12.dp))
-                .background(scheme.surfaceVariant.copy(alpha=.45f)).padding(4.dp).selectableGroup()) {
+                .background(scheme.surfaceContainerHigh).padding(4.dp).selectableGroup()) {
                 ActivityFilter.entries.forEach {entry->
                     val active=filter==entry
                     val filterLabel=when(entry) {
@@ -64,9 +65,9 @@ import androidx.compose.ui.unit.dp
                         ActivityFilter.FINISHED->stringResource(R.string.filter_finished)
                     }
                     Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(9.dp))
-                        .background(if(active) scheme.primaryContainer else Color.Transparent)
+                        .background(if(active) scheme.secondaryContainer else Color.Transparent)
                         .selectable(active,role=Role.Tab,onClick={filter=entry}),contentAlignment=Alignment.Center) {
-                        Text(filterLabel,style=SettingsType.section,color=if(active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        Text(filterLabel,style=SettingsType.section,color=if(active) scheme.onSecondaryContainer else scheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -88,16 +89,16 @@ import androidx.compose.ui.unit.dp
                         }
                         items(records,key={"${source.server.id}:${it.key}"}) {record->
                             val seen=record.state.notifiable && record.key in source.seen
-                            Row(Modifier.fillMaxWidth().heightIn(min=56.dp).clip(RoundedCornerShape(12.dp)).background(scheme.surfaceVariant.copy(alpha=.45f))
-                                .semantics {contentDescription="${record.label}, ${record.stateLabel}, ${record.sessionLabel}, ${source.server.label}"
-                                    stateDescription=listOf(record.stateLabel,if(seen) "Seen" else "",record.progress?.let {"$it%"}.orEmpty()).filter {it.isNotBlank()}.joinToString(" · ")}
+                            Row(Modifier.fillMaxWidth().heightIn(min=56.dp).clip(RoundedCornerShape(12.dp)).background(scheme.surfaceContainerHigh)
+                                .semantics {contentDescription=context.getString(R.string.a11y_activity_record,record.label,record.stateLabel,record.sessionLabel,source.server.label)
+                                    stateDescription=listOf(record.stateLabel,if(seen) context.getString(R.string.a11y_state_seen) else "",record.progress?.let {"$it%"}.orEmpty()).filter {it.isNotBlank()}.joinToString(" · ")}
                                 .clickable(enabled=source.connected,role=Role.Button){onSelect(ActivityTarget(source.server,record))}.padding(start=8.dp,end=4.dp,top=4.dp,bottom=4.dp),
                                 verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 ActivityIdentity(record,seen,Modifier.weight(1f))
                                 Box(Modifier.width(68.dp),contentAlignment=Alignment.CenterEnd) {
                                     if(record.state.notifiable && !seen) TextButton(
                                         onClick={onSeen(ActivityTarget(source.server,record))},enabled=source.connected,
-                                        modifier=Modifier.height(36.dp).semantics {contentDescription="Mark ${record.label} seen"},
+                                        modifier=Modifier.height(36.dp).semantics {contentDescription=context.getString(R.string.a11y_mark_seen,record.label)},
                                         shape=RoundedCornerShape(8.dp),contentPadding=PaddingValues(0.dp),
                                         colors=ButtonDefaults.textButtonColors(contentColor=scheme.onSurfaceVariant)
                                     ) {Text(stringResource(R.string.mark_seen),style=SettingsType.detail)}
@@ -159,22 +160,31 @@ import androidx.compose.ui.unit.dp
     val phase=rememberWorkingPhase(working || needsYou)
     val color=when {
         progress?.state=="pause" || progress?.state=="error"->terminalProgressColor(progress)
-        seen->scheme.onSurfaceVariant.copy(alpha=.22f)
+        seen->scheme.outlineVariant
         state==ActivityState.BLOCKED->if(LocalTerminalPalette.current.dark) Color(0xffe6a947) else Color(0xffb77710)
         state==ActivityState.ERROR->scheme.error
         working || state==ActivityState.DONE->scheme.primary
-        else->scheme.onSurfaceVariant.copy(alpha=.22f)
+        else->scheme.outlineVariant
     }
     Canvas(modifier) {
         val radius=CornerRadius(size.width/2)
         val brightness=if(working || needsYou) (.725-.275*cos(phase.value*2*PI)).toFloat() else 1f
-        drawWorkingBar(color.copy(alpha=color.alpha*brightness),Offset.Zero,size,
+        drawWorkingBar(color.copy(alpha=color.alpha*brightness),Offset.Zero,size,  // alpha-ok status pulse
             vertical=true,radius=radius)
     }
+}
+
+@Composable internal fun terminalProgressDescription(progress: TerminalProgress?): String = when(progress?.state) {
+    "pause"->stringResource(R.string.a11y_progress_paused)
+    "error"->stringResource(R.string.a11y_progress_failed)
+    else->progress?.percent?.let {stringResource(R.string.a11y_progress_percent,it)} ?: stringResource(R.string.a11y_progress_working)
 }
 
 @Composable internal fun terminalProgressColor(progress: TerminalProgress?) = when(progress?.state) {
     "error"->MaterialTheme.colorScheme.error
     "pause"->if(LocalTerminalPalette.current.dark) Color(0xffe6a947) else Color(0xffb77710)
+    // Working shares the action hue: a hue-rotated "status" accent next to the brand
+    // blue reads as a different feature, not as progress. Motion and the percentage
+    // carry the working state instead.
     else->MaterialTheme.colorScheme.primary
 }

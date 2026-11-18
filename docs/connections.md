@@ -22,4 +22,4 @@ Leave Control server blank for Tailscale, or enter your Headscale server’s HTT
 
 With built-in Tailscale on, Rexling’s SSH and HTTPS connections use it. Use a tailnet short name, full DNS name, or IP address. Active peer routes are listed as direct, peer relay or Tailscale relay. Existing terminal connections reconnect after changing network settings; active uploads and forwards may need restarting.
 
-Turn built-in Tailscale off to return to the phone’s existing network or VPN. No reverse forwarding or exit-node setup is included.
+To sign out of built-in Tailscale, open Network settings and tap **Sign out** next to the connected status. Confirming sign-out de-registers the `rexling-android` node from your tailnet, removes local cached credentials, stops the background daemon node, and returns the status to Not set up. To switch back to using the phone's native network without signing out individual routes, choose Phone network in the server profile. No reverse forwarding or exit-node setup is included.

@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -40,6 +41,7 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
 
 @Composable internal fun ControlDockKey(enabled: Boolean,active: Boolean,readable: Boolean,modifier: Modifier,
     onToggle: ()->Unit,onShortcut: (String)->Unit,gesture: ControlShortcutGesture=ControlShortcutGesture.HOLD) {
+    val context=androidx.compose.ui.platform.LocalContext.current
     var visible by remember {mutableStateOf(false)}
     var pressed by remember {mutableStateOf(false)}
     var highlighted by remember {mutableIntStateOf(-1)}
@@ -77,8 +79,8 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
     }
         .clip(RoundedCornerShape(11.dp)).background(if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
         .semantics {
-            contentDescription="Control";this.selected=active;role=Role.Button
-            if(enabled) {onClick {if(visible) closeFromTrigger() else toggle();true};onLongClick(label="Control shortcuts") {visible=true;true}} else disabled()
+            contentDescription=context.getString(R.string.a11y_control);this.selected=active;role=Role.Button
+            if(enabled) {onClick {if(visible) closeFromTrigger() else toggle();true};onLongClick(label=context.getString(R.string.a11y_control_shortcuts)) {visible=true;true}} else disabled()
         }.pointerInput(enabled,gesture) {
             if(!enabled) return@pointerInput
             var lastTap: Long?=null
@@ -120,7 +122,11 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
             }
         },contentAlignment=Alignment.Center) {
         ChromeSymbol(ChromeIcon.CONTROL,Modifier.size(20.dp),
-            (if(selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface).copy(alpha=if(readable) 1f else .38f))
+            when {
+                !readable->MaterialTheme.colorScheme.onSurfaceVariant
+                selected->MaterialTheme.colorScheme.onPrimary
+                else->MaterialTheme.colorScheme.onSurface
+            })
         if(visible) Popup(popupPositionProvider=provider,onDismissRequest={dismiss()},
             properties=PopupProperties(focusable=false,dismissOnClickOutside=true)) {
             val popupView=LocalView.current.rootView
@@ -133,7 +139,7 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
                 }
                 onDispose {popupView.setOnTouchListener(null)}
             }
-            SpeechBubble(provider,Modifier.width(244.dp).semantics {contentDescription="Control shortcuts"},shadowElevation=0.dp) {
+            SpeechBubble(provider,Modifier.width(244.dp).semantics {contentDescription=context.getString(R.string.a11y_control_shortcuts)},shadowElevation=0.dp) {
             Column(Modifier.padding(8.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 repeat(controlShortcutRows) {row->
                     Row(Modifier.fillMaxWidth().height(44.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -142,7 +148,7 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
                             if(letter==null) Spacer(Modifier.weight(1f).fillMaxHeight())
                             else Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(11.dp))
                                 .background(if(current) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
-                                .semantics {contentDescription="Control ${letter.uppercase()}";this.selected=current}
+                                .semantics {contentDescription=context.getString(R.string.a11y_control_letter,letter.uppercase());this.selected=current}
                                 .clickable(enabled=enabled,role=Role.Button) {choose(index)},contentAlignment=Alignment.Center) {
                                 Text("^${letter.uppercase()}",fontFamily=MonoUi,fontSize=13.sp,fontWeight=FontWeight.Bold,
                                     color=if(current) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)

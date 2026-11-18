@@ -3,5 +3,6 @@
   "sha256": "443b671d35c39b5fff12468e360c014a1600fed814ef2c43a538aeab5265bdcf",
   "themes": 41,
   "projection": "Numeric terminal and UI colors only; Display-P3 converted and clipped to sRGB. No network or Mac installation required at runtime.",
+  "derived_roles": "accentSecondary and accentTertiary triads are derived from each authored accent in OKLCH; see scripts/derive_theme_roles.py.",
   "conversion_reference": "https://www.w3.org/TR/css-color-4/#color-conversion-code"
 }

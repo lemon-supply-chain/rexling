@@ -64,15 +64,18 @@ import androidx.compose.ui.unit.dp
 }
 
 @Composable private fun ShortcutProfileRow(profile: ShortcutProfile,onClick: ()->Unit,onEnabled: (Boolean)->Unit) {
+    val editProfileDescription=stringResource(R.string.a11y_edit_profile,profile.name)
+    val showProfileDescription=stringResource(R.string.a11y_show_profile,profile.name)
+    val profileStateDescription=stringResource(if(profile.enabled) R.string.a11y_state_on else R.string.a11y_state_off)
     Row(Modifier.fillMaxWidth().clickable(role=Role.Button,onClick=onClick).padding(start=16.dp,end=8.dp,top=12.dp,bottom=12.dp)
-        .semantics {contentDescription="Edit ${profile.name} profile"},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        .semantics {contentDescription=editProfileDescription},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
             Text(profile.name,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
             Text(profile.matchText,style=SettingsType.detail.copy(fontFamily=MonoUi),color=MaterialTheme.colorScheme.primary,maxLines=1,overflow=TextOverflow.Ellipsis)
             Text(shortcutCount(profile.items),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked=profile.enabled,onCheckedChange=onEnabled,modifier=Modifier.semantics {
-            contentDescription="Show ${profile.name} shortcuts";stateDescription=if(profile.enabled) "On" else "Off"})
+            contentDescription=showProfileDescription;stateDescription=profileStateDescription})
     }
 }
 

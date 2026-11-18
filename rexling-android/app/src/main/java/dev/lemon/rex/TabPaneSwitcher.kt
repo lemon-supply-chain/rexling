@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -66,28 +67,30 @@ import kotlinx.coroutines.launch
         return program.tabTitle(tab.label,block?.label.orEmpty(),windows.indexOf(tab)+1,titles[block?.id].orEmpty())
     }
     val drawerSurface=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
+    val closeSwitcherDescription=stringResource(R.string.a11y_close_tab_and_pane_switcher)
+    val pagesDescription=stringResource(R.string.a11y_tab_and_pane_pages)
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,
         dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
         Column(drawerSurface.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
         DrawerHandle()
         Column(Modifier.fillMaxWidth().height(panelHeight).padding(bottom=4.dp)) {
             Row(Modifier.fillMaxWidth().padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                Row(Modifier.weight(1f).height(48.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),RoundedCornerShape(12.dp)).padding(4.dp).selectableGroup()) {
+                Row(Modifier.weight(1f).height(48.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh,RoundedCornerShape(12.dp)).padding(4.dp).selectableGroup()) {
                 listOf("Tabs" to windows.size,"Panes" to panes.size).forEachIndexed {page,(label,count)->
                     val active=pager.currentPage==page
-                    Row(Modifier.weight(1f).fillMaxHeight().background(if(active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,RoundedCornerShape(9.dp))
+                    Row(Modifier.weight(1f).fillMaxHeight().background(if(active) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,RoundedCornerShape(9.dp))
                         .selectable(active,role=Role.Tab,onClick={scope.launch {pager.animateScrollToPage(page)}}),
                         horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
-                            Text(label,style=SettingsType.row,color=if(active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(label,style=SettingsType.row,color=if(active) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.width(6.dp))
                             Text(count.toString(),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 }
-                IconButton(onClick=onClose,modifier=Modifier.semantics {contentDescription="Close tab and pane switcher"}) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(18.dp))}
+                IconButton(onClick=onClose,modifier=Modifier.semantics {contentDescription=closeSwitcherDescription}) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(18.dp))}
             }
             if(error.isNotBlank()) Text(error,Modifier.padding(horizontal=16.dp,vertical=4.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.error,maxLines=2,overflow=TextOverflow.Ellipsis)
-            HorizontalPager(pager,Modifier.fillMaxWidth().weight(1f).semantics {contentDescription="Tab and pane pages"},verticalAlignment=Alignment.Top) {page->
+            HorizontalPager(pager,Modifier.fillMaxWidth().weight(1f).semantics {contentDescription=pagesDescription},verticalAlignment=Alignment.Top) {page->
                 val ids=if(page==0) windows.map {it.id} else panes.map {it.id}
                 val list=rememberLazyListState()
                 val drag=remember(page,reorderKey,if(page==1) targetWindow else "") {TabDrag()}
@@ -160,7 +163,7 @@ import kotlinx.coroutines.launch
                             else if(hasLayout) item(key="layout") {
                                 PaneLayoutMap(current!!,targetPane,programs,titles,enabled) {targetPane=it}
                                 Spacer(Modifier.height(4.dp))
-                            } else item(key="layout-unavailable") {Text("Layout unavailable",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                            } else item(key="layout-unavailable") {Text(stringResource(R.string.label_layout_unavailable),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                             val displayed=if(drag.id==null) panes else drag.order.mapNotNull {id->panes.firstOrNull {it.id==id}}
                             items(displayed,key={it.id}) {block->
                                 val program=programs[block.id] ?: ProgramIdentity.Loading
@@ -175,33 +178,33 @@ import kotlinx.coroutines.launch
                                         val tiled=current?.tiledPanes().orEmpty()
                                         if(placement?.floating==true) TerminalMenuItem("Dock pane",ChromeIcon.SPLIT,enabled=enabled && tiled.isNotEmpty(),onClick={dismiss();dock=targetWindow to block.id})
                                         else if(placement!=null) DropdownMenuItem(text={Column {
-                                            Text("Float pane",style=SettingsType.row)
-                                            if(tiled.size<2) Text("Keep one docked pane in this tab",style=SettingsType.detail)
+                                            Text(stringResource(R.string.label_float_pane),style=SettingsType.row)
+                                            if(tiled.size<2) Text(stringResource(R.string.label_keep_one_docked),style=SettingsType.detail)
                                         }},leadingIcon={ChromeSymbol(ChromeIcon.FLOAT)},enabled=enabled && tiled.size>1,
                                             onClick={dismiss();onFloatPane(targetWindow,block.id)})
                                     })
                             }
                         }
                     }
-                    HorizontalDivider(Modifier.padding(horizontal=16.dp),color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))
+                    HorizontalDivider(Modifier.padding(horizontal=16.dp),color=MaterialTheme.colorScheme.outlineVariant)
                     if(page==0) Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                         Button(onClick={onTab(targetWindow)},enabled=enabled && current?.blocks?.isNotEmpty()==true && !pager.isScrollInProgress,
-                            modifier=Modifier.weight(1f).heightIn(min=48.dp)) {Text("Open tab",style=SettingsType.row)}
+                            modifier=Modifier.weight(1f).heightIn(min=48.dp)) {Text(stringResource(R.string.label_open_tab),style=SettingsType.row)}
                         FilledTonalButton(onClick=onNewTab,enabled=canCreateTab && !pager.isScrollInProgress,
                             modifier=Modifier.weight(1f).heightIn(min=48.dp)) {
                         ChromeSymbol(ChromeIcon.ADD,Modifier.size(18.dp),MaterialTheme.colorScheme.onSecondaryContainer)
                         Spacer(Modifier.width(8.dp))
-                        Text("New tab",style=SettingsType.row)
+                        Text(stringResource(R.string.label_new_tab),style=SettingsType.row)
                         }
                     } else Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                         Button(onClick={onPane(targetPane)},enabled=canOpenPane && !pager.isScrollInProgress,
-                            modifier=Modifier.weight(1f).heightIn(min=48.dp)) {Text("Open pane",style=SettingsType.row)}
+                            modifier=Modifier.weight(1f).heightIn(min=48.dp)) {Text(stringResource(R.string.label_open_pane),style=SettingsType.row)}
                         Box(Modifier.weight(1f)) {
                             FilledTonalButton(onClick={splitMenu=true},enabled=canSplit && !pager.isScrollInProgress,
                                 modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {
                                 ChromeSymbol(ChromeIcon.ADD,Modifier.size(18.dp),LocalContentColor.current)
                                 Spacer(Modifier.width(8.dp))
-                                Text("New pane",style=SettingsType.row)
+                                Text(stringResource(R.string.label_new_pane),style=SettingsType.row)
                             }
                             DropdownMenu(expanded=splitMenu,onDismissRequest={splitMenu=false},containerColor=MaterialTheme.colorScheme.surface,
                                 shape=RoundedCornerShape(14.dp),tonalElevation=0.dp,shadowElevation=0.dp,
@@ -237,7 +240,7 @@ import kotlinx.coroutines.launch
     Canvas(modifier) {
         val u=size.minDimension/24f
         val right=split==PaneSplit.RIGHT
-        drawRoundRect(color.copy(alpha=.22f),Offset((if(right) 12f else 2f)*u,(if(right) 4f else 12f)*u),
+        drawRoundRect(color.copy(alpha=.22f),Offset((if(right) 12f else 2f)*u,(if(right) 4f else 12f)*u),  // alpha-ok layout preview ghost
             Size((if(right) 10f else 20f)*u,(if(right) 16f else 8f)*u),CornerRadius(1.5f*u))
         drawRoundRect(color,Offset(2f*u,4f*u),Size(20f*u,16f*u),CornerRadius(2f*u),style=Stroke(1.5f*u))
         drawLine(color,Offset((if(right) 12f else 2f)*u,(if(right) 4f else 12f)*u),
@@ -257,7 +260,7 @@ import kotlinx.coroutines.launch
     actions: @Composable ((()->Unit)->Unit)={}) {
     var menu by remember {mutableStateOf(false)}
     val primary=MaterialTheme.colorScheme.primary
-    Surface(modifier=modifier,shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),contentColor=MaterialTheme.colorScheme.onSurface) {
+    Surface(modifier=modifier,shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surfaceContainerHigh,contentColor=MaterialTheme.colorScheme.onSurface) {
         Row(Modifier.fillMaxWidth().heightIn(min=56.dp).selectable(active,enabled=enabled,role=Role.RadioButton,onClick=onSelect)
             .semantics {contentDescription=description;stateDescription=if(active) "Selected" else "";customActions=reorderActions}.padding(start=8.dp,end=0.dp,top=4.dp,bottom=4.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
