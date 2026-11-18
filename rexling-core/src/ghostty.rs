@@ -30,6 +30,7 @@ struct RawFrame {
     overscan_below: u16,
     cursor_style: u8,
     cursor_blinking: u8,
+    cursor_has_position: u8,
 }
 const ROW_ABOVE: u16 = 0xFF00;
 const ROW_BELOW: u16 = 0xFE00;
@@ -37,6 +38,8 @@ unsafe extern "C" {
     fn rp_new(cols: u16, rows: u16, out: *mut *mut c_void) -> i32;
     fn rp_decode(bytes: *const u8, len: usize, out: *mut *mut c_void, offset: *mut usize) -> i32;
     fn rp_free(term: *mut c_void);
+    fn rp_decode_ready(bytes:*const u8,len:usize,out:*mut *mut c_void,consumed:*mut usize)->i32;
+    fn rp_decode_next(term:*mut c_void,bytes:*const u8,len:usize,consumed:*mut usize,finished:*mut u8)->i32;
     fn rp_write(
         term: *mut c_void,
         bytes: *const u8,
@@ -103,8 +106,10 @@ pub struct Frame {
     pub columns: u16,
     pub rows: u16,
     pub cursor: Option<(u16, u16)>,
-    /// The cursor position even while hidden; TUIs such as pi park it at their input.
-    pub cursor_at: Option<(u16, u16)>,
+    /// Viewport position even when the application hides its cursor glyph.
+    pub cursor_position: Option<(u16,u16)>,
+    /// Alias for cursor_position for backward compatibility with local predictor.
+    pub cursor_at: Option<(u16,u16)>,
     pub cursor_style: u8,
     pub cursor_blinking: bool,
     pub foreground: [u8; 3],
@@ -200,8 +205,6 @@ impl Drop for Terminal {
         }
     }
 }
-type ApcEvent = (u8, Vec<u8>);
-
 impl Terminal {
     pub fn new(columns: u16, rows: u16) -> Result<Self> {
         ensure!(
@@ -232,19 +235,30 @@ impl Terminal {
             offset,
         ))
     }
-
-    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<ApcEvent>)> {
+    fn decode_ready(bytes:&[u8])->Result<(Self,usize)> {
+        crate::graphics::init()?;
+        let mut handle=ptr::null_mut();let mut consumed=0;
+        check(unsafe {rp_decode_ready(bytes.as_ptr(),bytes.len(),&mut handle,&mut consumed)},"decode snapshot READY")?;
+        Ok((Self {handle:NonNull::new(handle).context("null decoded terminal")?,
+            _owner_thread:PhantomData,images:Default::default(),graphics_clock:std::time::Instant::now(),render_hold:None},consumed))
+    }
+    fn decode_next(&mut self,bytes:&[u8])->Result<(usize,bool)> {
+        let mut consumed=0;let mut finished=0;
+        check(unsafe {rp_decode_next(self.handle.as_ptr(),bytes.as_ptr(),bytes.len(),&mut consumed,&mut finished)},"decode snapshot history")?;
+        Ok((consumed,finished!=0))
+    }
+    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<(u8,Vec<u8>)>)> {
         unsafe extern "C" fn apc(userdata: *mut c_void, kind: u8, bytes: *const u8, len: usize) {
             // Synchronous callback, borrowed bytes copied before native code returns.
             unsafe {
-                let events=&mut *userdata.cast::<Vec<ApcEvent>>();
+                let events=&mut *userdata.cast::<Vec<(u8,Vec<u8>)>>();
                 if kind==1 {events.retain(|(kind,_)|*kind!=1);}
                 let data=if len==0 {Vec::new()} else {std::slice::from_raw_parts(bytes,len).to_vec()};
                 events.push((kind,data));
             }
         }
         let mut consumed = 0;
-        let mut events = Vec::<ApcEvent>::new();
+        let mut events = Vec::<(u8,Vec<u8>)>::new();
         check(
             unsafe {
                 rp_write(
@@ -417,8 +431,9 @@ impl Terminal {
         Ok(Frame {
             columns: raw.columns,
             rows: raw.rows,
-            cursor: (raw.cursor_visible & 1 != 0).then_some((raw.cursor_x, raw.cursor_y)),
-            cursor_at: (raw.cursor_visible & 2 != 0).then_some((raw.cursor_x, raw.cursor_y)),
+            cursor: (raw.cursor_visible != 0).then_some((raw.cursor_x, raw.cursor_y)),
+            cursor_position: (raw.cursor_has_position != 0).then_some((raw.cursor_x,raw.cursor_y)),
+            cursor_at: (raw.cursor_has_position != 0).then_some((raw.cursor_x,raw.cursor_y)),
             cursor_style: raw.cursor_style,
             cursor_blinking: raw.cursor_blinking != 0,
             foreground: raw.foreground,
@@ -505,19 +520,27 @@ impl Replica {
     pub fn terminal(&mut self) -> Result<&mut Terminal> {
         self.terminal.as_mut().context("snapshot is incomplete")
     }
+    pub fn snapshot_complete(&self)->bool {self.snapshot_bytes>0}
     pub fn feed(&mut self, bytes: &[u8]) -> Result<()> {
-        if self.terminal.is_none() {
-            let Some((snapshot, tail)) = self.snapshot.push(bytes)? else {
-                return Ok(());
-            };
-            let (terminal, consumed) = Terminal::decode(&snapshot)?;
-            ensure!(
-                consumed == snapshot.len(),
-                "snapshot decoder boundary mismatch"
-            );
-            self.snapshot_bytes = consumed;
-            self.terminal = Some(terminal);
-            return self.live(&tail);
+        if !self.snapshot_complete() {
+            self.snapshot.append(bytes)?;
+            while let Some(step)=self.snapshot.next_step()? {
+                let input=self.snapshot.input(step);
+                let consumed=if step.ready {
+                    let (terminal,consumed)=Terminal::decode_ready(input)?;
+                    self.terminal=Some(terminal);consumed
+                } else {
+                    let (consumed,finished)=self.terminal.as_mut().context("snapshot READY missing")?.decode_next(input)?;
+                    ensure!(finished==step.finish,"snapshot FINISH boundary mismatch");
+                    consumed
+                };
+                self.snapshot.advance(step,consumed)?;
+                if step.finish {
+                    let (total,tail)=self.snapshot.finish();self.snapshot_bytes=total;
+                    return self.live(&tail);
+                }
+            }
+            return Ok(());
         }
         self.live(bytes)
     }
@@ -565,6 +588,90 @@ impl Replica {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn snapshot_records(bytes:&[u8])->Vec<(u16,usize,usize)> {
+        let mut records=Vec::new();let mut start=10;
+        while start+10<=bytes.len() {
+            let tag=u16::from_le_bytes(bytes[start..start+2].try_into().unwrap());
+            let end=start+10+u32::from_le_bytes(bytes[start+2..start+6].try_into().unwrap()) as usize;
+            records.push((tag,start,end));start=end;if tag==6 {break;}
+        }
+        records
+    }
+    #[test]
+    fn renders_ready_prefix_before_history_and_restores_fragmented_history_without_jumping() {
+        let mut original=Terminal::new(32,6).unwrap();
+        for n in 0..1600 {original.write(format!("history row {n:04}\r\n").as_bytes()).unwrap();}
+        original.write(b"CURRENT PROMPT").unwrap();
+        let bytes=original.encode().unwrap();let records=snapshot_records(&bytes);
+        let ready=records.iter().find(|r|r.0==5).unwrap().2;
+        assert!(ready<bytes.len()/4,"fixture must have substantial history after READY");
+        let mut replica=Replica::new(7);
+        for b in &bytes[..ready] {replica.feed(&[*b]).unwrap();}
+        assert!(replica.ready());assert!(!replica.snapshot_complete());
+        assert!(replica.terminal().unwrap().frame().unwrap().text().contains("CURRENT PROMPT"));
+        let mut anchored=None;
+        for chunk in bytes[ready..].chunks(137) {
+            replica.feed(chunk).unwrap();
+            let terminal=replica.terminal().unwrap();
+            let frame=terminal.frame().unwrap();
+            if let Some(ref expected)=anchored {assert_eq!(&frame.text(),expected,"prepending history moved the viewport");}
+            else if frame.scroll_total>30 {terminal.scroll_viewport(-3);anchored=Some(terminal.frame().unwrap().text());}
+        }
+        assert!(anchored.is_some());assert!(replica.snapshot_complete());
+        assert_eq!(replica.snapshot_bytes,bytes.len());
+        assert_eq!(replica.terminal().unwrap().text().unwrap(),original.text().unwrap());
+        replica.terminal().unwrap().scroll_to_bottom();
+        replica.feed(b" LIVE_AFTER_FINISH").unwrap();
+        assert!(replica.terminal().unwrap().frame().unwrap().text().contains("LIVE_AFTER_FINISH"));
+    }
+    #[test]
+    fn incremental_history_checks_crcs_after_the_first_frame_and_never_replays_snapshot_clipboard() {
+        let mut original=Terminal::new(32,6).unwrap();
+        for n in 0..2000 {original.write(format!("history row {n:04}\r\n").as_bytes()).unwrap();}
+        original.write(b"\x1b]52;c;c2VjcmV0\x07current").unwrap();
+        let mut bytes=original.encode().unwrap();let records=snapshot_records(&bytes);
+        let ready=records.iter().find(|r|r.0==5).unwrap().2;
+        let mut invalid_prefix=bytes[..ready].to_vec();invalid_prefix[16]^=1;
+        let mut rejected=Replica::new(1);assert!(rejected.feed(&invalid_prefix).is_err());assert!(!rejected.ready());
+        let page=records.iter().find(|r|r.0==3 && r.1>ready).unwrap();
+        bytes[page.1+6]^=1;
+        let mut replica=Replica::new(1);replica.feed(&bytes[..ready]).unwrap();
+        assert!(replica.ready());assert!(replica.clipboard_write.is_none());
+        assert!(replica.feed(&bytes[ready..]).is_err());
+        assert!(!replica.snapshot_complete());assert!(replica.clipboard_write.is_none());
+    }
+    #[test]
+    fn incremental_kitty_pixels_and_history_placements_survive_every_byte_boundary() {
+        let mut original=Terminal::new(32,6).unwrap();
+        original.write(b"\x1b_Ga=T,f=32,s=2,v=1,i=41,c=2,r=1;/wAA/wD/AP8=\x1b\\").unwrap();
+        for n in 0..2000 {original.write(format!("image history {n:04}\r\n").as_bytes()).unwrap();}
+        original.write(b"\x1b_Ga=T,f=32,s=2,v=1,i=42,c=2,r=1;/wAA/wD/AP8=\x1b\\").unwrap();
+        let bytes=original.encode().unwrap();let records=snapshot_records(&bytes);
+        assert!(records.iter().any(|r|r.0==9),"fixture needs late image pixels");
+        assert!(records.iter().any(|r|r.0==10),"fixture needs history image placements");
+        let mut replica=Replica::new(1);
+        let ready=records.iter().find(|r|r.0==5).unwrap().2;
+        replica.feed(&bytes[..ready]).unwrap();
+        let _=replica.terminal().unwrap().frame().unwrap(); // Cache a frame before image pixels arrive.
+        for b in &bytes[ready..] {replica.feed(&[*b]).unwrap();}
+        assert!(replica.snapshot_complete());
+        let frame=replica.terminal().unwrap().frame().unwrap();
+        assert!(frame.images.iter().any(|p|p.image.id==42));
+        let terminal=replica.terminal().unwrap();terminal.scroll_viewport(-10000);
+        let frame=terminal.frame().unwrap();
+        assert!(frame.images.iter().any(|p|p.image.id==41));
+    }
+    #[test] fn hidden_tui_cursor_keeps_its_input_position_without_becoming_visible() {
+        let mut terminal=Terminal::new(40,12).unwrap();
+        terminal.write(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[9;3H\x1b[?25l").unwrap();
+        let frame=terminal.frame().unwrap();
+        assert!(frame.cursor.is_none());assert_eq!(frame.cursor_position,Some((2,8)));
+        let mut replica=Replica::new(1);replica.feed(&terminal.encode().unwrap()).unwrap();
+        let restored=replica.terminal().unwrap().frame().unwrap();
+        assert!(restored.cursor.is_none());assert_eq!(restored.cursor_position,Some((2,8)));
+        terminal.write(b"\x1b[?25h").unwrap();let visible=terminal.frame().unwrap();
+        assert_eq!(visible.cursor,Some((2,8)));assert_eq!(visible.cursor_position,visible.cursor);
+    }
     #[test] fn program_cursor_shapes_and_blink_modes_reach_frames() {
         let mut terminal=Terminal::new(20,5).unwrap();
         for (sequence,style,blinking) in [(b"\x1b[1 q".as_slice(),1,true),(b"\x1b[2 q",1,false),(b"\x1b[3 q",2,true),(b"\x1b[4 q",2,false),(b"\x1b[5 q",0,true),(b"\x1b[6 q",0,false)] {
@@ -707,7 +814,7 @@ mod tests {
         let bottom = terminal.frame().unwrap();
         // At the bottom: history above, nothing below; cells stay in the grid.
         assert_eq!(bottom.below.len(), 0);
-        assert!(!bottom.above.is_empty() && bottom.above.len() <= 4);
+        assert!(!bottom.above.is_empty() && bottom.above.len() <= 16); // RP_OVERSCAN in native/ghostty_shim.c
         let line = |row: &Vec<Cell>| row.iter().map(|c| c.text.as_str()).collect::<String>();
         assert_eq!(line(bottom.above.last().unwrap()).trim(), "L17", "nearest row above the visible L18, L19, END");
         assert!(bottom.cells.iter().all(|c| c.y < 3));

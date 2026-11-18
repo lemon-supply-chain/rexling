@@ -94,10 +94,15 @@
     <string name="use_joystick">Use joystick for arrows</string>
     <string name="use_joystick_detail_on">Hold and slide; double-tap for arrow buttons</string>
     <string name="use_joystick_detail_off">Tap for arrow buttons</string>
+    <string name="keyboard_enter_sends">Keyboard Enter sends</string>
+    <string name="keyboard_enter_sends_detail_on">Submits, like a hardware Enter. Hold toolbar Shift for a newline.</string>
+    <string name="keyboard_enter_sends_detail_off">A newline. Programs such as Claude Code insert a line instead of submitting.</string>
     <string name="ctrl_shortcuts">Ctrl shortcuts</string>
     <string name="ctrl_shortcuts_detail">Open the ^ shortcut list with</string>
     <string name="ctrl_gesture_hold">Hold</string>
     <string name="ctrl_gesture_double_tap">Double tap</string>
+    <string name="ctrl_shortcut_buttons">Ctrl shortcut buttons</string>
+    <string name="ctrl_shortcut_buttons_detail">Customize keys and key sequences</string>
     <string name="neovim_shortcuts">Neovim shortcuts</string>
     <string name="neovim_shortcuts_detail">Customize the floating key menu</string>
     <string name="background_alerts">Background alerts</string>
@@ -279,6 +284,8 @@
     <!-- Network -->
     <string name="network">Network</string>
     <string name="network_detail">Built-in Tailscale and control server</string>
+    <string name="ssh_keys">SSH keys</string>
+    <string name="ssh_keys_detail">Save and reuse private keys across servers</string>
     <string name="close_network_settings">Close network settings</string>
     <string name="current_server">Current server</string>
     <string name="builtin_tailscale">Built-in Tailscale</string>

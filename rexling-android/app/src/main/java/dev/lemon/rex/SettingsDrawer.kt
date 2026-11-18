@@ -22,7 +22,7 @@ import dev.chrisbanes.haze.HazeState
 /** Shared chrome for secondary settings drawers; scrolling stays in their content. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun SettingsDrawer(title: String,closeDescription: String,onClose: ()->Unit,
-    hazeState: HazeState?=null,onBack: (() -> Unit)?=null,swipeToDismiss: Boolean=true,content: @Composable ColumnScope.()->Unit) {
+    hazeState: HazeState?=null,onBack: (() -> Unit)?=null,swipeToDismiss: Boolean=true,backDescription: String=stringResource(R.string.back_to_appearance),content: @Composable ColumnScope.()->Unit) {
     val localHaze=remember {HazeState()}
     @Composable fun Body(modifier: Modifier=Modifier) {
         val frost=if(swipeToDismiss) Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
@@ -32,7 +32,7 @@ import dev.chrisbanes.haze.HazeState
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
                 DrawerHandle()
                 Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                    onBack?.let {ChromeButton(ChromeIcon.LEFT,stringResource(R.string.back_to_appearance),onClick=it)}
+                    onBack?.let {ChromeButton(ChromeIcon.LEFT,backDescription,onClick=it)}
                     Text(title,Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
                     ChromeButton(ChromeIcon.CLOSE,closeDescription,onClick=onClose)
                 }

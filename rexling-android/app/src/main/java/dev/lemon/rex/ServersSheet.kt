@@ -112,6 +112,7 @@ import kotlinx.coroutines.launch
     var icon by remember(server?.id) {mutableStateOf(server?.icon ?: ServerIcon.GLOBE)}
     var error by remember {mutableStateOf<String?>(null)}
     var route by remember(server?.id) {mutableStateOf(NetworkSettings.route(server?.endpoint.orEmpty()))}
+    var selectedKey by remember(server?.id) {mutableStateOf(NetworkSettings.selectedKey(server?.endpoint.orEmpty()))}
     var routesOpen by remember {mutableStateOf(false)}
     var networkOpen by remember {mutableStateOf(false)}
     var busy by remember {mutableStateOf(false)}
@@ -141,18 +142,28 @@ import kotlinx.coroutines.launch
             }
             if(endpoint.startsWith("ssh://")) {
                 val normalized=runCatching {ServerProfile.normalizeEndpoint(endpoint)}.getOrNull()
-                if(normalized!=null) SshKeyEditor(normalized)
+                if(normalized!=null) SshKeyEditor(selectedKey) {selectedKey=it}
             }
             error?.let {Text(it,color=MaterialTheme.colorScheme.error,fontSize=12.sp)}
         }
     },confirmButton={Button(onClick={
         val profile=runCatching {ServerProfile.create(name,endpoint,icon=icon)}.getOrElse {error=it.message;return@Button}
         val requestedRoute=route
+        val requestedKey=selectedKey
         busy=true
         scope.launch {
             val previous=NetworkSettings.route(profile.endpoint)
-            error=runCatching {NetworkSettings.saveRoute(profile.endpoint,requestedRoute) ?: onSave(profile.label,profile.endpoint,profile.icon)}.getOrElse {"Could not save server network"}
-            if(error!=null && previous!=requestedRoute) NetworkSettings.saveRoute(profile.endpoint,previous)
+            val previousKey=NetworkSettings.selectedKey(profile.endpoint)
+            val ssh=profile.endpoint.startsWith("ssh://")
+            error=runCatching {
+                NetworkSettings.saveRoute(profile.endpoint,requestedRoute) ?:
+                    (if(ssh) NetworkSettings.assignKey(profile.endpoint,requestedKey) else null) ?:
+                    onSave(profile.label,profile.endpoint,profile.icon)
+            }.getOrElse {it.message ?: "Could not save server"}
+            if(error!=null) {
+                if(previous!=requestedRoute) NetworkSettings.saveRoute(profile.endpoint,previous)
+                if(ssh && previousKey!=NetworkSettings.selectedKey(profile.endpoint)) NetworkSettings.assignKey(profile.endpoint,previousKey)
+            }
             busy=false;if(error==null) onClose()
         }
     },enabled=endpoint.isNotBlank() && !busy) {Text(if(busy) stringResource(R.string.saving) else stringResource(R.string.save_and_connect))}},

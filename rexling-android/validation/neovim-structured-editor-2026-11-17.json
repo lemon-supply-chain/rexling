@@ -1,0 +1,39 @@
+{
+  "build": 161,
+  "editor": [
+    "shortcut list",
+    "one-level group navigation",
+    "create/rename/ungroup",
+    "drag root entries and group contents",
+    "separate command and recorded-key forms",
+    "name and group picker",
+    "compact menu appearance subpage",
+    "expanded editor-only Ungrouped section",
+    "collapsible direct shortcuts",
+    "group picker uses Ungrouped"
+  ],
+  "existing_configuration_preserved": true,
+  "execution_policy_unchanged": true,
+  "checks": {
+    "unit_tests": 223,
+    "unit_skipped": 1,
+    "unit_failures": 0,
+    "release_lint": "passed",
+    "unique_phone_checks_passed": 8,
+    "phone_notes": "Five current editor checks plus prior appearance/recorder and grouped wheel/grid checks passed. Command-save check retried successfully; test now waits for Android IME close before pressing Save.",
+    "visual_review": "list/group and command form screenshots reviewed"
+  },
+  "coverage": [
+    "legacy grouping/order round-trip",
+    "rename and ungroup without key loss",
+    "move shortcut to group",
+    "empty group cannot silently disappear",
+    "duplicate labels do not overwrite entries",
+    "recorded key case and Undo boundaries",
+    "complex command assignment preserved",
+    "grid/circular, effects, haptics and enable controls",
+    "Ungrouped expanded by default",
+    "collapse retains direct shortcuts and exact menu order",
+    "section reordering preserves other root anchors"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "build": 136,
+  "jvm": {
+    "tests": 200,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "lint_release": "passed",
+  "phone_tests": "9 passed on SM-S906E",
+  "coverage": [
+    "Every up/down row step with keyboard open moves viewport at most one row",
+    "No terminal grid resize during cursor navigation",
+    "Hidden cursor and scrollback preserve anchor",
+    "Keyboard animations and prompt visibility",
+    "Program-requested cursor blink and steady transitions",
+    "Cached, uncached and rapid tab IME handoff"
+  ],
+  "live_cursor_modes": {
+    "Codex": "cursor_blinking=false",
+    "Neovim": "cursor_blinking=false"
+  },
+  "apk_verification": "passed"
+}

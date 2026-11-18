@@ -1,0 +1,27 @@
+{
+  "build": 162,
+  "issue": "Shipyard minimized floating terminal remains on Opening terminal",
+  "finding": {
+    "floating_snapshot_bytes": 21650115,
+    "snapshot_decode_host_ms": 37,
+    "server_minimized_stream_delivers_snapshot": true,
+    "indefinite_stall_consistently_reproduced": false
+  },
+  "change": "Retain one inactive floating terminal stream and replica; consume hidden output without rendering or replaying clipboard writes; invalidate on session/connection changes, closure and stream errors.",
+  "checks": {
+    "native_passed": 62,
+    "native_ignored": 15,
+    "android_unit_tests": 223,
+    "android_unit_skipped": 1,
+    "android_unit_failures": 0,
+    "lint": "passed",
+    "phone_minimize_reopen_cycles": 2,
+    "phone_terminal_loaded_at_first_ui_check": true,
+    "phone_check_duration_seconds": [
+      2.39,
+      2.42
+    ],
+    "installed_apk_hash_matches": true
+  },
+  "limitations": "First open still needs the full snapshot. This removes repeated snapshot downloads; the intermittent indefinite stall needs confirmation from the user."
+}

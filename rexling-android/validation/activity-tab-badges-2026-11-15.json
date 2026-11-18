@@ -1,0 +1,25 @@
+{
+  "build": 129,
+  "jvm": {
+    "tests": 195,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "lint_release": "passed",
+  "apk_verification": "passed",
+  "device_ui_tests": "12 passed on SM-S906E",
+  "coverage": [
+    "Same-session activity badges its current owning tab",
+    "Other sessions and servers badge the eye",
+    "Pane moves use current layout membership",
+    "Missing panes retain eye fallback",
+    "Seen, working, progress-only and disconnected records excluded",
+    "Tab geometry and top-right placement tests compiled for both themes"
+  ],
+  "notification_delivery": "unchanged",
+  "screenshots_reviewed": [
+    "tab-badge-light.png",
+    "tab-badge-dark.png"
+  ]
+}

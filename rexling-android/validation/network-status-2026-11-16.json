@@ -1,0 +1,13 @@
+{
+  "build": 142,
+  "lint_release": "passed",
+  "jvm": "204 passed, 1 skipped",
+  "phone_tests": "10 passed on SM-S906E",
+  "coverage": [
+    "Current server route/status separated from built-in client",
+    "Unconfigured built-in state is Not set up",
+    "Empty backend state is Not connected, never indefinite Starting",
+    "Phone network/VPN connection remains independently Connected"
+  ],
+  "apk_verification": "passed"
+}

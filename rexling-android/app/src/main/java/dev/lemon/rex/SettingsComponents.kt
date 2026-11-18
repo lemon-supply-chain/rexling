@@ -55,7 +55,7 @@ internal object SettingsType {
     HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant)
 }
 
-internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK }
+internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK,KEY }
 
 @Composable internal fun SettingsRow(title: String,subtitle: String,glyph: SettingsGlyph,onClick: ()->Unit,badge: String?=null) {
     val chevronColor=MaterialTheme.colorScheme.onSurfaceVariant
@@ -76,7 +76,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
     }
 }
 
-@Composable private fun SettingsIcon(glyph: SettingsGlyph) {
+@Composable internal fun SettingsIcon(glyph: SettingsGlyph) {
     val color=MaterialTheme.colorScheme.primary
     Surface(shape=RoundedCornerShape(11.dp),color=color.copy(alpha=.09f)) {  // alpha-ok decorative glyph tile
         Box(Modifier.size(36.dp),contentAlignment=Alignment.Center) {
@@ -113,6 +113,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
                             drawCircle(color,3f*u,Offset(x*u,y*u),style=stroke)
                         }
                     }
+                    SettingsGlyph.KEY->{drawCircle(color,4f*u,Offset(7f*u,8f*u),style=stroke);line(10f,11f,20f,21f);line(15f,16f,18f,13f);line(18f,19f,21f,16f)}
                     SettingsGlyph.FONT->Unit
                     SettingsGlyph.COMMAND->{line(9f,6f,3f,12f);line(3f,12f,9f,18f);line(15f,6f,21f,12f);line(21f,12f,15f,18f)}
                 }

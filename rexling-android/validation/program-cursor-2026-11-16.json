@@ -1,0 +1,25 @@
+{
+  "build": 135,
+  "native": {
+    "passed": 116,
+    "ignored": 18,
+    "failures": 0
+  },
+  "jvm": {
+    "passed": 198,
+    "skipped": 1,
+    "failures": 0
+  },
+  "lint_release": "passed",
+  "phone": "5 tests passed on unlocked SM-S906E",
+  "coverage": [
+    "DECSCUSR bar/block/underline and steady/blinking modes",
+    "DEC mode 12 blink override and mode 25 hidden cursor",
+    "RXT6 cursor-only update without changed rows",
+    "Old packet steady-block fallback",
+    "Cursor visual blink phases, steady transition and inactive pane",
+    "Tab keyboard handoff and screen-awake behavior"
+  ],
+  "server_protocol": "unchanged",
+  "apk_verification": "passed"
+}

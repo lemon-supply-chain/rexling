@@ -1,0 +1,16 @@
+{
+  "build": 133,
+  "default": "SYSTEM",
+  "mechanism": "View.keepScreenOn, no wake lock",
+  "lifecycle": "Requires attached, shown, focused and visible window; cleared on detach",
+  "jvm": {
+    "tests": 198,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "lint_release": "passed",
+  "phone_tests": "KeepScreenAwakeUiTest passed on SM-S906E; active hold releases on idle",
+  "apk_verification": "passed",
+  "active_timeout": "Android system screen timeout; frame-bound activity hold, no fixed grace period"
+}

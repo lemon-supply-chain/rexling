@@ -1,6 +1,6 @@
 # Upstream Sync Plan & Status
 
-Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884c48f3600dd787f17a5` through `7e1cd8ecf997558af4b9fe18bfd3b9129173bdf9` (`upstream/main`), while preserving repository customizations:
+Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884c48f3600dd787f17a5` through `da7a0f9fa45759ffcf2f01d41865c3bbec614742` (`upstream/main`), while preserving repository customizations:
 - Package name `dev.lemon.rex` preserved.
 - Icon rainbow marquee and glint effects (`RainbowMarquee.kt`, `ProgramStack.kt`, `TerminalChrome.kt`) preserved.
 - Custom vector artwork system (`ProgramArtwork.kt`, `ProgramVectorPicture.kt`, `ProgramVocabulary.kt`) preserved.
@@ -8,6 +8,8 @@ Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884
 - Chinese localization (`res/values-zh/` and language toggle) preserved.
 - Neovim shortcut profiles preserved.
 - Custom terminal padding setting preserved.
+- Built-in Tailscale sign-out and session reset preserved.
+- Predictive local echo preserved.
 
 ---
 
@@ -98,12 +100,77 @@ Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884
   - **Area**: Keyboard Toolbar, Customization UI
   - **Status**: Synced `KeyboardToolbar.kt`, `KeyboardToolbarSheet.kt`, and `ToolbarLayoutTest.kt`.
 
+- [x] **18. `ee1269f`** - Reuse live floating terminal streams when reopening panes
+  - **Full Hash**: `ee1269fa5da27e69c1c4ee00b8686f0aafe097f5`
+  - **Area**: JNI Engine, Terminal Stream Caching
+  - **Status**: Synced `RetainedFloating` stream caching in `rexling-core/jni/src/engine.rs`.
+
+- [x] **19. `4f2cfae`** - Add editable Ctrl shortcut sequences
+  - **Full Hash**: `4f2cfae090f0c0ae2f8d36371cb1fbe24cb47f89`
+  - **Area**: Keyboard / Ctrl Shortcuts, Customization UI
+  - **Status**: Synced `ControlShortcutConfig.kt`, `ControlShortcutsSheet.kt`, and `ControlShortcuts.kt`.
+
+- [x] **20. `68d1e35`** - Add structured Neovim shortcut editing and groups
+  - **Full Hash**: `68d1e35d1f8553d1fb525f674516be702e8ebdb3`
+  - **Area**: Neovim Shortcuts, Drag-and-drop Group Editor
+  - **Status**: Synced `NeovimShortcutEditor.kt`, `NeovimShortcutForm.kt`, `NeovimShortcutsSheet.kt`.
+
+- [x] **21. `715dd4c`** - Render terminal screens before scrollback finishes loading
+  - **Full Hash**: `715dd4c871efd3013d289e6eb1f3c7e754593ae4`
+  - **Area**: Ghostty Shim, Stream Decoder, Screen-first Snapshot
+  - **Status**: Synced `ghostty_shim.c` (`rp_decode_ready`, `rp_decode_next`) and `snapshot.rs`.
+
+- [x] **22. `878248e`** - Use themed text colors in transparent settings drawers
+  - **Full Hash**: `878248eecb5fae5f3964fc5f206a4cb6fa8e9d3d`
+  - **Area**: UI / Theme Styling, Settings Drawer
+  - **Status**: Synced `SettingsDrawer.kt` contentColor handling and `drawer-dark-text-2026-11-18.json`.
+
+- [x] **23. `bc0b4c3`** - Add reusable SSH key library and server key selection
+  - **Full Hash**: `bc0b4c338e553be0c3924f1141df90e3aa002a28`
+  - **Area**: Network Daemon, SSH Key Management, Settings UI
+  - **Status**: Synced `rexling-network` fingerprint calculation, `SshKeyLibrary.kt`, `SshKeysSheet.kt`, `ServersSheet.kt`.
+
+- [x] **24. `d181aee`** - Keep hidden Claude cursor positions for input and keyboard panning
+  - **Full Hash**: `d181aeead8eb333bf69b59620ca117a7a5c8e234`
+  - **Area**: Terminal Core / RXT7 Wire Protocol, IME Anchor
+  - **Status**: Synced `cursor_position` export in Ghostty, `RXT7` wire protocol in JNI and Kotlin, `cursorAnchorX`/`Y`.
+
+- [x] **25. `81bce6c`** - Prepare release build 167
+  - **Full Hash**: `81bce6cf9a7c36c49c71987ba62078516faef4bb`
+  - **Area**: Release Packaging
+  - **Status**: Bumped version code to 167 in `build.gradle.kts` and verified artifacts.
+
+- [x] **26. `d92d836`** - Add an option for the keyboard's Enter to submit
+  - **Full Hash**: `d92d836696db2256ffb861e6878b2d131f4a9b6c`
+  - **Area**: Keyboard Preferences, Terminal Input
+  - **Status**: Synced `enterSubmits` option in `PreferencesSheet.kt`, `TerminalView.kt`, and `TerminalInput.imeKeys`.
+
+- [x] **27. `ecf9777`** - Stop typed input from delaying its own echo by a frame
+  - **Full Hash**: `ecf9777df7f7fa2ff8ea97a31f0a202c4161794b`
+  - **Area**: JNI Engine, Typing Latency
+  - **Status**: Synced `scrolled_back` typing dirty render flag in `rexling-core/jni/src/engine.rs`.
+
+- [x] **28. `89f18fe`** - Keep fast flings from sticking at the overscan edge
+  - **Full Hash**: `89f18fe67d268d0ee54e19b996f8aeb9b5b2713f`
+  - **Area**: JNI Engine, Scroll Motion
+  - **Status**: Synced `scroll_instant` rendering flag in `rexling-core/jni/src/engine.rs`.
+
+- [x] **29. `55520d7`** - Expect the current RXT7 packet header in the JNI smoke test
+  - **Full Hash**: `55520d74268153b6fa620e74e30ef6823c914bf6`
+  - **Area**: JNI Tests
+  - **Status**: Synced `tools/jni-smoke/dev/lemon/rex/NativeBridge.java`.
+
+- [x] **30. `da7a0f9`** - Prepare release build 168
+  - **Full Hash**: `da7a0f9fa45759ffcf2f01d41865c3bbec614742`
+  - **Area**: Release Packaging
+  - **Status**: Bumped `versionCode = 168` in `build.gradle.kts`.
+
 ---
 
 ## Verification
-- Rust Core (`rexling-core`): 114 tests passed, 18 ignored.
-- Go Network Daemon (`rexling-network`): 6 tests passed.
+- Rust Core (`rexling-core`): 50 passed, 3 ignored (6 suites).
+- Go Network Daemon (`rexling-network`): 8 passed in 1 package.
 - Android Application (`rexling-android`):
   - Debug compilation: `BUILD SUCCESSFUL`.
-  - Debug unit tests: 253 passed, 1 skipped (`testDebugUnitTest` SUCCESS).
+  - Debug unit tests: 310 passed, 1 skipped (`testDebugUnitTest` SUCCESS).
   - Debug APK assembly: `BUILD SUCCESSFUL` (`assembleDebug`).

@@ -344,7 +344,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                     else PortForwards.notice="Wait for this pane to connect before forwarding its link."
                                 }
                             },
-                            Modifier.fillMaxSize(),floatingDock=floating.isNotEmpty(),paneLayout=window?.layout.orEmpty(),titles=state.titles,directories=state.directories,hazeState=terminalHaze,captureBackdrop=floatingBackdrop || ownerBackdrop || readyBackdrop || model.images.state!=null,onImage=imageCommit,onPaste=::pasteClipboard,padding=model.terminalPadding,extendPadding=model.extendPadding)
+                            Modifier.fillMaxSize(),floatingDock=floating.isNotEmpty(),paneLayout=window?.layout.orEmpty(),titles=state.titles,directories=state.directories,hazeState=terminalHaze,captureBackdrop=floatingBackdrop || ownerBackdrop || readyBackdrop || model.images.state!=null,onImage=imageCommit,onPaste=::pasteClipboard,padding=model.terminalPadding,extendPadding=model.extendPadding,imeEnterSubmits=model.enterSubmits)
                         if(floatingActive && hiddenFloating==chosen) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
                             Text(stringResource(R.string.floating_panes_minimized),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -382,7 +382,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                     {model.showActivity(true)},{picker="tabs"},attentionCount=activityBadges.elsewhere)
                             })
                             KeyboardBar(controlled,ready,client.controlModifier,client.altModifier,client.shiftModifier,keyboardVisible,
-                                client::toggleControl,client::toggleAlt,client::toggleShift,client::pressShift,client::releaseShift,{client.keyForTarget(it,keyTarget)},readable=state.connected,onControlShortcut=client::controlShortcut,inputKey=keyTarget,shortcutGesture=model.shortcutGesture,arrowJoystickEnabled=model.arrowJoystickEnabled,onPaste=::pasteClipboard,onPrompt=if(client.hasSemanticPrompts && !changingSession) client::scrollPrompt else null,toolbarKeys=model.toolbarKeys) {
+                                client::toggleControl,client::toggleAlt,client::toggleShift,client::pressShift,client::releaseShift,{client.keyForTarget(it,keyTarget)},readable=state.connected,onControlShortcut=client::controlShortcut,inputKey=keyTarget,shortcutGesture=model.shortcutGesture,arrowJoystickEnabled=model.arrowJoystickEnabled,onPaste=::pasteClipboard,onPrompt=if(client.hasSemanticPrompts && !changingSession) client::scrollPrompt else null,toolbarKeys=model.toolbarKeys,controlItems=model.controlItems) {
                                 if(!controlled) client.takeControl() else if(keyboardVisible) terminalView?.hideKeyboard() else terminalView?.keyboard()
                             }
                         }
@@ -408,10 +408,12 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
             {openSettings(SettingsRoute.BackgroundAlerts)},{openSettings(SettingsRoute.About)},
             onClose={closeSettings()},shortcutGesture=model.shortcutGesture,onShortcutGesture=model::changeShortcutGesture,
             onNeovim={openSettings(SettingsRoute.Shortcuts)},arrowJoystickEnabled=model.arrowJoystickEnabled,onArrowJoystick=model::changeArrowJoystick,
+            enterSubmits=model.enterSubmits,onEnterSubmits=model::changeEnterSubmits,
             codexTitleAttention=model.experimentalCodexAttention,onCodexTitleAttention=model::changeCodexAttention,
             minimizeFloatingPanes=model.minimizeFloatingPanes,onMinimizeFloatingPanes=model::changeMinimizeFloatingPanes,
             onNetwork={openSettings(SettingsRoute.Network)},
             keepScreenAwake=model.keepScreenAwake,onKeepScreenAwake=model::changeKeepScreenAwake,onToolbar={openSettings(SettingsRoute.KeyboardToolbar)},
+            onControlItems={openSettings(SettingsRoute.ControlShortcuts)},onSshKeys={openSettings(SettingsRoute.SshKeys)},
             keyboardSuggestionsEnabled=model.keyboardSuggestions,onKeyboardSuggestions=model::changeKeyboardSuggestions,
             language=model.language,onLanguage={openSettings(SettingsRoute.Language)},
             terminalPadding=model.terminalPadding,onTerminalPadding=model::changeTerminalPadding,extendPadding=model.extendPadding,onExtendPadding=model::changeExtendPadding,
@@ -422,6 +424,8 @@ if(picker=="sessions") SessionSwitcher(model.sessionTargets,currentSessionKey,mo
         SettingsRoute.BackgroundAlerts->BackgroundAlertsDialog(model,hazeState=workspaceHaze) {closeSettings()}
         SettingsRoute.About->AboutSheet(hazeState=workspaceHaze) {closeSettings()}
         SettingsRoute.KeyboardToolbar->KeyboardToolbarSheet(model.toolbarKeys,model::changeToolbar,onClose={closeSettings()},hazeState=workspaceHaze)
+        SettingsRoute.ControlShortcuts->ControlShortcutsSheet(model.controlItems,model::saveControlShortcuts,onClose={closeSettings()},hazeState=workspaceHaze)
+        SettingsRoute.SshKeys->SshKeysSheet(onClose={closeSettings()},hazeState=workspaceHaze)
         SettingsRoute.Network->NetworkSheet(model.activeServer,state.connected,hazeState=workspaceHaze) {closeSettings()}
         SettingsRoute.Shortcuts->ShortcutProfilesSheet(model.shortcutProfiles,onEdit={openSettings(SettingsRoute.ShortcutEditor(it))},onNew={openSettings(SettingsRoute.ShortcutEditor(""))},
             onEnabled=model::enableShortcutProfile,onClose={closeSettings()},
@@ -549,11 +553,11 @@ private fun getClipboard(context: Context)=context.getSystemService(Context.CLIP
     onInput: (String)->Unit,onScroll: (Int)->Unit,onWheel: (Int,Int,Int,Int,Int)->Unit,onActivate: ()->Unit,onBottom: ()->Unit,onDimensions: (Int,Int)->Unit,
     onSelect: (String)->Unit,onPanes: ()->Unit,onView: (TerminalView)->Unit,modifier: Modifier=Modifier,
     floatingDock: Boolean=false,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},
-    padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true) {
+    padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true,imeEnterSubmits: Boolean=false) {
     val layout by client.displayLayout.collectAsState()
     val screen=client.screenForLayout(layout)
     TerminalCarousel(blocks,chosen,liveBlock,screen,client.paneFrames,programs,controlled,fontSize,
-        onInput,onScroll,onWheel,onActivate,onBottom,onDimensions,onSelect,onPanes,onView,modifier,client::bindTerminalView,onMouseClick=client::click,mouseTarget=client::keyTarget,onImage=onImage,onPaste=onPaste,imageTarget=client::imageInputTarget,bottomControlsInset=if(floatingDock) 56.dp else 0.dp,paneLayout=paneLayout,titles=titles,directories=directories,hazeState=hazeState,captureBackdrop=captureBackdrop,padding=padding,extendPadding=extendPadding)
+        onInput,onScroll,onWheel,onActivate,onBottom,onDimensions,onSelect,onPanes,onView,modifier,client::bindTerminalView,onMouseClick=client::click,mouseTarget=client::keyTarget,onImage=onImage,onPaste=onPaste,imageTarget=client::imageInputTarget,bottomControlsInset=if(floatingDock) 56.dp else 0.dp,paneLayout=paneLayout,titles=titles,directories=directories,hazeState=hazeState,captureBackdrop=captureBackdrop,padding=padding,extendPadding=extendPadding,imeEnterSubmits=imeEnterSubmits)
 }
 
 @Composable private fun BackgroundAlertsDialog(model: RexModel,hazeState: HazeState?=null,onClose: ()->Unit) {

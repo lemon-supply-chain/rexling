@@ -163,4 +163,22 @@ class TerminalUpdatesTest {
         assertTrue(runCatching {decoder.decode(rxt5(4,2,4,1,emptyMap()))}.isFailure)
         assertTrue(runCatching {decoder.decode(rxt5(4,3,4,1,mapOf(0 to "a",1 to "b",2 to "c",3 to "d")))}.isFailure)
     }
+    @Test fun rxt7KeepsHiddenInputAnchorSeparateFromTheVisibleCursor() {
+        fun packet(rev: Long,anchorX: Int,anchorY: Int): ByteArray {
+            val out=ByteArrayOutputStream()
+            fun n(value:Long,size:Int) {repeat(size) {out.write((value ushr (8*it)).toInt() and 255)}}
+            out.write("RXT7".toByteArray());n(rev,8);n(2,4);out.write("{}".toByteArray());n(3,1)
+            n(2,2);n(2,2);n(-1,4);n(-1,4);n(-1,4);n(0,4)
+            n(2,8);n(0,8);n(2,8);n(7,1);n(1,1);n(0,2);n(2,2)
+            repeat(2) {row->n(row.toLong(),2);n(0,2);n(0,2)}
+            n(0,1);n(0,1);n(8,4);n(16,4);n(0,2);n(0,2)
+            n(anchorX.toLong(),4);n(anchorY.toLong(),4);n(0,2)
+            return out.toByteArray()
+        }
+        val decoder=TerminalUpdates();val frame=decoder.decode(packet(1,1,1)).screen!!
+        assertNull(frame.cursorX);assertNull(frame.cursorY);assertEquals(1,frame.cursorAnchorX);assertEquals(1,frame.cursorAnchorY)
+        val absent=decoder.decode(packet(2,-1,-1)).screen!!;assertNull(absent.cursorAnchorX);assertNull(absent.cursorAnchorY)
+        assertTrue(runCatching {decoder.decode(packet(3,2,1))}.isFailure)
+        assertEquals(2L,decoder.revision)
+    }
 }

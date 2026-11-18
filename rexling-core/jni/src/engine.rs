@@ -248,6 +248,13 @@ fn collect_pane_layout(node: &Value,ids: &BTreeSet<&str>,layer: usize,floating: 
 type ConnectTask = Pin<Box<dyn Future<Output = Result<Control>>>>;
 type ProgramTask = Pin<Box<dyn Future<Output = Result<Value>>>>;
 type SummaryTask = Pin<Box<dyn Future<Output = Result<Value>>>>;
+// One inactive floating terminal stays live while its tiled pane is viewed.
+// It never owns input, publishes pixels, or delivers clipboard side effects.
+struct RetainedFloating {
+    block: String,
+    data: Data,
+    replica: Replica,
+}
 struct Actor {
     latest_navigation: Arc<AtomicU64>,
     shared: Arc<Mutex<Shared>>,
@@ -265,6 +272,7 @@ struct Actor {
     connection_epoch: u64,
     other_owner: bool,
     data: Option<Data>,
+    retained_floating: Option<RetainedFloating>,
     replica: Option<Replica>,
     control_token: Option<String>,
     data_resume: Option<Resume>,
@@ -335,6 +343,7 @@ impl Actor {
             server: String::new(),
             control: None,commands:Commands::default(),input_acks:VecDeque::new(),input_limit:8,batch_text:true,connect_task:None,network_online:true,connection_epoch:0,other_owner:false,
             data: None,
+            retained_floating: None,
             replica: None,
             control_token: None,
             data_resume: None,
@@ -451,7 +460,9 @@ impl Actor {
                         continue;
                     }
                     // Local scrollback does not issue RPCs or mutate input ownership.
-                    if value["type"]=="scroll" {self.execute_command(value).await;continue;}
+                    // Render a scroll on the next loop pass instead of the next 16 ms slot: the view is
+                    // sliding locally and runs out of overscan rows while it waits for this frame.
+                    if value["type"]=="scroll" {self.execute_command(value).await;if self.dirty {render_at=tokio::time::Instant::now();}continue;}
                     if matches!(value["type"].as_str(),Some("connect"|"retry"|"network"|"resume"|"activity")) {maintenance_at=tokio::time::Instant::now();}
                     if value["type"]=="network" {
                         self.execute_command(value).await;
@@ -505,6 +516,16 @@ impl Actor {
                             }
                         }
                     }
+                },
+                chunk=async {match &mut self.retained_floating {Some(p)=>p.data.read().await,None=>pending().await}}=>{
+                    let keep=if let (Ok(bytes),Some(pane))=(chunk,self.retained_floating.as_mut()) {
+                        let ok=pane.replica.feed(&bytes).is_ok();
+                        // Inactive terminals must not replay clipboard writes or old
+                        // status events when restored; control events track status.
+                        pane.replica.events.clear();pane.replica.clipboard_write=None;
+                        ok
+                    } else {false};
+                    if !keep {self.close_retained_floating().await;}
                 },
                 result=async {match &mut self.preview_task {Some(task)=>task.await,None=>pending().await}}=>{
                     self.preview_task=None;
@@ -611,7 +632,13 @@ impl Actor {
         }
         self.disconnect().await;
     }
+    async fn close_retained_floating(&mut self) {
+        if let Some(mut pane)=self.retained_floating.take() {
+            let _=tokio::time::timeout(Duration::from_secs(2),pane.data.close()).await;
+        }
+    }
     async fn disconnect(&mut self) {
+        self.close_retained_floating().await;
         self.commands.clear();self.input_acks.clear();
         self.predictor.reset();
         self.connect_task=None;self.other_owner=false;
@@ -636,6 +663,7 @@ impl Actor {
         self.controlled = false;
     }
     fn lose_connections(&mut self) {
+        self.retained_floating=None;
         self.progress_reports.clear();self.activity_dirty=true;
         self.commands.clear();self.input_acks.clear();
         self.predictor.reset();
@@ -790,6 +818,7 @@ impl Actor {
         }
         self.windows = next;
         let live: BTreeSet<_>=self.windows.as_array().into_iter().flatten().flat_map(|w|w["blocks"].as_array().into_iter().flatten()).filter_map(|b|b["id"].as_str().map(str::to_owned)).collect();
+        if self.retained_floating.as_ref().is_some_and(|p|!live.contains(&p.block)) {self.retained_floating=None;}
         if let Some(map)=self.status_progress.as_object_mut() {map.retain(|k,_| live.contains(k));}
         let before=self.progress_reports.len();
         self.progress_reports.retain(|_,r|r["session"]!=self.selected_session || r["block"].as_str().is_some_and(|id|live.contains(id)));
@@ -1008,7 +1037,11 @@ impl Actor {
         } else if !click {
             self.predictor.reset();
         }
-        if !click && let Some(replica)=self.replica.as_mut().filter(|r|r.ready()) {replica.terminal()?.scroll_to_bottom();self.dirty=true;}
+        // Render only if typing actually moved the viewport. An unconditional render here
+        // publishes an unchanged frame and starts the 16 ms render throttle just before
+        // the echo arrives, so every echo waited a full frame interval.
+        let scrolled_back=self.screen.as_ref().is_some_and(|f|f.scroll_offset+f.scroll_visible<f.scroll_total);
+        if !click && let Some(replica)=self.replica.as_mut().filter(|r|r.ready()) {replica.terminal()?.scroll_to_bottom();if scrolled_back {self.dirty=true;}}
         // Unlike terminal.write, block.event is serialized by Rex on this connection.
         // An unidentified key with text preserves our already-encoded input bytes;
         // it bypasses Lua bindings, matching the previous raw-write behavior.
@@ -1308,6 +1341,7 @@ impl Actor {
                 if let Some(mut data) = self.data.take() {
                     let _ = data.close().await;
                 }
+                self.close_retained_floating().await;
                 self.data_resume = None;
                 self.replica = None;
                 self.screen = None;
@@ -1626,24 +1660,35 @@ impl Actor {
     async fn open_block(&mut self, block: String) -> Result<()> {
         ensure!(!self.selected_session.is_empty(), "Choose a session first");
         self.release_selected().await?;
-        if let Some(mut data) = self.data.take() {
-            let _ = data.close().await;
+        let restored=if self.retained_floating.as_ref().is_some_and(|p|p.block==block) {
+            self.retained_floating.take()
+        } else {None};
+        let floating=self.windows.as_array().into_iter().flatten().any(|w|
+            w["layout"].as_array().into_iter().flatten().any(|p|p["id"]==self.selected_block && p["floating"]==true));
+        if floating && let (Some(data),Some(replica))=(self.data.take(),self.replica.take()) {
+            self.close_retained_floating().await;
+            self.retained_floating=Some(RetainedFloating {block:self.selected_block.clone(),data,replica});
+        } else if let Some(mut data)=self.data.take() {
+            let _=tokio::time::timeout(Duration::from_secs(2),data.close()).await;
         }
         self.data_resume = None;
         self.selected_block = block;
         self.controlled = false;
         self.screen = None;
-        self.apply_theme().await?;
-        let data = Data::open(
-            self.endpoint.as_ref().context("no server")?,
-            self.control.as_mut().context("not connected")?,
-            &self.selected_session,
-            &self.selected_block,
-            Trace::default(),
-        )
-        .await?;
-        self.replica = Some(Replica::new(data.nonce));
-        self.data = Some(data);
+        if let Some(pane)=restored {
+            self.replica=Some(pane.replica);self.data=Some(pane.data);
+            self.dirty=true;
+        } else {
+            let data = Data::open(
+                self.endpoint.as_ref().context("no server")?,
+                self.control.as_mut().context("not connected")?,
+                &self.selected_session,
+                &self.selected_block,
+                Trace::default(),
+            ).await?;
+            self.replica = Some(Replica::new(data.nonce));
+            self.data = Some(data);
+        }
         self.error.clear();
         self.notice = "Viewing terminal; take control to type".into();
         self.refresh_view().await?;
@@ -1654,6 +1699,7 @@ impl Actor {
         match self.refresh_view().await {
             Ok(())=>Ok(true),
             Err(error) if error.downcast_ref::<rex_core::control::RpcError>().is_some_and(|e|e.code=="session_not_found")=>{
+                self.close_retained_floating().await;
                 self.selected_session.clear();self.selected_block.clear();self.windows=json!([]);self.screen=None;
                 self.data=None;self.data_resume=None;self.replica=None;self.controlled=false;
                 self.preview_task=None;self.program_task=None;self.summary_task=None;self.preview_updates.clear();
@@ -1726,7 +1772,9 @@ fn preview_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> Previe
                         Data::open(&endpoint, &mut control, &session, &id, Trace::default())
                             .await?;
                     let mut replica = Replica::new(data.nonce);
-                    while !replica.ready() {
+                    // One-shot previews need late Kitty pixels too. Only the
+                    // selected live terminal presents before FINISH.
+                    while !replica.snapshot_complete() {
                         replica.feed(&data.read().await?)?;
                     }
                     let frame = Arc::new(replica.terminal()?.frame()?);
@@ -1995,7 +2043,7 @@ fn frame_value(frame: &Frame) -> Value {
             ])
         })
         .collect();
-    json!({"columns":frame.columns,"rows":frame.rows,"scrollbar":[frame.scroll_total,frame.scroll_offset,frame.scroll_visible],"input_flags":frame.input_flags,"cursor":frame.cursor,"foreground":rgb(frame.foreground),"background":rgb(frame.background),"cells":cells})
+    json!({"columns":frame.columns,"rows":frame.rows,"scrollbar":[frame.scroll_total,frame.scroll_offset,frame.scroll_visible],"input_flags":frame.input_flags,"cursor":frame.cursor,"cursor_position":frame.cursor_position,"foreground":rgb(frame.foreground),"background":rgb(frame.background),"cells":cells})
 }
 
 #[cfg(test)]

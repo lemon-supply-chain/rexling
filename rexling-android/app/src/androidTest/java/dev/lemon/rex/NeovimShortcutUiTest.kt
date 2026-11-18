@@ -38,17 +38,20 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NeovimShortcutUiTest {
     @get:Rule val ui=createComposeRule()
-    @Test fun wheelKeepsOneSurfaceColourOverAnyBackdropAndLeavesTheHubGapClear() {
+    @Test fun wheelSamplesTheLiveBackdropAndReleasesCaptureWhenClosed() {
         val backdrop=mutableStateOf(androidx.compose.ui.graphics.Color.Red)
+        var capturing=false
         ui.setContent {MaterialTheme {
+            val haze=remember {dev.chrisbanes.haze.HazeState()}
             Box(Modifier.fillMaxSize()) {
-                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {drawRect(backdrop.value)}
+                androidx.compose.foundation.Canvas(Modifier.fillMaxSize().hazeSource(haze)) {drawRect(backdrop.value)}
                 NeovimShortcutButton(NeovimShortcuts.defaults,"one",true,{_,_->},{},
                     layout=NeovimShortcutLayout.CIRCULAR,effect=NeovimShortcutEffect.NONE,
-                    position=Offset(.5f,.5f))
+                    position=Offset(.5f,.5f),hazeState=haze,onExpandedChange={capturing=it})
             }
         }}
         ui.onNodeWithContentDescription("Neovim shortcuts").performClick()
+        ui.runOnIdle {assertTrue(capturing)}
         val bounds=nativeBounds("Neovim shortcut menu")
         fun pixel(x: Float,y: Float): Int {
             ui.waitForIdle();SystemClock.sleep(100)
@@ -56,47 +59,18 @@ class NeovimShortcutUiTest {
             return shot.getPixel((bounds.left+bounds.width()*x).toInt(),(bounds.top+bounds.height()*y).toInt()).also {shot.recycle()}
         }
         val red=pixel(.5f,.08f)
+        assertTrue("Wheel must sample the red backdrop: $red",android.graphics.Color.red(red)>android.graphics.Color.green(red)+35)
+        // The neutral gap remains transparent rather than gaining a solid annulus.
+        val gap=pixel(.5f,.28f)
+        assertTrue(android.graphics.Color.red(gap)>200)
         ui.runOnIdle {backdrop.value=androidx.compose.ui.graphics.Color.Green}
         val green=pixel(.5f,.08f)
-        // The sector is one opaque surface, so a program's own background cannot tint the menu.
-        val shift=listOf(android.graphics.Color.red(red) to android.graphics.Color.red(green),
-            android.graphics.Color.green(red) to android.graphics.Color.green(green),
-            android.graphics.Color.blue(red) to android.graphics.Color.blue(green)).maxOf {kotlin.math.abs(it.first-it.second)}
-        assertTrue("Wheel surface must not follow the backdrop: red=$red green=$green",shift<=6)
-        // The neutral gap between the sectors and the hub stays transparent rather than gaining an annulus.
-        ui.runOnIdle {backdrop.value=androidx.compose.ui.graphics.Color.Red};ui.waitForIdle()
-        val gap=pixel(.5f,.28f)
-        assertTrue("Hub gap must stay clear: $gap",android.graphics.Color.red(gap)>200)
+        assertTrue("Open wheel must follow backdrop changes: $green",android.graphics.Color.green(green)>android.graphics.Color.red(green)+35)
         val shot=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()!!
-        File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"neovim-wheel-surface.png").outputStream().use {shot.compress(Bitmap.CompressFormat.PNG,100,it)}
+        File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"neovim-wheel-frost.png").outputStream().use {shot.compress(Bitmap.CompressFormat.PNG,100,it)}
         shot.recycle()
         ui.onNodeWithContentDescription("Close Neovim shortcuts").performClick()
-        ui.onNodeWithContentDescription("Neovim shortcut menu").assertDoesNotExist()
-    }
-    @Test fun singleShortcutStillDrawsItsSectorSurface() {
-        val backdrop=mutableStateOf(androidx.compose.ui.graphics.Color.Red)
-        ui.setContent {MaterialTheme {
-            Box(Modifier.fillMaxSize()) {
-                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {drawRect(backdrop.value)}
-                NeovimShortcutButton(listOf(NeovimShortcut(":w",":w")),"one",true,{_,_->},{},
-                    layout=NeovimShortcutLayout.CIRCULAR,effect=NeovimShortcutEffect.NONE,position=Offset(.5f,.5f))
-            }
-        }}
-        ui.onNodeWithContentDescription("Neovim shortcuts").performClick()
-        ui.onNodeWithText(":w").assertIsDisplayed()
-        val bounds=nativeBounds("Neovim shortcut menu")
-        fun pixel(x: Float,y: Float): Int {
-            ui.waitForIdle();SystemClock.sleep(100)
-            val shot=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()!!
-            return shot.getPixel((bounds.left+bounds.width()*x).toInt(),(bounds.top+bounds.height()*y).toInt()).also {shot.recycle()}
-        }
-        // One shortcut sweeps the whole circle; the sector surface must still cover the page behind it.
-        val sector=pixel(.5f,.08f)
-        assertTrue("Single sector must draw its surface: $sector",
-            android.graphics.Color.green(sector)>120 && android.graphics.Color.blue(sector)>120)
-        val gap=pixel(.5f,.28f)
-        assertTrue("Hub gap must stay clear: $gap",android.graphics.Color.red(gap)>200)
-        ui.onNodeWithContentDescription("Close Neovim shortcuts").performClick()
+        ui.runOnIdle {assertFalse(capturing)}
     }
     @Test fun menuSelectsNamedKeysForItsCapturedPaneAndCanOpenCustomization() {
         val sent=mutableListOf<Pair<NeovimShortcut,String>>()
@@ -170,55 +144,38 @@ class NeovimShortcutUiTest {
         ui.onNodeWithContentDescription("Neovim shortcuts").assertIsNotEnabled()
         ui.runOnIdle {assertEquals(0,sent)}
     }
-    @Test fun profilesSheetChangesSharedMenuSettingsAndProfileSwitches() {
-        val profiles=mutableStateOf(ShortcutProfiles.defaults())
+    @Test fun editorValidatesAndSavesCustomKeysWithoutAddingEnter() {
+        var saved: List<NeovimShortcut>?=null;var closed=false
+        val enabled=mutableStateOf(true)
         val layout=mutableStateOf(NeovimShortcutLayout.GRID)
         val effect=mutableStateOf(NeovimShortcutEffect.FAN_OUT)
         val haptics=mutableStateOf(true)
-        var edited="";var created=false
         ui.setContent {MaterialTheme {Box(Modifier.fillMaxSize()) {
-            ShortcutProfilesSheet(profiles.value,{edited=it},{created=true},{id,on->profiles.value=profiles.value.map {if(it.id==id) it.copy(enabled=on) else it}},{},
-                layout.value,{layout.value=it},effect.value,{effect.value=it},haptics.value,{haptics.value=it})
+            NeovimShortcutsSheet(NeovimShortcuts.defaults,{text->runCatching {saved=NeovimShortcuts.parse(text)}.exceptionOrNull()?.message},{closed=true},enabled.value,{enabled.value=it},layout.value,{layout.value=it},effect.value,{effect.value=it},haptics.value,{haptics.value=it})
         }}}
-        ui.onNodeWithText("Neovim").assertIsDisplayed()
-        ui.onNodeWithText("fish, zsh, bash, sh").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Show Neovim shortcuts").assertIsOn().performClick()
-        ui.runOnIdle {assertFalse(profiles.value.first {it.id==ShortcutProfiles.NEOVIM}.enabled)}
-        ui.onNodeWithContentDescription("Edit Shell profile").performClick()
-        ui.runOnIdle {assertEquals(ShortcutProfiles.SHELL,edited)}
-        ui.onNodeWithText("New profile").performScrollTo().performClick()
-        ui.runOnIdle {assertTrue(created)}
-        ui.onNodeWithText("Grid").performScrollTo().assertIsSelected()
+        ui.onNodeWithText("Menu appearance").performClick()
+        ui.onNodeWithText("Grid").assertIsSelected()
         ui.onNodeWithText("Circular").performClick().assertIsSelected()
-        ui.onNodeWithText("Fan out").performScrollTo().assertIsSelected()
+        ui.onNodeWithText("Fan out").assertIsSelected()
         ui.onNodeWithText("Shutter").assertDoesNotExist()
         ui.onNodeWithText("Spin").performScrollTo().performClick().assertIsSelected()
         ui.runOnIdle {assertEquals(NeovimShortcutEffect.SPIN,effect.value)}
+        ui.onNodeWithText("Expand").performScrollTo().performClick().assertIsSelected()
+        ui.runOnIdle {assertEquals(NeovimShortcutEffect.EXPAND,effect.value)}
         ui.onNodeWithText("None").performScrollTo().performClick().assertIsSelected()
         ui.runOnIdle {assertEquals(NeovimShortcutEffect.NONE,effect.value)}
         ui.onNodeWithText("Selection haptics").performScrollTo().assertIsOn().performClick().assertIsOff()
         ui.runOnIdle {assertFalse(haptics.value)}
-    }
-    @Test fun editorValidatesAndSavesCustomKeysWithoutAddingEnter() {
-        var saved: ShortcutProfile?=null;var closed=false
-        ui.setContent {MaterialTheme {Box(Modifier.fillMaxSize()) {
-            ShortcutProfileSheet(ShortcutProfiles.neovim(),{name,match,prefix,enter,text->
-                runCatching {saved=ShortcutProfiles.build(ShortcutProfiles.NEOVIM,name,match,prefix,enter,true,text,emptyList())}.exceptionOrNull()?.message
-            },{closed=true},defaults=NeovimShortcuts.defaults)
-        }}}
-        ui.onNodeWithText(": commands").performScrollTo().assertIsSelected()
-        ui.onNodeWithText("Shortcuts").performScrollTo().performTextReplacement("LazyGit = <Leader>lg")
-        ui.onNodeWithText("Save").performScrollTo().performClick()
-        ui.waitUntil(4000) {ui.onAllNodesWithText("Use your actual leader key, such as <Space>, instead of <Leader>.").fetchSemanticsNodes().isNotEmpty()}
-        ui.runOnIdle {assertFalse(closed);assertNull(saved)}
-        ui.onNodeWithText("Shortcuts").performTextReplacement(":w\nLazyGit = <Space>lg\n!Quit all = :qa!")
-        ui.onNodeWithText("Save").performScrollTo().performClick()
-        ui.runOnIdle {
-            assertTrue(closed)
-            assertEquals(NeovimShortcuts.parse(":w\nLazyGit = <Space>lg\n!Quit all = :qa!"),saved?.items)
-            assertTrue(saved!!.items.last().confirm)
-            assertEquals(listOf("nvim","neovim"),saved!!.match)
-        }
+        ui.onNodeWithContentDescription("Back to Neovim shortcuts").performClick()
+        ui.onNodeWithText("Enable Neovim shortcuts").assertIsOn().performClick().assertIsOff()
+        ui.onNodeWithText("Add shortcut").performClick()
+        ui.onNodeWithText("Key sequence").performClick()
+        ui.onNodeWithText("Space",substring=false).performClick()
+        ui.onNodeWithText("Press keys").performTextInput("lg")
+        ui.onNodeWithText("Name (optional)").performTextInput("LazyGit")
+        ui.onNodeWithText("Done").performScrollTo().performClick()
+        ui.onNodeWithText("Save").performClick()
+        ui.runOnIdle {assertTrue(closed);assertFalse(enabled.value);assertEquals(NeovimShortcuts.defaults+NeovimShortcut("LazyGit","<Space>lg"),saved)}
     }
     @Test fun draggingMovesTheButtonWithoutOpeningTheMenuAndStaysInsideAResizedTerminal()=checkClosedDragging(NeovimShortcutLayout.GRID)
     @Test fun closedWheelCanStillBeDraggedWithoutOpeningOrSending()=checkClosedDragging(NeovimShortcutLayout.CIRCULAR)

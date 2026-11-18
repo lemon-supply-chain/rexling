@@ -1,0 +1,19 @@
+{
+  "build": 138,
+  "jvm": {
+    "tests": 203,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "go_tests": "passed: all network tests, including endpoint-specific routes and root-slash normalization",
+  "lint_release": "passed",
+  "phone_tests": "9 passed on SM-S948B",
+  "screenshots_reviewed": [
+    "server-editor-compact-light.png",
+    "server-editor-compact-dark.png"
+  ],
+  "sign_in": "Polls AuthURL and launches browser, with busy state, timeout and surfaced errors; user completes browser authentication",
+  "route_default": "Existing global setting preserved; phone and built-in overrides saved per normalized endpoint",
+  "apk_verification": "passed"
+}

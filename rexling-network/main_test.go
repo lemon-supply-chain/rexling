@@ -317,3 +317,37 @@ func TestLogoutSuspendsTailscaleAndClearsDirectory(t *testing.T) {
 		t.Fatalf("expected state directory to be deleted, got err=%v", err)
 	}
 }
+
+func TestImportedSSHKeyIdentityIsStableAcrossPassphrasesAndEncoding(t *testing.T) {
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, _ := ssh.NewSignerFromKey(private)
+	plain, _ := ssh.MarshalPrivateKey(private, "")
+	encrypted, err := ssh.MarshalPrivateKeyWithPassphrase(private, "", []byte("test-passphrase"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(pem.EncodeToMemory(encrypted))
+	a, err := importSSHKey(string(pem.EncodeToMemory(plain)), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := importSSHKey(text, "test-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a["fingerprint"] != ssh.FingerprintSHA256(signer.PublicKey()) || a["fingerprint"] != b["fingerprint"] || b["kind"] != "ssh-ed25519" {
+		t.Fatal("imported key identity changed")
+	}
+	if _, err := ssh.ParsePrivateKey([]byte(b["key"].(string))); err != nil {
+		t.Fatal("normalized key still needs its passphrase:", err)
+	}
+	if _, err := importSSHKey(text, "wrong"); err == nil {
+		t.Fatal("wrong passphrase accepted")
+	}
+	if _, err := importSSHKey("not a key", ""); err == nil {
+		t.Fatal("malformed key accepted")
+	}
+}

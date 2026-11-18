@@ -1,0 +1,10 @@
+{
+  "visible_rows": 20,
+  "scroll_rows": 1,
+  "baseline_recordings": 20,
+  "optimized_recordings": 3,
+  "identical_pixels": true,
+  "baseline": "Current renderer with row-moving reuse disabled; not an old APK benchmark",
+  "phone_model": "SM-S906E",
+  "scope": "Visible-row recording work only; not overall FPS, latency, GPU replay, or overscan draw cost."
+}

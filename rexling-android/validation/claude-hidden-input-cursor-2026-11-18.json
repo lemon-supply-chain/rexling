@@ -1,0 +1,30 @@
+{
+  "build": 166,
+  "issue": "Work first tab second pane: hidden Claude cursor could not open the keyboard or pan the prompt.",
+  "server": "shulhi-x13",
+  "diagnosis": {
+    "foreground": "Claude Code 2.1.325 agent dashboard",
+    "mouse_reporting": true,
+    "alternate_screen": true,
+    "visible_terminal_cursor": false,
+    "valid_cursor_viewport_position": [
+      2,
+      66
+    ]
+  },
+  "fix": "Carry an independent cursor-position anchor in RXT7; use hidden anchors only for live Claude/Codex input tapping and IME panning. Cursor painting remains governed by visibility.",
+  "checks": {
+    "native_core_and_wire_checks": "passed",
+    "android_unit_tests": 230,
+    "android_unit_skipped": 1,
+    "android_unit_failures": 0,
+    "lint": "passed",
+    "automated_phone_mouse_cursor_ime_checks": 15,
+    "automated_phone_failures": 0,
+    "actual_Work_pane_cursor_tap_opens_keyboard": true,
+    "actual_Work_pane_prompt_pans_above_keyboard": true,
+    "actual_Work_pane_screenshots_reviewed": true,
+    "installed_hash_matches": true,
+    "installed_sha256": "019b21fa68ece85325d5ea6e7118e1c93c00653461e6871c1636085ed51c4234"
+  }
+}

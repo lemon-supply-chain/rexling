@@ -467,6 +467,28 @@ func status() map[string]any {
 	return value
 }
 
+func importSSHKey(text, passphrase string) (map[string]any, error) {
+	var key any
+	var err error
+	if passphrase == "" {
+		key, err = ssh.ParseRawPrivateKey([]byte(text))
+	} else {
+		key, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(text), []byte(passphrase))
+	}
+	if err != nil {
+		return nil, err
+	}
+	block, err := ssh.MarshalPrivateKey(key, "")
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.NewSignerFromKey(key)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"key": string(pem.EncodeToMemory(block)), "fingerprint": ssh.FingerprintSHA256(signer.PublicKey()), "kind": signer.PublicKey().Type()}, nil
+}
+
 //export rexnet_command
 func rexnet_command(raw *C.char) *C.char {
 	var request struct {
@@ -505,19 +527,7 @@ func rexnet_command(raw *C.char) *C.char {
 		case "logout":
 			err = logout()
 		case "import_key":
-			var key any
-			if request.Passphrase == "" {
-				key, err = ssh.ParseRawPrivateKey([]byte(request.Key))
-			} else {
-				key, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(request.Key), []byte(request.Passphrase))
-			}
-			if err == nil {
-				var block *pem.Block
-				block, err = ssh.MarshalPrivateKey(key, "")
-				if err == nil {
-					result = map[string]any{"key": string(pem.EncodeToMemory(block))}
-				}
-			}
+			result, err = importSSHKey(request.Key, request.Passphrase)
 		default:
 			err = errors.New("unknown network command")
 		}

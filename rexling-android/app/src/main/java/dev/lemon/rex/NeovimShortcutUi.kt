@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -169,4 +170,38 @@ import kotlin.math.roundToInt
         }
     }
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable internal fun NeovimMenuOptions(layout: NeovimShortcutLayout,onLayout: (NeovimShortcutLayout)->Unit,
+    effect: NeovimShortcutEffect,onEffect: (NeovimShortcutEffect)->Unit,hapticsEnabled: Boolean,onHaptics: (Boolean)->Unit) {
+    Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Text("Menu layout",style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                NeovimShortcutLayout.entries.forEach {choice->
+                    FilterChip(selected=layout==choice,onClick={onLayout(choice)},
+                        label={Text(if(choice==NeovimShortcutLayout.GRID) "Grid" else "Circular",style=SettingsType.row)})
+                }
+            }
+            if(layout==NeovimShortcutLayout.CIRCULAR) {
+                Text("Opening effect",style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+                FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    NeovimShortcutEffect.entries.forEach {choice->
+                        FilterChip(selected=effect==choice,onClick={onEffect(choice)},label={Text(choice.label,style=SettingsType.row)})
+                    }
+                }
+                Text(when(effect) {
+                    NeovimShortcutEffect.FAN_OUT->"Segments open clockwise in a wave."
+                    NeovimShortcutEffect.SPIN->"The wheel spins into place."
+                    NeovimShortcutEffect.EXPAND->"The wheel grows outward from the center."
+                    NeovimShortcutEffect.NONE->"Opens and closes immediately."
+                },style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth().toggleable(hapticsEnabled,role=Role.Switch,onValueChange=onHaptics).padding(vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text("Selection haptics",Modifier.weight(1f),style=SettingsType.row)
+                    Switch(checked=hapticsEnabled,onCheckedChange=null)
+                }
+                Text("Hold and slide to a segment; release to run. Swipe up/down on the outer ring for more pages.",style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+    }
+}
+
 

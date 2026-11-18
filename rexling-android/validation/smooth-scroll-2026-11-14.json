@@ -1,0 +1,35 @@
+{
+  "build": 128,
+  "native_tests_passed": 114,
+  "native_ignored": 18,
+  "jvm_tests": 189,
+  "jvm_skipped": 1,
+  "jvm_failures": 0,
+  "lint_release": "passed",
+  "phone_smooth_scroll_tests_passed": 5,
+  "phone_keyboard_retest_passed": 4,
+  "phone_combined_run": {
+    "tests": 29,
+    "failures": 2,
+    "notes": [
+      "historyAndHiddenCursorFramesDoNotMoveTheKeyboardViewport hit an ActivityScenario destroyed-activity error; separate rerun of all 4 viewport tests passed.",
+      "launcherPortraitReachesTheBottomOfTheMaskWithoutAWhiteGap failed because its sampled area contained no mask pixels; launcher code and assets are unchanged."
+    ]
+  },
+  "verified": [
+    "Fractional movement draws before a whole-row scroll request",
+    "One-row movement needs at most 3 row recordings for a 20-row fixture",
+    "Cached text and hyperlink underlines match a fresh redraw",
+    "Native RXT5 packets decode on Android",
+    "Stopping movement does not activate links; subsequent tap uses the settled grid",
+    "Application-controlled wheel events remain unchanged",
+    "Kitty layer and cropping checks passed",
+    "Hardware row rendering checks passed",
+    "Real Gboard suggestion test passed"
+  ],
+  "limits": [
+    "Fractional drawing is disabled on image-bearing frames; existing whole-row image rendering is retained.",
+    "No overall FPS or latency improvement claimed from row-recording counts."
+  ],
+  "source": "Adapted from michaelcosj/rexling 601c385, with offset-based reuse, unchanged overscan delta reuse and stop-tap handling."
+}

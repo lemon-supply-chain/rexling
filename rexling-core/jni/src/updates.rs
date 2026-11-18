@@ -208,6 +208,9 @@ fn encode_frame(out: &mut Vec<u8>, frame: &Frame, previous: Option<&Frame>) {
             u32le(out, v);
         }
     }
+    // RXT7: input/IME anchoring is independent of whether the cursor is drawn.
+    let (x,y)=frame.cursor_position.map_or((-1,-1),|(x,y)|(i32::from(x),i32::from(y)));
+    out.extend(x.to_le_bytes());out.extend(y.to_le_bytes());
 }
 pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     if after >= state.revision {
@@ -215,7 +218,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     }
     let base = &state.wire;
     let reset = after != base.revision || base.key != state.key;
-    let mut out = b"RXT6".to_vec();
+    let mut out = b"RXT7".to_vec();
     u64le(&mut out, state.revision);
     let previews: Vec<_> = std::mem::take(&mut state.pending_previews)
         .into_iter()
@@ -292,6 +295,7 @@ mod wire_tests {
             columns: 100,
             rows: 50,
             cursor: Some((0, 0)),
+            cursor_position: Some((0, 0)),
             cursor_at: Some((0, 0)),
             cursor_style: 1,
             cursor_blinking: false,
@@ -330,6 +334,13 @@ mod wire_tests {
         // Geometry 4, cursor 8, colors 8, scroll 24, input 1, cursor flags 1.
         assert_eq!(bytes[46],4);
         assert_eq!(u16::from_le_bytes(bytes[49..51].try_into().unwrap()),0);
+    }
+    #[test] fn hidden_cursor_position_is_carried_without_drawing_a_cursor_or_resending_rows() {
+        let old=frame();let mut next=frame();next.cursor=None;next.cursor_position=Some((4,6));
+        let mut bytes=Vec::new();encode_frame(&mut bytes,&next,Some(&old));
+        assert_eq!(i32::from_le_bytes(bytes[5..9].try_into().unwrap()),-1);
+        assert_eq!(u16::from_le_bytes(bytes[49..51].try_into().unwrap()),0);
+        assert_eq!(&bytes[bytes.len()-8..],&[4,0,0,0,6,0,0,0]);
     }
     #[test]
     fn packets_diff_against_delivered_frame_and_reset_on_unknown_base() {
@@ -396,7 +407,7 @@ mod wire_tests {
             activity: Arc::default(),
         };
         let full = encode(&mut state, 0);
-        assert_eq!(&full[..4], b"RXT6");
+        assert_eq!(&full[..4], b"RXT7");
         assert_eq!(
             full.windows(b"https://example.com/one".len())
                 .filter(|w| *w == b"https://example.com/one")

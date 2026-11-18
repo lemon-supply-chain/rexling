@@ -94,10 +94,15 @@
     <string name="use_joystick">方向键摇杆</string>
     <string name="use_joystick_detail_on">长按滑动；双击切换为方向按键</string>
     <string name="use_joystick_detail_off">点击显示方向按键</string>
+    <string name="keyboard_enter_sends">键盘 Enter 键发送</string>
+    <string name="keyboard_enter_sends_detail_on">直接提交，类似实体回车键。按住工具栏 Shift 可换行。</string>
+    <string name="keyboard_enter_sends_detail_off">输入换行符。Claude Code 等多行程序会换行而非直接提交。</string>
     <string name="ctrl_shortcuts">Ctrl 快捷键</string>
     <string name="ctrl_shortcuts_detail">打开快捷键列表触发方式</string>
     <string name="ctrl_gesture_hold">长按</string>
     <string name="ctrl_gesture_double_tap">双击</string>
+    <string name="ctrl_shortcut_buttons">Ctrl 快捷键按钮</string>
+    <string name="ctrl_shortcut_buttons_detail">自定义按键与快捷键序列</string>
     <string name="neovim_shortcuts">Neovim 快捷键</string>
     <string name="neovim_shortcuts_detail">自定义浮动按键菜单</string>
     <string name="background_alerts">后台提醒</string>
@@ -279,6 +284,8 @@
     <!-- Network -->
     <string name="network">网络</string>
     <string name="network_detail">内置 Tailscale 与控制服务器</string>
+    <string name="ssh_keys">SSH 密钥</string>
+    <string name="ssh_keys_detail">保存私钥并在多个服务器间复用</string>
     <string name="close_network_settings">关闭网络设置</string>
     <string name="current_server">当前服务器</string>
     <string name="builtin_tailscale">内置 Tailscale</string>

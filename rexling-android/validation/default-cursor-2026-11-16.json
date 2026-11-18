@@ -1,0 +1,15 @@
+{
+  "build": 137,
+  "native": {
+    "passed": 117,
+    "ignored": 18,
+    "failures": 0
+  },
+  "lint_release": "passed",
+  "jvm": "199 passed, 1 skipped",
+  "phone": "2 tests passed: native snapshot -> RXT6 -> Android blinking default; visual shapes/blink/steady transitions",
+  "default": "blinking",
+  "explicit_steady": "DECSCUSR steady block/bar/underline preserved, including reconnect",
+  "limitation": "libghostty snapshot does not distinguish mode-12-only override from default when cursor shape follows default",
+  "apk_verification": "passed"
+}

@@ -1,0 +1,12 @@
+{
+  "build": 164,
+  "fix": "Set explicit theme onSurface content color for transparent Preferences and Servers sheets.",
+  "checks": {
+    "release_build": "passed",
+    "release_lint": "passed",
+    "settings_screens_light_dark_emulator": "passed",
+    "header_luminance_contrast_assertion": "passed",
+    "screenshots_reviewed": true
+  },
+  "phone_install": "pending: phone disconnected from ADB"
+}

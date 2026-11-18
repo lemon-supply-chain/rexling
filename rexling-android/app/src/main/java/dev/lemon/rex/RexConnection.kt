@@ -113,6 +113,7 @@ internal class RexConnection(application: Application, private val scope: Corout
                 "columns" to frame.columns,"rows" to frame.rows,"scrollTotal" to frame.scroll.total,
                 "scrollOffset" to frame.scroll.offset,"viewport" to frame.plainText(),"col" to col,"row" to row,"output" to output)
         }
+        view.allowHiddenCursorInput=current.programs[block]?.kind in setOf(ProgramKind.CODEX,ProgramKind.CLAUDE)
         view.onCursorTap={
             val active=state.value
             // Program identity must be live, not the last-known chrome cache.
@@ -499,9 +500,10 @@ internal class RexConnection(application: Application, private val scope: Corout
     fun toggleShift() {shiftState=ShiftKeyState(latched=!shiftState.active)}
     fun pressShift() {shiftState=shiftState.press()}
     fun releaseShift(cancelled: Boolean) {shiftState=shiftState.release(cancelled)}
-    fun controlShortcut(letter: String) {
-        if(letter !in controlShortcuts || !visible || !state.value.controlled || state.value.creating || navigationRequest.pending) return
-        resetModifiers();type(TerminalInput.modified(letter,control=true,alt=false))
+    fun controlShortcut(keys: String,target: String=keyTarget()) {
+        if(target!=keyTarget() || !visible || !state.value.controlled || state.value.creating || navigationRequest.pending) return
+        val input=runCatching {ControlShortcutConfig.decode(keys)}.getOrNull() ?: return
+        resetModifiers();type(input)
     }
     fun type(text: String) {
         if (!visible || !state.value.controlled || state.value.creating || navigationRequest.pending || text.isEmpty()) return

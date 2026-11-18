@@ -41,7 +41,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
     onView: (TerminalView)->Unit,modifier: Modifier=Modifier,bindLiveView: ((String,TerminalView)->Boolean)?=null,
     onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,
     padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true,
-    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false) {
+    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,imeEnterSubmits: Boolean=false) {
     val context=androidx.compose.ui.platform.LocalContext.current
     val switchLayout=remember(paneLayout,blocks) {paneLayout.filter {p->blocks.any {it.id==p.id}}.sortedBy {it.layer}}
     val hasMinimap=blocks.all {b->switchLayout.any {it.id==b.id}}
@@ -147,6 +147,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                                 if(retiring || block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
                                 view.interactive=center
                                 view.keyboardSuggestions=keyboardSuggestions && programs[block.id]?.kind!=ProgramKind.NEOVIM
+                                view.imeEnterSubmits=imeEnterSubmits
                                 view.imeAnchor=TerminalImeAnchors.anchor(programs[block.id])
                                 view.edgePolicy=TerminalEdgePolicies.policy(programs[block.id])
                                 view.controlled=center && controlled && block.id==liveBlock
