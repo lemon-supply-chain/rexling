@@ -132,8 +132,9 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                     .paneScrim(backdrop) {(abs(pageOffset+drag)/stride).coerceIn(0f,1f)*.48f}
                     .then(if(center || retiring) Modifier else Modifier.clickable(role=Role.Button){latestSelect(block.id)})) {
                     Box(Modifier.fillMaxSize()) {
+                        val profile=ProgramProfile.resolve(programs[block.id])
                         if(frame!=null) AndroidView(
-                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets,TerminalImeAnchors.anchor(programs[block.id])) {keyboardFocus}.clipToBounds(),
+                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets,profile.imeAnchor) {keyboardFocus}.clipToBounds(),
                             update={view ->
                                 view.keepAwakeMode=if(center) keepAwake else KeepScreenAwake.SYSTEM
                                 imeHandoff.mount(block,view)
@@ -146,10 +147,10 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                                 view.palette=palette;view.textSp=fontSize
                                 if(retiring || block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
                                 view.interactive=center
-                                view.keyboardSuggestions=keyboardSuggestions && programs[block.id]?.kind!=ProgramKind.NEOVIM
+                                view.keyboardSuggestions=keyboardSuggestions && profile.keyboardSuggestions
                                 view.imeEnterSubmits=imeEnterSubmits
-                                view.imeAnchor=TerminalImeAnchors.anchor(programs[block.id])
-                                view.edgePolicy=TerminalEdgePolicies.policy(programs[block.id])
+                                view.imeAnchor=profile.imeAnchor
+                                view.edgePolicy=profile.edgePolicy
                                 view.controlled=center && controlled && block.id==liveBlock
                                 view.imageInputTarget=imageTarget
                                 view.onImage=if(center && block.id==liveBlock) onImage else {_,release->release();false}

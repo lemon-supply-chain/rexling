@@ -113,13 +113,12 @@ internal class RexConnection(application: Application, private val scope: Corout
                 "columns" to frame.columns,"rows" to frame.rows,"scrollTotal" to frame.scroll.total,
                 "scrollOffset" to frame.scroll.offset,"viewport" to frame.plainText(),"col" to col,"row" to row,"output" to output)
         }
-        view.allowHiddenCursorInput=current.programs[block]?.kind in setOf(ProgramKind.CODEX,ProgramKind.CLAUDE)
+        view.allowHiddenCursorInput=ProgramProfile.resolve(current.programs[block]).hiddenCursorInput
         view.onCursorTap={
             val active=state.value
             // Program identity must be live, not the last-known chrome cache.
-            val kind=active.programs[block]?.kind
             if(visible && foreground && active.connected && active.controlled && !active.creating && !navigationRequest.pending &&
-                active.selectedBlock==block && (kind==ProgramKind.CODEX || kind==ProgramKind.CLAUDE || kind==ProgramKind.ANTIGRAVITY)) view.keyboard()
+                active.selectedBlock==block && ProgramProfile.resolve(active.programs[block]).cursorTapKeyboard) view.keyboard()
         }
         boundTarget=frameTarget(current);boundView=java.lang.ref.WeakReference(view)
         val latest=mutableTerminal.value.takeIf {displayedTarget==boundTarget} ?: return false
