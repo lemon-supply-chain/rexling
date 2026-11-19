@@ -40,6 +40,7 @@ type configuration struct {
 	Routes     map[string]string        `json:"routes"`
 	BuiltIn    bool                     `json:"built_in"`
 	ControlURL string                   `json:"control_url"`
+	Hostname   string                   `json:"hostname"`
 	Directory  string                   `json:"directory"`
 	SSH        map[string]sshCredential `json:"ssh"`
 	Trusted    map[string]string        `json:"trusted"`
@@ -159,7 +160,7 @@ func configure(next configuration) error {
 	for _, client := range clients {
 		client.Close()
 	}
-	if previous.tailscaleEnabled() != next.tailscaleEnabled() || previous.ControlURL != next.ControlURL || previous.Directory != next.Directory {
+	if previous.tailscaleEnabled() != next.tailscaleEnabled() || previous.ControlURL != next.ControlURL || previous.Hostname != next.Hostname || previous.Directory != next.Directory {
 		tail.Lock()
 		old := tail.server
 		tail.server = nil
@@ -172,6 +173,14 @@ func configure(next configuration) error {
 		go func() { _, _ = tailServer() }()
 	}
 	return nil
+}
+
+// tailHostname is the device name the built-in Tailscale node presents, defaulting to rexling-android.
+func tailHostname(config configuration) string {
+	if name := strings.TrimSpace(config.Hostname); name != "" {
+		return name
+	}
+	return "rexling-android"
 }
 func tailServer() (*tsnet.Server, error) {
 	tail.Lock()
@@ -190,7 +199,9 @@ func tailServer() (*tsnet.Server, error) {
 		control = "https://controlplane.tailscale.com"
 	}
 	sum := sha256.Sum256([]byte(control))
-	server := &tsnet.Server{Dir: filepath.Join(config.Directory, hex.EncodeToString(sum[:16])), Hostname: "rexling-android", ControlURL: config.ControlURL,
+	// The state directory depends only on the control server, so renaming keeps the node's identity
+	// and sign-in; tsnet re-sends the hostname to control on every start.
+	server := &tsnet.Server{Dir: filepath.Join(config.Directory, hex.EncodeToString(sum[:16])), Hostname: tailHostname(config), ControlURL: config.ControlURL,
 		Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}
 	if err := server.Start(); err != nil {
 		server.Close()

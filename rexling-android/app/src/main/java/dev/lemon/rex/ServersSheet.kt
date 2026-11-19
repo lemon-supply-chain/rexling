@@ -34,10 +34,13 @@ import kotlinx.coroutines.launch
     var editing by remember {mutableStateOf<ServerProfile?>(null)}
     var editor by remember {mutableStateOf(false)}
     var scanning by remember {mutableStateOf(false)}
+    // Built outside the sheet on purpose: the frost redraws when its host window draws, and inside the
+    // sheet that host is the sheet's own window, which then redraws itself every frame while open.
+    val frost=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
     ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
         containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-            Column(Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+            Column(frost.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
                 DrawerHandle()
                 Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(stringResource(R.string.servers),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
@@ -56,7 +59,7 @@ import kotlinx.coroutines.launch
                 val status=model.serverStatuses[server.id] ?: ServerStatus()
                 var menu by remember(server.id) {mutableStateOf(false)}
                 Row(Modifier.fillMaxWidth().padding(bottom=4.dp).heightIn(min=56.dp).clip(RoundedCornerShape(12.dp))
-                    .background(if(selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=if(selected) .8f else .35f))  // alpha-ok server row background
                     .clickable {onDismiss();model.connectServer(server.id)}.padding(start=12.dp,top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
                     Box(Modifier.size(7.dp).background(if(status.connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,RoundedCornerShape(4.dp)))
                     Spacer(Modifier.width(11.dp))
@@ -127,7 +130,7 @@ import kotlinx.coroutines.launch
             OutlinedTextField(endpoint,{endpoint=it;error=null},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.server_url))},singleLine=true,textStyle=SettingsType.body,
                 keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri),placeholder={Text("https://host.tailnet.ts.net",fontSize=11.sp)})
             Text(if(endpoint.startsWith("ssh://")) stringResource(R.string.ssh_target_hint) else stringResource(R.string.https_target_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            if(runCatching {ServerProfile.normalizeEndpoint(endpoint)}.isSuccess) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp)) {
+            if(runCatching {ServerProfile.normalizeEndpoint(endpoint)}.isSuccess) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.5f)).padding(12.dp)) {  // alpha-ok network route background
                 Text(stringResource(R.string.connection_network),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Box {
                     TextButton(enabled=!busy,onClick={routesOpen=true},contentPadding=PaddingValues(horizontal=0.dp,vertical=4.dp)) {Text(stringResource(route.labelRes),style=SettingsType.row);Text(" ▾")}

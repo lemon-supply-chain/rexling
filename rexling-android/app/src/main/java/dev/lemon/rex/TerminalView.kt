@@ -163,6 +163,11 @@ class TerminalView(context: Context) : View(context) {
         set(value) {
             if(field!=value) {field=value;if(controlled && hasFocus()) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)}
         }
+    /** Any tap on a controlled pane opens the keyboard; set while the key toolbar hides without it. */
+    var tapOpensKeyboard: Boolean = false
+        set(value) {
+            if(field!=value) {field=value;if(controlled && hasFocus()) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)}
+        }
     var controlled: Boolean = false
         set(value) {
             if (field != value) {
@@ -618,14 +623,17 @@ class TerminalView(context: Context) : View(context) {
                 col !in 0 until frame.columns || row !in 0 until frame.rows) return
             super.performClick()
             onMouseClick(col,row,cellWidth.roundToInt().coerceAtLeast(1),cellHeight.roundToInt().coerceAtLeast(1))
-            if(frame.isSemanticInputRow(row)) keyboard()
+            // Mouse-reporting programs (pi's fullscreen mode) still get the click; with no toolbar
+            // keyboard button showing, the tap must also be able to open the keyboard.
+            if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
             else if(row==inputCursorRow(frame)) onCursorTap()
         } else if(controlled && frame?.hasSemanticPrompt==true) {
             val row=floor((y-insetTop)/cellHeight).toInt()
             if(pressedMouseTarget!=mouseTarget() || pressedMouseGrid!=(frame.columns to frame.rows) ||
                 x<insetHorizontal || x>=width-insetHorizontal || y<insetTop || y>=height-insetBottom) return
             super.performClick()
-            if(frame.isSemanticInputRow(row)) keyboard()
+            // Prompt-marked shells otherwise open it only from the prompt line.
+            if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
             else if(frame.scroll.below==0L && row==inputCursorRow(frame)) onCursorTap()
         } else performClick()
     }

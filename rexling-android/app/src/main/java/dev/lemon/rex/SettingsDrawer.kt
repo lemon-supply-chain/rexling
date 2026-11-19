@@ -24,9 +24,11 @@ import dev.chrisbanes.haze.HazeState
 @Composable internal fun SettingsDrawer(title: String,closeDescription: String,onClose: ()->Unit,
     hazeState: HazeState?=null,onBack: (() -> Unit)?=null,swipeToDismiss: Boolean=true,backDescription: String=stringResource(R.string.back_to_appearance),content: @Composable ColumnScope.()->Unit) {
     val localHaze=remember {HazeState()}
+    // Built outside the sheet on purpose: drawerFrost redraws when its host window draws, and inside the
+    // sheet that host is the sheet's own window, which then redraws itself every frame while open.
+    val frost=if(swipeToDismiss) Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
+        else Modifier.paneFrost(hazeState ?: localHaze,BottomSheetDefaults.ExpandedShape,edge=false,opacity=.72f,blur=24.dp)
     @Composable fun Body(modifier: Modifier=Modifier) {
-        val frost=if(swipeToDismiss) Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
-            else Modifier.paneFrost(hazeState ?: localHaze,BottomSheetDefaults.ExpandedShape,edge=false,opacity=.72f,blur=24.dp)
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
             Column(modifier.then(frost).fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {

@@ -493,6 +493,7 @@
     <string name="label_notification">通知</string>
     <string name="label_ok">确定</string>
     <string name="label_image_upload">图片上传</string>
+    <string name="file_upload">文件上传</string>
     <string name="a11y_shortcuts_format">%1$s 快捷方式</string>
     <string name="a11y_shortcut_menu_format">%1$s 快捷菜单</string>
     <string name="a11y_shortcut_pages_format">%1$s 快捷页</string>
@@ -593,4 +594,13 @@
     <string name="ungrouped">未分组</string>
     <string name="command">命令</string>
     <string name="key_sequence">按键序列</string>
+
+    <!-- Upstream build 169 sync -->
+    <string name="show_toolbar_only_with_keyboard">仅在键盘弹出时显示工具栏</string>
+    <string name="show_toolbar_only_with_keyboard_desc">键盘收起时隐藏按键工具栏以留出终端高度。</string>
+    <string name="device_name">设备名称</string>
+    <string name="device_name_hint">此设备在 tailnet 中显示的名称。在 Tailscale 管理后台设置的名称优先。</string>
+    <string name="attach_file">附加文件</string>
+    <string name="session_label">会话</string>
+    <string name="switch_session">切换会话</string>
 </resources>

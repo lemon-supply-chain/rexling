@@ -33,6 +33,7 @@ import kotlinx.coroutines.withTimeoutOrNull
     val scope=rememberCoroutineScope()
     val status by NetworkSettings.status.collectAsState()
     var control by remember {mutableStateOf(NetworkSettings.controlUrl)}
+    var deviceName by remember {mutableStateOf(NetworkSettings.hostname)}
     var error by remember {mutableStateOf<String?>(null)}
     var busy by remember {mutableStateOf(false)}
     var confirmSignOut by remember {mutableStateOf(false)}
@@ -47,7 +48,7 @@ import kotlinx.coroutines.withTimeoutOrNull
         busy=true;error=null
         scope.launch {
             try {
-                error=NetworkSettings.prepareBuiltIn(control)
+                error=NetworkSettings.prepareBuiltIn(control,deviceName)
                 if(error==null) error=NetworkSettings.login()
                 if(error==null) {
                     val url=withTimeoutOrNull(20_000) {
@@ -78,7 +79,9 @@ import kotlinx.coroutines.withTimeoutOrNull
             Text(stringResource(R.string.choose_network_per_server),style=SettingsType.detail)
             OutlinedTextField(control,{control=it},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.control_server_optional))},placeholder={Text("https://headscale.example.com")},singleLine=true)
             Text(stringResource(R.string.control_server_hint),style=SettingsType.detail)
-            Button(enabled=!busy,onClick={busy=true;scope.launch {error=NetworkSettings.prepareBuiltIn(control);busy=false}}) {Text(if(busy) stringResource(R.string.applying) else stringResource(R.string.apply))}
+            OutlinedTextField(deviceName,{deviceName=it},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.device_name))},placeholder={Text(TailscaleHostname.DEFAULT)},singleLine=true)
+            Text(stringResource(R.string.device_name_hint),style=SettingsType.detail)
+            Button(enabled=!busy,onClick={busy=true;scope.launch {error=NetworkSettings.prepareBuiltIn(control,deviceName);busy=false}}) {Text(if(busy) stringResource(R.string.applying) else stringResource(R.string.apply))}
             error?.let {Text(it,color=MaterialTheme.colorScheme.error,style=SettingsType.detail)}
         }
         if(confirmSignOut) SettingsConfirmDialog(
@@ -167,11 +170,8 @@ internal fun tailscalePeers(status: org.json.JSONObject?): List<TailscalePeerSta
                 Text(stringResource(tailscaleStatusLabelRes(state)),style=SettingsType.row)
                 Text(if(state=="Running") stringResource(R.string.tailscale_ready_desc) else if(state=="NeedsMachineAuth") stringResource(R.string.tailscale_machine_auth_desc) else if(state=="Off") stringResource(R.string.tailscale_off_desc) else stringResource(R.string.tailscale_browser_signin_desc),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if(state=="Running") Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                ChromeSymbol(ChromeIcon.CHECK,Modifier.size(22.dp).testTag("Tailscale connected icon"),color=MaterialTheme.colorScheme.primary)
-                TextButton(enabled=!busy,onClick=onSignOut,modifier=Modifier.testTag("Tailscale sign out button")) {
-                    Text(stringResource(R.string.sign_out),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)
-                }
+            if(state=="Running") TextButton(enabled=!busy,onClick=onSignOut,modifier=Modifier.testTag("Tailscale sign out button")) {
+                Text(stringResource(R.string.sign_out),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)
             }
             else if(busy) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp)
             else TextButton(onClick=onSignIn) {Text(if(state=="Off") stringResource(R.string.set_up) else stringResource(R.string.sign_in),style=SettingsType.detail)}

@@ -186,7 +186,7 @@ pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadCreate(
         _ => {
             let _ = env.throw_new(
                 "java/lang/IllegalStateException",
-                "Could not start image upload",
+                "Could not start file upload",
             );
             0
         }

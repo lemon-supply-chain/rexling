@@ -45,14 +45,14 @@ internal object SettingsType {
 @Composable internal fun SettingsSection(title: String,compact: Boolean=true,content: @Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(title,Modifier.padding(start=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
-        Surface(shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),color=MaterialTheme.colorScheme.surfaceContainerHigh,contentColor=MaterialTheme.colorScheme.onSurface) {
+        Surface(shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)) {  // alpha-ok section surface
             Column(Modifier.fillMaxWidth(),content=content)
         }
     }
 }
 
 @Composable internal fun SettingsDivider() {
-    HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant)
+    HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))  // alpha-ok divider tint
 }
 
 internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK,KEY }

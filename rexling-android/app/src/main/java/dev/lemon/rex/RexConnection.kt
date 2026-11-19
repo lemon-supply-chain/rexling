@@ -499,8 +499,8 @@ internal class RexConnection(application: Application, private val scope: Corout
     fun toggleShift() {shiftState=ShiftKeyState(latched=!shiftState.active)}
     fun pressShift() {shiftState=shiftState.press()}
     fun releaseShift(cancelled: Boolean) {shiftState=shiftState.release(cancelled)}
-    fun controlShortcut(keys: String) {
-        if(!visible || !state.value.controlled || state.value.creating || navigationRequest.pending) return
+    fun controlShortcut(keys: String,target: String=keyTarget()) {
+        if(target!=keyTarget() || !visible || !state.value.controlled || state.value.creating || navigationRequest.pending) return
         val input=runCatching {ControlShortcutConfig.decode(keys)}.getOrNull() ?: return
         resetModifiers();type(input)
     }

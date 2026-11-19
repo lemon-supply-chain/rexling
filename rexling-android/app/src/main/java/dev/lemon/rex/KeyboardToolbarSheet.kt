@@ -86,7 +86,7 @@ import dev.chrisbanes.haze.HazeState
                 Row(Modifier.fillMaxWidth().height(48.dp).onGloballyPositioned {toolbarBounds=it.boundsInRoot()}
                     .semantics {contentDescription=dropAreaDescription},horizontalArrangement=Arrangement.spacedBy(4.dp),verticalAlignment=Alignment.CenterVertically) {
                     if(draft.isEmpty()) Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(11.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),contentAlignment=Alignment.Center) {
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)),contentAlignment=Alignment.Center) {  // alpha-ok draft drop area
                         Text(stringResource(R.string.drag_buttons_here),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     draft.forEachIndexed {index,item->key(item.id) {
@@ -118,13 +118,13 @@ import dev.chrisbanes.haze.HazeState
                 }
                 LazyVerticalGrid(columns=GridCells.Fixed(4),modifier=Modifier.fillMaxWidth().weight(1f,fill=false).heightIn(min=96.dp,max=240.dp)
                     .onGloballyPositioned {paletteBounds=it.boundsInRoot()}
-                    .clip(RoundedCornerShape(12.dp)).background(if(overPalette && fromToolbar) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clip(RoundedCornerShape(12.dp)).background(if(overPalette && fromToolbar) MaterialTheme.colorScheme.errorContainer.copy(alpha=.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f))  // alpha-ok palette background
                     .semantics {contentDescription=availableButtonsDescription},contentPadding=PaddingValues(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     items(ToolbarKey.entries.filter {it !in draft},key={it.id}) {item->
                         val availableButtonDescription=stringResource(R.string.a11y_available_button,item.label)
                         DisposableEffect(item) {onDispose {availableBounds.remove(item)}}
                         Column(Modifier.height(56.dp).onGloballyPositioned {availableBounds[item]=it.boundsInRoot()}
-                            .clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.6f))  // alpha-ok button surface
                             .graphicsLayer {alpha=if(dragged==item) .3f else 1f}
                             .clickable(role=Role.Button) {
                                 val result=if(draft.size<ToolbarLayout.MAX_KEYS) draft+item else ToolbarLayout.assign(draft,selected,item)

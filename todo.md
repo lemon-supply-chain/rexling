@@ -165,12 +165,42 @@ Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884
   - **Area**: Release Packaging
   - **Status**: Bumped `versionCode = 168` in `build.gradle.kts`.
 
+- [x] **31. `1b009b2`** - Keep Gboard stable when changing sessions and simplify candidate strip
+  - **Full Hash**: `1b009b244d2d482d8c3629e46a74bbf3b76a6b57`
+  - **Area**: IME / Gboard, Input Connection
+  - **Status**: Synced `TerminalImeViewport.kt` and `TerminalCarousel.kt`.
+
+- [x] **32. `2e02fc4`** - Auto-hide key toolbar when the keyboard is closed
+  - **Full Hash**: `2e02fc434b9d0ce47101a07010a300d8d0cfafc8`
+  - **Area**: Keyboard Toolbar, UI Layout, Settings
+  - **Status**: Synced `toolbarWithKeyboardOnly` preference, `Modifier.keyboardRevealed`, `TerminalActions` keyboard trigger, and `PreferencesSheet.kt`.
+
+- [x] **33. `7e62e98`** - Configure custom Tailscale device name
+  - **Full Hash**: `7e62e987c47311746c078aeec5809da8a50672e8`
+  - **Area**: Tailscale, Go Daemon, Network UI
+  - **Status**: Synced `Hostname` configuration in `rexling-network/main.go`, `TailscaleHostname` validator in `NetworkSettings.kt`, and device name input in `NetworkSheet.kt`.
+
+- [x] **34. `b58859e`** - Stop frosted settings drawers from invalidating every frame
+  - **Full Hash**: `b58859e86470081bf5c822558509ce77e64a4b4e`
+  - **Area**: Performance, Compose Rendering, Haze Blur
+  - **Status**: Instantiated `val frost = Modifier.drawerFrost(...)` outside `ModalBottomSheet` across all settings sheets (`PreferencesSheet.kt`, `SettingsDrawer.kt`, `ServersSheet.kt`, `PortForwardSheet.kt`, `ShortcutProfileSheets.kt`), eliminating continuous redraws.
+
+- [x] **35. `8c375c9`** - Move sessions into the unified tab and pane drawer
+  - **Full Hash**: `8c375c9424c30c80ff2d12fb6230f2c4fe866385`
+  - **Area**: Drawer UI, Tab & Pane Switcher, Session Navigation
+  - **Status**: Unified Sessions into `TabPaneSwitcher.kt` (`SwitcherSessions`, `SessionsPage`, `sessionsPageHeight`), restored translucent styling, and updated `DrawerFrostTest.kt` and `SessionSwitcherTest.kt`.
+
+- [x] **36. `8d60289`** - Prepare release build 169
+  - **Full Hash**: `8d602897d1f7facfff23d21d76d4313ab89a3c98`
+  - **Area**: File Uploads, Release Packaging
+  - **Status**: Generalized image uploads to arbitrary files across `rexling-core/src/upload.rs`, JNI bridge, `ImageUploads.kt`, `MainActivity.kt` file picker, bumped `versionCode = 169` in `build.gradle.kts`.
+
 ---
 
 ## Verification
 - Rust Core (`rexling-core`): 50 passed, 3 ignored (6 suites).
-- Go Network Daemon (`rexling-network`): 8 passed in 1 package.
+- Go Network Daemon (`rexling-network`): 9 passed in 1 package.
 - Android Application (`rexling-android`):
   - Debug compilation: `BUILD SUCCESSFUL`.
-  - Debug unit tests: 310 passed, 1 skipped (`testDebugUnitTest` SUCCESS).
+  - Debug unit tests: 312 passed, 1 skipped (`testDebugUnitTest` SUCCESS).
   - Debug APK assembly: `BUILD SUCCESSFUL` (`assembleDebug`).

@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
@@ -18,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -35,6 +37,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
+/**
+ * The Sessions page of the switcher: [current] names the session whose tabs and panes the other
+ * pages show, and [content] is the page itself (see SessionsPage).
+ */
+internal class SwitcherSessions(val count: Int,val current: String,val height: androidx.compose.ui.unit.Dp,
+    val onShown: ()->Unit={},val content: @Composable ()->Unit)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun TabPaneSwitcher(
     windows: List<WindowItem>,selectedWindow: String,selectedBlock: String,
@@ -45,10 +54,14 @@ import kotlinx.coroutines.launch
     onMoveTab: (String,String?)->Boolean={_,_->false},onMovePane: (String,String,String?)->Boolean={_,_,_->false},reorderKey: String="",
     onRenameTab: (String,String)->Boolean={_,_->false},onRenamePane: (String,String,String)->Boolean={_,_,_->false},
     onFloatPane: (String,String)->Boolean={_,_->false},onDockPane: (String,String,String,PaneSplit)->Boolean={_,_,_,_->false},error: String="",hazeState: dev.chrisbanes.haze.HazeState?=null,
+    sessions: SwitcherSessions?=null,openSessions: Boolean=false,
 ) {
+    // With sessions, page 0 is Sessions and Tabs/Panes follow; [initialPage] still counts Tabs as 0.
+    val offset=if(sessions!=null) 1 else 0
     var rename by remember(reorderKey) {mutableStateOf<TerminalRenameTarget?>(null)}
     var dock by remember(reorderKey) {mutableStateOf<Pair<String,String>?>(null)}
-    val pager=rememberPagerState(initialPage=initialPage.coerceIn(0,1),pageCount={2})
+    val pager=rememberPagerState(initialPage=if(sessions!=null && openSessions) 0 else offset+initialPage.coerceIn(0,1),pageCount={2+offset})
+    LaunchedEffect(pager.currentPage) {if(sessions!=null && pager.currentPage==0) sessions.onShown()}
     val scope=rememberCoroutineScope()
     var targetWindow by remember {mutableStateOf(selectedWindow)}
     val current=windows.firstOrNull {it.id==targetWindow}
@@ -60,7 +73,8 @@ import kotlinx.coroutines.launch
     var splitMenu by remember(targetWindow,targetPane,canSplit,enabled,pager.currentPage) {mutableStateOf(false)}
     val hasLayout=panes.isNotEmpty() && current!=null && panes.all {pane->current.layout.any {it.id==pane.id}}
     val layoutAllowance=if(current?.layout?.any {it.floating}==true) 128 else 104
-    val panelHeight=(128+maxOf(windows.size,panes.size,1).coerceAtMost(7)*60+if(hasLayout) layoutAllowance else 0).dp.coerceAtMost(620.dp)
+    // One height for every page, so swiping between them never resizes the drawer.
+    val panelHeight=maxOf((128+maxOf(windows.size,panes.size,1).coerceAtMost(7)*60+if(hasLayout) layoutAllowance else 0).dp,sessions?.height ?: 0.dp).coerceAtMost(620.dp)
     fun tabTitle(tab: WindowItem): String {
         val block=tab.blocks.getOrNull(selectedPane(tab))
         val program=programs[block?.id] ?: ProgramIdentity.Loading
@@ -73,20 +87,22 @@ import kotlinx.coroutines.launch
         Column(drawerSurface.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
         DrawerHandle()
         Column(Modifier.fillMaxWidth().height(panelHeight).padding(bottom=4.dp)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).height(48.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh,RoundedCornerShape(12.dp)).padding(4.dp).selectableGroup()) {
-                listOf("Tabs" to windows.size,"Panes" to panes.size).forEachIndexed {page,(label,count)->
+            Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).height(48.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),RoundedCornerShape(12.dp)).padding(4.dp).selectableGroup()) {  // alpha-ok tab switcher header
+                (listOfNotNull(sessions?.let {stringResource(R.string.sessions) to it.count})+listOf("Tabs" to windows.size,"Panes" to panes.size)).forEachIndexed {page,(label,count)->
                     val active=pager.currentPage==page
-                    Row(Modifier.weight(1f).fillMaxHeight().background(if(active) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,RoundedCornerShape(9.dp))
+                    Row(Modifier.weight(1f).fillMaxHeight().background(if(active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,RoundedCornerShape(9.dp))
                         .selectable(active,role=Role.Tab,onClick={scope.launch {pager.animateScrollToPage(page)}}),
                         horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
-                            Text(label,style=SettingsType.row,color=if(active) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(label,style=SettingsType.row,color=if(active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.width(6.dp))
                             Text(count.toString(),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
             if(error.isNotBlank()) Text(error,Modifier.padding(horizontal=16.dp,vertical=4.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.error,maxLines=2,overflow=TextOverflow.Ellipsis)
-            HorizontalPager(pager,Modifier.fillMaxWidth().weight(1f).semantics {contentDescription=pagesDescription},verticalAlignment=Alignment.Top) {page->
+            HorizontalPager(pager,Modifier.fillMaxWidth().weight(1f).semantics {contentDescription=pagesDescription},verticalAlignment=Alignment.Top) {index->
+                if(sessions!=null && index==0) {sessions.content();return@HorizontalPager}
+                val page=index-offset
                 val ids=if(page==0) windows.map {it.id} else panes.map {it.id}
                 val list=rememberLazyListState()
                 val drag=remember(page,reorderKey,if(page==1) targetWindow else "") {TabDrag()}
@@ -124,6 +140,8 @@ import kotlinx.coroutines.launch
                     }
                 }
                 Column(Modifier.fillMaxSize()) {
+                    // Whose tabs these are; tapping goes to Sessions to switch.
+                    if(sessions!=null) SwitcherSessionLabel(sessions.current) {scope.launch {pager.animateScrollToPage(0)}}
                     LazyColumn(Modifier.fillMaxWidth().weight(1f).selectableGroup().semantics {contentDescription=if(page==0) "Reorder tabs" else "Reorder panes"}
                         .pointerInput(enabled,ids,reorderKey,targetWindow,page) {
                             if(enabled) detectTabDrag(
@@ -256,7 +274,7 @@ import kotlinx.coroutines.launch
     actions: @Composable ((()->Unit)->Unit)={}) {
     var menu by remember {mutableStateOf(false)}
     val primary=MaterialTheme.colorScheme.primary
-    Surface(modifier=modifier,shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surfaceContainerHigh,contentColor=MaterialTheme.colorScheme.onSurface) {
+    Surface(modifier=modifier,shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)) {  // alpha-ok item surface
         Row(Modifier.fillMaxWidth().heightIn(min=56.dp).selectable(active,enabled=enabled,role=Role.RadioButton,onClick=onSelect)
             .semantics {contentDescription=description;stateDescription=if(active) "Selected" else "";customActions=reorderActions}.padding(start=8.dp,end=0.dp,top=4.dp,bottom=4.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -275,5 +293,16 @@ import kotlinx.coroutines.launch
                 }
             }
         }
+    }
+}
+
+@Composable private fun SwitcherSessionLabel(current: String,onClick: ()->Unit) {
+    val scheme=MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).padding(top=6.dp).clip(RoundedCornerShape(10.dp))
+        .clickable(role=Role.Button,onClickLabel=stringResource(R.string.switch_session),onClick=onClick).padding(horizontal=4.dp,vertical=6.dp),
+        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+        Text(stringResource(R.string.session_label),style=SettingsType.detail,color=scheme.onSurfaceVariant)
+        Text(current.ifBlank {"None"},Modifier.weight(1f,fill=false),style=SettingsType.section,color=scheme.onSurface,maxLines=1,overflow=TextOverflow.Ellipsis)
+        ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(14.dp).graphicsLayer {rotationZ=-90f},scheme.onSurfaceVariant)
     }
 }

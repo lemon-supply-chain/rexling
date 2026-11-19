@@ -16,9 +16,9 @@ internal class RexImageUpload: RexUploadBackend {
         val request=JSONObject().put("endpoint",target.endpoint).put("session",target.session).put("block",target.block)
             .put("path",image.file.absolutePath).put("name",image.name).put("ref","upload:${UUID.randomUUID()}")
         val handle=try {
-            NativeBridge.uploadCreate(request.toString()).also {check(it!=0L) {"Could not start image upload"}}
+            NativeBridge.uploadCreate(request.toString()).also {check(it!=0L) {"Could not start file upload"}}
         } catch(error: Throwable) {
-            return RexUploadResult("failed",error.message ?: "Could not start image upload")
+            return RexUploadResult("failed",error.message ?: "Could not start file upload")
         }
         try {
             while(true) {
@@ -30,7 +30,7 @@ internal class RexImageUpload: RexUploadBackend {
                 delay(40)
             }
         } catch(error: CancellationException) {throw error}
-        catch(error: Exception) {return RexUploadResult("uncertain","Could not confirm the image upload. Check the original pane before trying again.")}
+        catch(error: Exception) {return RexUploadResult("uncertain","Could not confirm the file upload. Check the original pane before trying again.")}
         finally {NativeBridge.uploadDestroy(handle)}
     }
 }

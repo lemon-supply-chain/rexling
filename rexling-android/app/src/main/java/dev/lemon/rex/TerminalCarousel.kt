@@ -41,7 +41,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
     onView: (TerminalView)->Unit,modifier: Modifier=Modifier,bindLiveView: ((String,TerminalView)->Boolean)?=null,
     onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,
     padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true,
-    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,imeEnterSubmits: Boolean=false) {
+    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,imeEnterSubmits: Boolean=false,tapOpensKeyboard: Boolean=false,keyboardChrome: ()->Int={0}) {
     val context=androidx.compose.ui.platform.LocalContext.current
     val switchLayout=remember(paneLayout,blocks) {paneLayout.filter {p->blocks.any {it.id==p.id}}.sortedBy {it.layer}}
     val hasMinimap=blocks.all {b->switchLayout.any {it.id==b.id}}
@@ -134,7 +134,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                     Box(Modifier.fillMaxSize()) {
                         val profile=ProgramProfile.resolve(programs[block.id])
                         if(frame!=null) AndroidView(
-                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets,profile.imeAnchor) {keyboardFocus}.clipToBounds(),
+                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets,profile.imeAnchor,keyboardChrome) {keyboardFocus}.clipToBounds(),
                             update={view ->
                                 view.keepAwakeMode=if(center) keepAwake else KeepScreenAwake.SYSTEM
                                 imeHandoff.mount(block,view)
@@ -149,6 +149,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                                 view.interactive=center
                                 view.keyboardSuggestions=keyboardSuggestions && profile.keyboardSuggestions
                                 view.imeEnterSubmits=imeEnterSubmits
+                                view.tapOpensKeyboard=tapOpensKeyboard
                                 view.imeAnchor=profile.imeAnchor
                                 view.edgePolicy=profile.edgePolicy
                                 view.controlled=center && controlled && block.id==liveBlock

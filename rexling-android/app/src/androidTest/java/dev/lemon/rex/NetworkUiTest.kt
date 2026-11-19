@@ -106,7 +106,7 @@ class NetworkUiTest {
         compose.onNodeWithText("Sign in").assertIsDisplayed()
         compose.runOnIdle {state="Running"}
         compose.onNodeWithText("Connected").assertIsDisplayed()
-        compose.onNodeWithTag("Tailscale connected icon").assertIsDisplayed()
+        compose.onNodeWithTag("Tailscale sign out button").assertIsDisplayed()
         compose.onNodeWithText("Sign in").assertDoesNotExist()
         compose.onNodeWithText("Sign in again").assertDoesNotExist()
     }

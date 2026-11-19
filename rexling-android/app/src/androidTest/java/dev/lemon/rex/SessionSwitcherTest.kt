@@ -27,10 +27,17 @@ class SessionSwitcherTest {
             instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG,100,it)
         }
     }
+    /** The unified switcher opened on its Sessions page, as the header's session strip opens it. */
+    @androidx.compose.runtime.Composable private fun SessionsDrawer(targets: List<SessionTarget>,current: String,last: String,
+        onRename: (SessionTarget,String)->Boolean,onSelect: (String)->Unit,onClose: ()->Unit,onNew: ()->Unit) {
+        TabPaneSwitcher(emptyList(),"","",emptyMap(),emptyMap(),emptyMap(),{0},true,true,true,{},{},{},{_,_->},{},{},onClose,
+            sessions=SwitcherSessions(targets.size,"",sessionsPageHeight(targets)) {SessionsPage(targets,current,last,true,"","",{},onRename,onSelect,onNew)},
+            openSessions=true)
+    }
     @Test fun compactDrawerFiltersAcrossServersAndNavigatesWithoutDuplicateStrip() {
         var selected="";var closed=0
         ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {
-            SessionSwitcher(targets,targets[0].key,targets[1].key,true,"","",{},{_,_->true},{selected=it},{closed++},{})
+            SessionsDrawer(targets,targets[0].key,targets[1].key,{_,_->true},{selected=it},{closed++},{})
         }}
         ui.onNodeWithContentDescription("Session strip").assertDoesNotExist()
         ui.onNodeWithText("Rexling development").assertIsDisplayed()
@@ -42,13 +49,13 @@ class SessionSwitcherTest {
         assertEquals(before.width,ui.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot.width)
         ui.onNodeWithText("Ubuntu server").performClick()
         ui.runOnIdle {assertEquals(targets[2].key,selected);assertEquals(0,closed)}
-        ui.onNodeWithContentDescription("Close sessions").performClick()
+        ui.onNodeWithContentDescription("Close tab and pane switcher").performClick()
         ui.runOnIdle {assertEquals(1,closed)}
     }
     @Test fun newSessionAndSessionActionsRemainSeparateFromSelection() {
         var created=0;var selected=0;var renamed=""
         ui.setContent {RexTheme(false,ThemeCatalog.defaults[1]) {
-            SessionSwitcher(targets,targets[0].key,targets[1].key,true,"","",{},{_,name->renamed=name;true},{selected++},{},{created++})
+            SessionsDrawer(targets,targets[0].key,targets[1].key,{_,name->renamed=name;true},{selected++},{},{created++})
         }}
         capture("sessions-compact-light.png")
         ui.onNodeWithText("New session").performClick()
@@ -61,7 +68,7 @@ class SessionSwitcherTest {
     @Test fun emptyDrawerStillOffersNewSession() {
         var created=0
         ui.setContent {RexTheme(false,ThemeCatalog.defaults[1]) {
-            SessionSwitcher(emptyList(),"","",true,"","",{},{_,_->false},{},{},{created++})
+            SessionsDrawer(emptyList(),"","",{_,_->false},{},{},{created++})
         }}
         ui.onNodeWithText("No sessions yet").assertIsDisplayed()
         ui.onNodeWithText("New session").assertIsEnabled().performClick()

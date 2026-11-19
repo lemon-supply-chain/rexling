@@ -72,7 +72,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, ADD, KEYBOARD, HIDE_KEYBOARD, LEFT, RIGHT, UP, DOWN, TAB, CLOSE, ESCAPE, CONTROL, ALT, SHIFT, POINTER, EYE, BACKSPACE, ARROWS, ENTER, SETTINGS, PASTE, IMAGE, SERVER, REFRESH, SUN, MOON, EDIT, UNPLUG, DELETE, QR, FLOAT, CHECK, PLAY, STOP }
+internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, ADD, KEYBOARD, HIDE_KEYBOARD, LEFT, RIGHT, UP, DOWN, TAB, CLOSE, ESCAPE, CONTROL, ALT, SHIFT, POINTER, EYE, BACKSPACE, ARROWS, ENTER, SETTINGS, PASTE, IMAGE, FILE, SERVER, REFRESH, SUN, MOON, EDIT, UNPLUG, DELETE, QR, FLOAT, CHECK, PLAY, STOP }
 
 @Composable internal fun ChromeSymbol(icon: ChromeIcon, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
     Canvas(modifier.size(19.dp)) {
@@ -104,6 +104,10 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
             }
             ChromeIcon.UNPLUG -> {box(7f,7f,10f,7f);line(9f,3f,9f,7f);line(15f,3f,15f,7f);line(12f,14f,12f,20f);line(12f,20f,18f,20f);line(3f,3f,21f,21f)}
             ChromeIcon.DELETE -> {box(7f,8f,10f,13f,1f);line(5f,6f,19f,6f);box(9f,3f,6f,3f,1f);line(10f,11f,10f,17f);line(14f,11f,14f,17f)}
+            ChromeIcon.FILE -> {
+                line(6f,3f,14f,3f);line(14f,3f,19f,8f);line(19f,8f,19f,21f);line(19f,21f,6f,21f);line(6f,21f,6f,3f);line(14f,3f,14f,8f);line(14f,8f,19f,8f)
+                line(9f,15f,16f,15f);line(13f,12f,16f,15f);line(13f,18f,16f,15f)
+            }
             ChromeIcon.QR -> {
                 box(3f,3f,7f,7f,1f);drawRect(color,Offset(5.5f*u,5.5f*u),Size(2f*u,2f*u))
                 box(14f,3f,7f,7f,1f);drawRect(color,Offset(16.5f*u,5.5f*u),Size(2f*u,2f*u))
@@ -564,11 +568,12 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
 }
 
 @Composable internal fun TerminalActions(enabled: Boolean,activityEnabled: Boolean,
-    onActivity: ()->Unit,onSwitcher: ()->Unit,attentionCount: Int=0) {
+    onActivity: ()->Unit,onSwitcher: ()->Unit,attentionCount: Int=0,keyboardLabel: String="",onKeyboard: (()->Unit)?=null) {
     val activityDescription=stringResource(R.string.activity)
     val activityState=if(attentionCount>0) stringResource(R.string.a11y_activity_new_items,attentionCount)
         else stringResource(R.string.a11y_activity_all_seen)
     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+        if(onKeyboard!=null) ChromeButton(ChromeIcon.KEYBOARD,keyboardLabel,enabled,onClick=onKeyboard)
         ChromeButton(ChromeIcon.SPLIT,stringResource(R.string.a11y_tabs_and_panes),enabled,readable=activityEnabled,onClick=onSwitcher)
         Box(Modifier.size(41.dp),contentAlignment=Alignment.Center) {
             Box(Modifier.matchParentSize().clip(RoundedCornerShape(23.dp)).background(MaterialTheme.colorScheme.surfaceVariant))

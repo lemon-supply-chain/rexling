@@ -493,6 +493,7 @@
     <string name="label_notification">Notification</string>
     <string name="label_ok">OK</string>
     <string name="label_image_upload">Image upload</string>
+    <string name="file_upload">File upload</string>
     <string name="a11y_shortcuts_format">%1$s shortcuts</string>
     <string name="a11y_shortcut_menu_format">%1$s shortcut menu</string>
     <string name="a11y_shortcut_pages_format">%1$s shortcut pages</string>
@@ -593,4 +594,13 @@
     <string name="ungrouped">Ungrouped</string>
     <string name="command">Command</string>
     <string name="key_sequence">Key sequence</string>
+
+    <!-- Upstream build 169 sync -->
+    <string name="show_toolbar_only_with_keyboard">Show toolbar only with keyboard</string>
+    <string name="show_toolbar_only_with_keyboard_desc">Hide the key toolbar while the keyboard is closed.</string>
+    <string name="device_name">Device name</string>
+    <string name="device_name_hint">How this phone appears in your tailnet. A name set in the Tailscale admin console takes precedence.</string>
+    <string name="attach_file">Attach file</string>
+    <string name="session_label">Session</string>
+    <string name="switch_session">Switch session</string>
 </resources>

@@ -351,3 +351,12 @@ func TestImportedSSHKeyIdentityIsStableAcrossPassphrasesAndEncoding(t *testing.T
 		t.Fatal("malformed key accepted")
 	}
 }
+
+func TestTailHostnameDefaultsAndTrims(t *testing.T) {
+	if got := tailHostname(configuration{}); got != "rexling-android" {
+		t.Fatalf("default hostname = %q", got)
+	}
+	if got := tailHostname(configuration{Hostname: "  shulhi-s22 "}); got != "shulhi-s22" {
+		t.Fatalf("custom hostname = %q", got)
+	}
+}
