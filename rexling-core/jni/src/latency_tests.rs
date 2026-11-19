@@ -30,12 +30,23 @@ impl Drop for Peer {
 }
 impl Peer {
     async fn new(delay: Duration, reject: bool, drop_first: bool) -> Self {
-        Self::with_floating(delay,reject,drop_first,false).await
+        Self::with_floating(delay, reject, drop_first, false).await
     }
-    async fn with_floating(delay:Duration,reject:bool,drop_first:bool,floating:bool)->Self {
-        Self::with_snapshot(delay,reject,drop_first,floating,false).await
+    async fn with_floating(
+        delay: Duration,
+        reject: bool,
+        drop_first: bool,
+        floating: bool,
+    ) -> Self {
+        Self::with_snapshot(delay, reject, drop_first, floating, false).await
     }
-    async fn with_snapshot(delay:Duration,reject:bool,drop_first:bool,floating:bool,slow_snapshot:bool)->Self {
+    async fn with_snapshot(
+        delay: Duration,
+        reject: bool,
+        drop_first: bool,
+        floating: bool,
+        slow_snapshot: bool,
+    ) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = Endpoint::new(
             &format!("http://{}", listener.local_addr().unwrap()),
@@ -43,8 +54,8 @@ impl Peer {
         )
         .unwrap();
         let gate = Arc::new(Semaphore::new(0));
-        let snapshot_gate=Arc::new(Semaphore::new(if slow_snapshot {0} else {128}));
-        let history_gate=snapshot_gate.clone();
+        let snapshot_gate = Arc::new(Semaphore::new(if slow_snapshot { 0 } else { 128 }));
+        let history_gate = snapshot_gate.clone();
         let writes = Arc::new(Mutex::new(Vec::new()));
         let acknowledged = Arc::new(AtomicUsize::new(0));
         let methods = Arc::new(Mutex::new(Vec::new()));
@@ -56,7 +67,7 @@ impl Peer {
             acknowledged.clone(),
             methods.clone(),
         );
-        let output=output_tx.clone();
+        let output = output_tx.clone();
         let task = tokio::spawn(async move {
             let mut peers = tokio::task::JoinSet::new();
             loop {
@@ -72,7 +83,7 @@ impl Peer {
                     output_tx.clone(),
                     output_rx.clone(),
                 );
-                let history_gate=history_gate.clone();
+                let history_gate = history_gate.clone();
                 peers.spawn(async move {
                     let mut ws=accept_hdr_async(socket,|request:&Request,mut response:Response|{
                         response.headers_mut().insert("Sec-WebSocket-Protocol",request.headers()["Sec-WebSocket-Protocol"].clone());Ok(response)
@@ -211,21 +222,41 @@ async fn shutdown(tx: &mpsc::Sender<Value>) {
 
 #[tokio::test]
 async fn synchronized_redraw_never_publishes_the_intermediate_blank_screen() {
-    let peer=Peer::new(Duration::ZERO,false,false).await;
-    let (mut actor,shared)=peer.actor(1,false).await;
-    actor.dirty=true;
-    let (tx,rx)=mpsc::channel(128);
-    tokio::join!(actor.run(rx),async {
-        until(||shared.lock().unwrap().frame.is_some()).await;
-        let complete=shared.lock().unwrap().frame.clone().unwrap();
-        peer.output.send(b"\x1b[?2026h\x1b[2J\x1b[H".to_vec()).await.unwrap();
+    let peer = Peer::new(Duration::ZERO, false, false).await;
+    let (mut actor, shared) = peer.actor(1, false).await;
+    actor.dirty = true;
+    let (tx, rx) = mpsc::channel(128);
+    tokio::join!(actor.run(rx), async {
+        until(|| shared.lock().unwrap().frame.is_some()).await;
+        let complete = shared.lock().unwrap().frame.clone().unwrap();
+        peer.output
+            .send(b"\x1b[?2026h\x1b[2J\x1b[H".to_vec())
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(80)).await;
-        assert!(Arc::ptr_eq(shared.lock().unwrap().frame.as_ref().unwrap(),&complete),"Clearing inside a synchronized redraw must retain the old complete frame");
+        assert!(
+            Arc::ptr_eq(shared.lock().unwrap().frame.as_ref().unwrap(), &complete),
+            "Clearing inside a synchronized redraw must retain the old complete frame"
+        );
         peer.output.send(b"partial redraw".to_vec()).await.unwrap();
         tokio::time::sleep(Duration::from_millis(80)).await;
-        assert!(Arc::ptr_eq(shared.lock().unwrap().frame.as_ref().unwrap(),&complete),"A partial redraw must not reach the Android renderer");
-        peer.output.send(b" completed\x1b[?2026l".to_vec()).await.unwrap();
-        until(||shared.lock().unwrap().frame.as_ref().is_some_and(|frame|frame.text().contains("partial redraw completed"))).await;
+        assert!(
+            Arc::ptr_eq(shared.lock().unwrap().frame.as_ref().unwrap(), &complete),
+            "A partial redraw must not reach the Android renderer"
+        );
+        peer.output
+            .send(b" completed\x1b[?2026l".to_vec())
+            .await
+            .unwrap();
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .frame
+                .as_ref()
+                .is_some_and(|frame| frame.text().contains("partial redraw completed"))
+        })
+        .await;
         shutdown(&tx).await;
     });
 }
@@ -341,7 +372,7 @@ async fn timed_run(limit: usize) -> Duration {
     });
     assert_eq!(
         *peer.writes.lock().unwrap(),
-        (0..24).map(|n| format!("{n},")).collect::<Vec<_>>()
+        Vec::from_fn(24, |n| format!("{n},"))
     );
     start.elapsed()
 }
@@ -385,70 +416,155 @@ async fn paste_remains_a_barrier_even_with_eight_input_requests_allowed() {
     });
 }
 
-#[tokio::test(flavor="current_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn minimized_floating_terminal_reopens_live_without_another_snapshot() {
-    let peer=Peer::with_floating(Duration::ZERO,false,false,true).await;
-    let (mut actor,_)=peer.actor(8,true).await;
-    actor.controlled=false; // Viewing must never take ownership.
+    let peer = Peer::with_floating(Duration::ZERO, false, false, true).await;
+    let (mut actor, _) = peer.actor(8, true).await;
+    actor.controlled = false; // Viewing must never take ownership.
     actor.refresh_view().await.unwrap();
-    let nonce=actor.data.as_ref().unwrap().nonce;
+    let nonce = actor.data.as_ref().unwrap().nonce;
     actor.open_block("block:tiled".into()).await.unwrap();
-    assert_eq!(actor.retained_floating.as_ref().unwrap().block,"block:test");
-    let cached=actor.retained_floating.as_mut().unwrap();
-    cached.replica.feed(b"\r\nUPDATED_WHILE_MINIMIZED\r\n").unwrap();
-    let before=peer.methods.lock().unwrap().iter().filter(|m|m.as_str()=="data.connect").count();
+    assert_eq!(
+        actor.retained_floating.as_ref().unwrap().block,
+        "block:test"
+    );
+    let cached = actor.retained_floating.as_mut().unwrap();
+    cached
+        .replica
+        .feed(b"\r\nUPDATED_WHILE_MINIMIZED\r\n")
+        .unwrap();
+    let before = peer
+        .methods
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|m| m.as_str() == "data.connect")
+        .count();
     actor.open_block("block:test".into()).await.unwrap();
-    assert_eq!(actor.data.as_ref().unwrap().nonce,nonce);
-    assert!(actor.replica.as_mut().unwrap().terminal().unwrap().frame().unwrap().text().contains("UPDATED_WHILE_MINIMIZED"));
+    assert_eq!(actor.data.as_ref().unwrap().nonce, nonce);
+    assert!(
+        actor
+            .replica
+            .as_mut()
+            .unwrap()
+            .terminal()
+            .unwrap()
+            .frame()
+            .unwrap()
+            .text()
+            .contains("UPDATED_WHILE_MINIMIZED")
+    );
     assert!(actor.dirty);
     assert!(actor.retained_floating.is_none());
-    assert_eq!(before,peer.methods.lock().unwrap().iter().filter(|m|m.as_str()=="data.connect").count());
+    assert_eq!(
+        before,
+        peer.methods
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|m| m.as_str() == "data.connect")
+            .count()
+    );
     // Recovery must never reuse a stream from the old connection.
-    actor.controlled=false;
+    actor.controlled = false;
     actor.open_block("block:tiled".into()).await.unwrap();
     assert!(actor.retained_floating.is_some());
     actor.lose_connections();
     assert!(actor.retained_floating.is_none());
 }
 
-#[tokio::test(flavor="current_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn retained_floating_stream_consumes_hidden_output_without_publishing_or_clipboard_replay() {
-    let peer=Peer::with_floating(Duration::ZERO,false,false,true).await;
-    let (mut actor,shared)=peer.actor(8,true).await;
+    let peer = Peer::with_floating(Duration::ZERO, false, false, true).await;
+    let (mut actor, shared) = peer.actor(8, true).await;
     actor.refresh_view().await.unwrap();
     actor.open_block("block:tiled".into()).await.unwrap();
-    let before=peer.methods.lock().unwrap().iter().filter(|m|m.as_str()=="data.connect").count();
-    let (tx,rx)=mpsc::channel(128);
-    tokio::join!(actor.run(rx),async {
-        until(||shared.lock().unwrap().frame.is_some()).await;
-        peer.output.send(b"\r\nHIDDEN_LIVE_UPDATE\r\n\x1b]52;c;aGlkZGVu\x07".to_vec()).await.unwrap();
+    let before = peer
+        .methods
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|m| m.as_str() == "data.connect")
+        .count();
+    let (tx, rx) = mpsc::channel(128);
+    tokio::join!(actor.run(rx), async {
+        until(|| shared.lock().unwrap().frame.is_some()).await;
+        peer.output
+            .send(b"\r\nHIDDEN_LIVE_UPDATE\r\n\x1b]52;c;aGlkZGVu\x07".to_vec())
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(80)).await;
-        assert!(!shared.lock().unwrap().frame.as_ref().unwrap().text().contains("HIDDEN_LIVE_UPDATE"));
-        tx.send(json!({"type":"block","id":"block:test","navigationId":1})).await.unwrap();
-        until(||shared.lock().unwrap().frame.as_ref().is_some_and(|f|f.text().contains("HIDDEN_LIVE_UPDATE"))).await;
-        let state:Value=serde_json::from_str(&shared.lock().unwrap().json).unwrap();
-        assert!(state["clipboard"].is_null(),"hidden clipboard writes cannot replay on reopen");
-        assert_eq!(before,peer.methods.lock().unwrap().iter().filter(|m|m.as_str()=="data.connect").count());
+        assert!(
+            !shared
+                .lock()
+                .unwrap()
+                .frame
+                .as_ref()
+                .unwrap()
+                .text()
+                .contains("HIDDEN_LIVE_UPDATE")
+        );
+        tx.send(json!({"type":"block","id":"block:test","navigationId":1}))
+            .await
+            .unwrap();
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .frame
+                .as_ref()
+                .is_some_and(|f| f.text().contains("HIDDEN_LIVE_UPDATE"))
+        })
+        .await;
+        let state: Value = serde_json::from_str(&shared.lock().unwrap().json).unwrap();
+        assert!(
+            state["clipboard"].is_null(),
+            "hidden clipboard writes cannot replay on reopen"
+        );
+        assert_eq!(
+            before,
+            peer.methods
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|m| m.as_str() == "data.connect")
+                .count()
+        );
         shutdown(&tx).await;
     });
 }
 
-#[tokio::test(flavor="current_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn renders_the_screen_while_initial_history_is_still_blocked_on_the_network() {
-    let peer=Peer::with_snapshot(Duration::ZERO,false,false,false,true).await;
-    let (mut actor,shared)=peer.actor(8,true).await;
+    let peer = Peer::with_snapshot(Duration::ZERO, false, false, false, true).await;
+    let (mut actor, shared) = peer.actor(8, true).await;
     assert!(actor.replica.as_ref().unwrap().ready());
     assert!(!actor.replica.as_ref().unwrap().snapshot_complete());
-    actor.dirty=true;
-    let (tx,rx)=mpsc::channel(128);
-    tokio::join!(actor.run(rx),async {
-        until(||shared.lock().unwrap().frame.is_some()).await;
-        assert_eq!(peer.snapshot_gate.available_permits(),0,"first frame must precede history delivery");
-        let first=shared.lock().unwrap().frame.clone().unwrap();
+    actor.dirty = true;
+    let (tx, rx) = mpsc::channel(128);
+    tokio::join!(actor.run(rx), async {
+        until(|| shared.lock().unwrap().frame.is_some()).await;
+        assert_eq!(
+            peer.snapshot_gate.available_permits(),
+            0,
+            "first frame must precede history delivery"
+        );
+        let first = shared.lock().unwrap().frame.clone().unwrap();
         assert!(!first.text().trim().is_empty());
         peer.snapshot_gate.add_permits(1);
-        peer.output.send(b"\r\nLIVE_AFTER_HISTORY\r\n".to_vec()).await.unwrap();
-        until(||shared.lock().unwrap().frame.as_ref().is_some_and(|f|f.text().contains("LIVE_AFTER_HISTORY"))).await;
+        peer.output
+            .send(b"\r\nLIVE_AFTER_HISTORY\r\n".to_vec())
+            .await
+            .unwrap();
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .frame
+                .as_ref()
+                .is_some_and(|f| f.text().contains("LIVE_AFTER_HISTORY"))
+        })
+        .await;
         shutdown(&tx).await;
     });
 }

@@ -10,8 +10,19 @@ use std::{
 };
 
 type ApcFn = unsafe extern "C" fn(*mut c_void, u8, *const u8, usize);
-type CellFn =
-    unsafe extern "C" fn(*mut c_void, u16, u16, *const u32, usize, *const u8, *const u8, u32, u8, *const u8, usize);
+type CellFn = unsafe extern "C" fn(
+    *mut c_void,
+    u16,
+    u16,
+    *const u32,
+    usize,
+    *const u8,
+    *const u8,
+    u32,
+    u8,
+    *const u8,
+    usize,
+);
 #[repr(C)]
 #[derive(Default)]
 struct RawFrame {
@@ -38,8 +49,19 @@ unsafe extern "C" {
     fn rp_new(cols: u16, rows: u16, out: *mut *mut c_void) -> i32;
     fn rp_decode(bytes: *const u8, len: usize, out: *mut *mut c_void, offset: *mut usize) -> i32;
     fn rp_free(term: *mut c_void);
-    fn rp_decode_ready(bytes:*const u8,len:usize,out:*mut *mut c_void,consumed:*mut usize)->i32;
-    fn rp_decode_next(term:*mut c_void,bytes:*const u8,len:usize,consumed:*mut usize,finished:*mut u8)->i32;
+    fn rp_decode_ready(
+        bytes: *const u8,
+        len: usize,
+        out: *mut *mut c_void,
+        consumed: *mut usize,
+    ) -> i32;
+    fn rp_decode_next(
+        term: *mut c_void,
+        bytes: *const u8,
+        len: usize,
+        consumed: *mut usize,
+        finished: *mut u8,
+    ) -> i32;
     fn rp_write(
         term: *mut c_void,
         bytes: *const u8,
@@ -52,15 +74,41 @@ unsafe extern "C" {
     fn rp_color(term: *mut c_void, which: i32, rgb: *const u8) -> i32;
     fn rp_palette(term: *mut c_void, index: u8, rgb: *const u8) -> i32;
     fn rp_text(term: *mut c_void, out: *mut *mut u8, len: *mut usize) -> i32;
-    fn rp_command_text(term: *mut c_void,col:u16,row:u16,output:i32,out:*mut *mut u8,len:*mut usize)->i32;
+    fn rp_command_text(
+        term: *mut c_void,
+        col: u16,
+        row: u16,
+        output: i32,
+        out: *mut *mut u8,
+        len: *mut usize,
+    ) -> i32;
     fn rp_encode(term: *mut c_void, out: *mut *mut u8, len: *mut usize) -> i32;
     fn rp_bytes_free(bytes: *mut u8, len: usize);
     fn rp_scroll(term: *mut c_void, lines: i32, bottom: i32);
-    fn rp_scroll_prompts(term: *mut c_void,prompts: i32);
+    fn rp_scroll_prompts(term: *mut c_void, prompts: i32);
     fn rp_input_flags(term: *mut c_void, flags: *mut u8) -> i32;
-    fn rp_render_hold_state(term: *mut c_void,held: *mut u8,generation: *mut u64) -> i32;
-    fn rp_wheel(term: *mut c_void, down: i32, col: i32, row: i32, cw: u32, ch: u32, out: *mut u8, capacity: usize, len: *mut usize) -> i32;
-    fn rp_click(term: *mut c_void, col: i32, row: i32, cw: u32, ch: u32, out: *mut u8, capacity: usize, len: *mut usize) -> i32;
+    fn rp_render_hold_state(term: *mut c_void, held: *mut u8, generation: *mut u64) -> i32;
+    fn rp_wheel(
+        term: *mut c_void,
+        down: i32,
+        col: i32,
+        row: i32,
+        cw: u32,
+        ch: u32,
+        out: *mut u8,
+        capacity: usize,
+        len: *mut usize,
+    ) -> i32;
+    fn rp_click(
+        term: *mut c_void,
+        col: i32,
+        row: i32,
+        cw: u32,
+        ch: u32,
+        out: *mut u8,
+        capacity: usize,
+        len: *mut usize,
+    ) -> i32;
     fn rp_frame(
         term: *mut c_void,
         frame: *mut RawFrame,
@@ -69,7 +117,11 @@ unsafe extern "C" {
     ) -> i32;
 }
 /// Move overscan cells (tagged by the shim) out of the grid into their own rows.
-fn split_overscan(cells: &mut Vec<Cell>, above: u16, below: u16) -> (Vec<Vec<Cell>>, Vec<Vec<Cell>>) {
+fn split_overscan(
+    cells: &mut Vec<Cell>,
+    above: u16,
+    below: u16,
+) -> (Vec<Vec<Cell>>, Vec<Vec<Cell>>) {
     let mut over: Vec<Vec<Cell>> = (0..above).map(|_| Vec::new()).collect();
     let mut under: Vec<Vec<Cell>> = (0..below).map(|_| Vec::new()).collect();
     cells.retain(|cell| {
@@ -80,7 +132,12 @@ fn split_overscan(cells: &mut Vec<Cell>, above: u16, below: u16) -> (Vec<Vec<Cel
             ROW_ABOVE | ROW_BELOW => None,
             _ => return true,
         };
-        if let Some(row) = row {row.push(Cell { y: 0, ..cell.clone() });}
+        if let Some(row) = row {
+            row.push(Cell {
+                y: 0,
+                ..cell.clone()
+            });
+        }
         false
     });
     (over, under)
@@ -107,7 +164,7 @@ pub struct Frame {
     pub rows: u16,
     pub cursor: Option<(u16, u16)>,
     /// Viewport position even when the application hides its cursor glyph.
-    pub cursor_position: Option<(u16,u16)>,
+    pub cursor_position: Option<(u16, u16)>,
     pub cursor_style: u8,
     pub cursor_blinking: bool,
     pub foreground: [u8; 3],
@@ -117,8 +174,10 @@ pub struct Frame {
     pub scroll_offset: u64,
     pub scroll_visible: u64,
     pub input_flags: u8,
-    pub next_image_delay_ms:Option<u64>,
-    pub image_cell_width:u32,pub image_cell_height:u32,pub images:Vec<crate::graphics::Placement>,
+    pub next_image_delay_ms: Option<u64>,
+    pub image_cell_width: u32,
+    pub image_cell_height: u32,
+    pub images: Vec<crate::graphics::Placement>,
     /// Scrollback rows just above the viewport, top to bottom (nearest last),
     /// for smooth sub-line scrolling. Cells keep `y` 0 within their row.
     pub above: Vec<Vec<Cell>>,
@@ -192,9 +251,9 @@ impl Frame {
 pub struct Terminal {
     handle: NonNull<c_void>,
     _owner_thread: PhantomData<Rc<()>>,
-    images:crate::graphics::Images,
-    graphics_clock:std::time::Instant,
-    render_hold:Option<(u64,u64)>,
+    images: crate::graphics::Images,
+    graphics_clock: std::time::Instant,
+    render_hold: Option<(u64, u64)>,
 }
 impl Drop for Terminal {
     fn drop(&mut self) {
@@ -214,7 +273,10 @@ impl Terminal {
         check(unsafe { rp_new(columns, rows, &mut handle) }, "create")?;
         Ok(Self {
             handle: NonNull::new(handle).context("null terminal")?,
-            _owner_thread: PhantomData,images:Default::default(),graphics_clock:std::time::Instant::now(),render_hold:None,
+            _owner_thread: PhantomData,
+            images: Default::default(),
+            graphics_clock: std::time::Instant::now(),
+            render_hold: None,
         })
     }
     pub fn decode(bytes: &[u8]) -> Result<(Self, usize)> {
@@ -228,35 +290,68 @@ impl Terminal {
         Ok((
             Self {
                 handle: NonNull::new(handle).context("null decoded terminal")?,
-                _owner_thread: PhantomData,images:Default::default(),graphics_clock:std::time::Instant::now(),render_hold:None,
+                _owner_thread: PhantomData,
+                images: Default::default(),
+                graphics_clock: std::time::Instant::now(),
+                render_hold: None,
             },
             offset,
         ))
     }
-    fn decode_ready(bytes:&[u8])->Result<(Self,usize)> {
+    fn decode_ready(bytes: &[u8]) -> Result<(Self, usize)> {
         crate::graphics::init()?;
-        let mut handle=ptr::null_mut();let mut consumed=0;
-        check(unsafe {rp_decode_ready(bytes.as_ptr(),bytes.len(),&mut handle,&mut consumed)},"decode snapshot READY")?;
-        Ok((Self {handle:NonNull::new(handle).context("null decoded terminal")?,
-            _owner_thread:PhantomData,images:Default::default(),graphics_clock:std::time::Instant::now(),render_hold:None},consumed))
+        let mut handle = ptr::null_mut();
+        let mut consumed = 0;
+        check(
+            unsafe { rp_decode_ready(bytes.as_ptr(), bytes.len(), &mut handle, &mut consumed) },
+            "decode snapshot READY",
+        )?;
+        Ok((
+            Self {
+                handle: NonNull::new(handle).context("null decoded terminal")?,
+                _owner_thread: PhantomData,
+                images: Default::default(),
+                graphics_clock: std::time::Instant::now(),
+                render_hold: None,
+            },
+            consumed,
+        ))
     }
-    fn decode_next(&mut self,bytes:&[u8])->Result<(usize,bool)> {
-        let mut consumed=0;let mut finished=0;
-        check(unsafe {rp_decode_next(self.handle.as_ptr(),bytes.as_ptr(),bytes.len(),&mut consumed,&mut finished)},"decode snapshot history")?;
-        Ok((consumed,finished!=0))
+    fn decode_next(&mut self, bytes: &[u8]) -> Result<(usize, bool)> {
+        let mut consumed = 0;
+        let mut finished = 0;
+        check(
+            unsafe {
+                rp_decode_next(
+                    self.handle.as_ptr(),
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &mut consumed,
+                    &mut finished,
+                )
+            },
+            "decode snapshot history",
+        )?;
+        Ok((consumed, finished != 0))
     }
-    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<(u8,Vec<u8>)>)> {
+    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<(u8, Vec<u8>)>)> {
         unsafe extern "C" fn apc(userdata: *mut c_void, kind: u8, bytes: *const u8, len: usize) {
             // Synchronous callback, borrowed bytes copied before native code returns.
             unsafe {
-                let events=&mut *userdata.cast::<Vec<(u8,Vec<u8>)>>();
-                if kind==1 {events.retain(|(kind,_)|*kind!=1);}
-                let data=if len==0 {Vec::new()} else {std::slice::from_raw_parts(bytes,len).to_vec()};
-                events.push((kind,data));
+                let events = &mut *userdata.cast::<Vec<(u8, Vec<u8>)>>();
+                if kind == 1 {
+                    events.retain(|(kind, _)| *kind != 1);
+                }
+                let data = if len == 0 {
+                    Vec::new()
+                } else {
+                    std::slice::from_raw_parts(bytes, len).to_vec()
+                };
+                events.push((kind, data));
             }
         }
         let mut consumed = 0;
-        let mut events = Vec::<(u8,Vec<u8>)>::new();
+        let mut events = Vec::<(u8, Vec<u8>)>::new();
         check(
             unsafe {
                 rp_write(
@@ -265,7 +360,7 @@ impl Terminal {
                     bytes.len(),
                     &mut consumed,
                     apc,
-                    (&mut events as *mut Vec<(u8,Vec<u8>)>).cast(),
+                    (&mut events as *mut Vec<(u8, Vec<u8>)>).cast(),
                 )
             },
             "write VT",
@@ -318,37 +413,96 @@ impl Terminal {
         self.buffer(true)
     }
     pub fn input_flags(&mut self) -> Result<u8> {
-        let mut flags=0;check(unsafe {rp_input_flags(self.handle.as_ptr(),&mut flags)},"input modes")?;Ok(flags)
+        let mut flags = 0;
+        check(
+            unsafe { rp_input_flags(self.handle.as_ptr(), &mut flags) },
+            "input modes",
+        )?;
+        Ok(flags)
     }
-    pub fn wheel(&mut self,down: bool,col: i32,row: i32,cw: u32,ch: u32) -> Result<Vec<u8>> {
-        let mut bytes=[0u8;64];let mut len=0;
-        check(unsafe {rp_wheel(self.handle.as_ptr(),i32::from(down),col,row,cw,ch,bytes.as_mut_ptr(),bytes.len(),&mut len)},"wheel encoding")?;
-        ensure!(len<=bytes.len(),"mouse encoder exceeded buffer");Ok(bytes[..len].to_vec())
+    pub fn wheel(&mut self, down: bool, col: i32, row: i32, cw: u32, ch: u32) -> Result<Vec<u8>> {
+        let mut bytes = [0u8; 64];
+        let mut len = 0;
+        check(
+            unsafe {
+                rp_wheel(
+                    self.handle.as_ptr(),
+                    i32::from(down),
+                    col,
+                    row,
+                    cw,
+                    ch,
+                    bytes.as_mut_ptr(),
+                    bytes.len(),
+                    &mut len,
+                )
+            },
+            "wheel encoding",
+        )?;
+        ensure!(len <= bytes.len(), "mouse encoder exceeded buffer");
+        Ok(bytes[..len].to_vec())
     }
     /// Encode a whole tap atomically using the application's negotiated mouse mode.
-    pub fn click(&mut self,col: i32,row: i32,cw: u32,ch: u32) -> Result<Vec<u8>> {
-        if self.input_flags()?&1==0 {return Ok(Vec::new());}
-        let mut bytes=[0u8;128];let mut len=0;
-        check(unsafe {rp_click(self.handle.as_ptr(),col,row,cw,ch,bytes.as_mut_ptr(),bytes.len(),&mut len)},"click encoding")?;
-        ensure!(len<=bytes.len(),"mouse encoder exceeded buffer");Ok(bytes[..len].to_vec())
+    pub fn click(&mut self, col: i32, row: i32, cw: u32, ch: u32) -> Result<Vec<u8>> {
+        if self.input_flags()? & 1 == 0 {
+            return Ok(Vec::new());
+        }
+        let mut bytes = [0u8; 128];
+        let mut len = 0;
+        check(
+            unsafe {
+                rp_click(
+                    self.handle.as_ptr(),
+                    col,
+                    row,
+                    cw,
+                    ch,
+                    bytes.as_mut_ptr(),
+                    bytes.len(),
+                    &mut len,
+                )
+            },
+            "click encoding",
+        )?;
+        ensure!(len <= bytes.len(), "mouse encoder exceeded buffer");
+        Ok(bytes[..len].to_vec())
     }
     pub fn scroll_viewport(&mut self, lines: i32) {
         unsafe { rp_scroll(self.handle.as_ptr(), lines, 0) };
     }
-    pub fn command_text(&mut self,col:u16,row:u16,output:bool)->Result<Option<String>> {
-        let mut bytes=ptr::null_mut();let mut len=0;
-        let code=unsafe {rp_command_text(self.handle.as_ptr(),col,row,output as i32,&mut bytes,&mut len)};
+    pub fn command_text(&mut self, col: u16, row: u16, output: bool) -> Result<Option<String>> {
+        let mut bytes = ptr::null_mut();
+        let mut len = 0;
+        let code = unsafe {
+            rp_command_text(
+                self.handle.as_ptr(),
+                col,
+                row,
+                output as i32,
+                &mut bytes,
+                &mut len,
+            )
+        };
         // GHOSTTY_NO_VALUE means this location has no matching command/output.
-        if code== -4 {return Ok(None);}
-        check(code,"select semantic command")?;
-        let data=if len==0 {Vec::new()} else {unsafe {std::slice::from_raw_parts(bytes,len)}.to_vec()};
-        unsafe {rp_bytes_free(bytes,len)};
-        let text=String::from_utf8(data)?;
-        ensure!(text.len()<=262144,"Command is too large to copy (256 KiB limit)");
+        if code == -4 {
+            return Ok(None);
+        }
+        check(code, "select semantic command")?;
+        let data = if len == 0 {
+            Vec::new()
+        } else {
+            unsafe { std::slice::from_raw_parts(bytes, len) }.to_vec()
+        };
+        unsafe { rp_bytes_free(bytes, len) };
+        let text = String::from_utf8(data)?;
+        ensure!(
+            text.len() <= 262144,
+            "Command is too large to copy (256 KiB limit)"
+        );
         Ok(Some(text))
     }
-    pub fn scroll_prompts(&mut self,prompts: i32) {
-        unsafe {rp_scroll_prompts(self.handle.as_ptr(),prompts)};
+    pub fn scroll_prompts(&mut self, prompts: i32) {
+        unsafe { rp_scroll_prompts(self.handle.as_ptr(), prompts) };
     }
     pub fn scroll_to_bottom(&mut self) {
         unsafe { rp_scroll(self.handle.as_ptr(), 0, 1) };
@@ -358,18 +512,31 @@ impl Terminal {
     pub fn render_ready(&mut self) -> Result<bool> {
         self.render_ready_at(self.graphics_clock.elapsed().as_millis() as u64)
     }
-    fn render_ready_at(&mut self,now:u64) -> Result<bool> {
-        let mut held=0;let mut generation=0;
-        check(unsafe {rp_render_hold_state(self.handle.as_ptr(),&mut held,&mut generation)},"render hold")?;
-        if held==0 {self.render_hold=None;return Ok(true);}
-        let start=match self.render_hold {Some((epoch,start)) if epoch==generation=>start,_=>{self.render_hold=Some((generation,now));now}};
-        Ok(now.saturating_sub(start)>=1000)
+    fn render_ready_at(&mut self, now: u64) -> Result<bool> {
+        let mut held = 0;
+        let mut generation = 0;
+        check(
+            unsafe { rp_render_hold_state(self.handle.as_ptr(), &mut held, &mut generation) },
+            "render hold",
+        )?;
+        if held == 0 {
+            self.render_hold = None;
+            return Ok(true);
+        }
+        let start = match self.render_hold {
+            Some((epoch, start)) if epoch == generation => start,
+            _ => {
+                self.render_hold = Some((generation, now));
+                now
+            }
+        };
+        Ok(now.saturating_sub(start) >= 1000)
     }
     pub fn frame(&mut self) -> Result<Frame> {
         self.frame_at(self.graphics_clock.elapsed().as_millis() as u64)
     }
-    pub(crate) fn frame_at(&mut self,now:u64) -> Result<Frame> {
-        let next_image_delay_ms=crate::graphics::animation_delay(self.handle.as_ptr(),now)?;
+    pub(crate) fn frame_at(&mut self, now: u64) -> Result<Frame> {
+        let next_image_delay_ms = crate::graphics::animation_delay(self.handle.as_ptr(), now)?;
         unsafe extern "C" fn cell(
             userdata: *mut c_void,
             x: u16,
@@ -388,7 +555,11 @@ impl Terminal {
             } else {
                 unsafe { std::slice::from_raw_parts(points, len) }
             };
-            let points=if points.first()==Some(&0x10eeee) {&[][..]} else {points};
+            let points = if points.first() == Some(&0x10eeee) {
+                &[][..]
+            } else {
+                points
+            };
             let text = points
                 .iter()
                 .map(|p| char::from_u32(*p).unwrap_or('\u{fffd}'))
@@ -406,7 +577,14 @@ impl Terminal {
                     background,
                     attributes,
                     width,
-                    hyperlink: if uri_len==0 {None} else {Some(String::from_utf8_lossy(std::slice::from_raw_parts(uri,uri_len)).into_owned())},
+                    hyperlink: if uri_len == 0 {
+                        None
+                    } else {
+                        Some(
+                            String::from_utf8_lossy(std::slice::from_raw_parts(uri, uri_len))
+                                .into_owned(),
+                        )
+                    },
                 });
             }
         }
@@ -424,13 +602,14 @@ impl Terminal {
             "render state",
         )?;
         let (above, below) = split_overscan(&mut cells, raw.overscan_above, raw.overscan_below);
-        let (image_cell_width,image_cell_height,images)=self.images.frame(self.handle.as_ptr(),raw.rows)?;
-        let next_image_delay_ms=next_image_delay_ms.filter(|_|!images.is_empty());
+        let (image_cell_width, image_cell_height, images) =
+            self.images.frame(self.handle.as_ptr(), raw.rows)?;
+        let next_image_delay_ms = next_image_delay_ms.filter(|_| !images.is_empty());
         Ok(Frame {
             columns: raw.columns,
             rows: raw.rows,
             cursor: (raw.cursor_visible != 0).then_some((raw.cursor_x, raw.cursor_y)),
-            cursor_position: (raw.cursor_has_position != 0).then_some((raw.cursor_x,raw.cursor_y)),
+            cursor_position: (raw.cursor_has_position != 0).then_some((raw.cursor_x, raw.cursor_y)),
             cursor_style: raw.cursor_style,
             cursor_blinking: raw.cursor_blinking != 0,
             foreground: raw.foreground,
@@ -439,7 +618,13 @@ impl Terminal {
             scroll_offset: raw.scroll_offset,
             scroll_visible: raw.scroll_visible,
             input_flags: raw.input_flags,
-            cells,image_cell_width,image_cell_height,images,next_image_delay_ms,above,below,
+            cells,
+            image_cell_width,
+            image_cell_height,
+            images,
+            next_image_delay_ms,
+            above,
+            below,
         })
     }
     fn theme(&mut self, event: &Value) -> Result<()> {
@@ -483,7 +668,7 @@ impl Terminal {
     }
 }
 fn color(s: &str) -> Result<[u8; 3]> {
-    let s = s.strip_prefix('#').unwrap_or(s);
+    let s = s.trim_prefix('#');
     ensure!(s.len() == 6 && s.is_ascii(), "invalid RGB color");
     Ok([
         u8::from_str_radix(&s[0..2], 16)?,
@@ -517,23 +702,31 @@ impl Replica {
     pub fn terminal(&mut self) -> Result<&mut Terminal> {
         self.terminal.as_mut().context("snapshot is incomplete")
     }
-    pub fn snapshot_complete(&self)->bool {self.snapshot_bytes>0}
+    pub fn snapshot_complete(&self) -> bool {
+        self.snapshot_bytes > 0
+    }
     pub fn feed(&mut self, bytes: &[u8]) -> Result<()> {
         if !self.snapshot_complete() {
             self.snapshot.append(bytes)?;
-            while let Some(step)=self.snapshot.next_step()? {
-                let input=self.snapshot.input(step);
-                let consumed=if step.ready {
-                    let (terminal,consumed)=Terminal::decode_ready(input)?;
-                    self.terminal=Some(terminal);consumed
+            while let Some(step) = self.snapshot.next_step()? {
+                let input = self.snapshot.input(step);
+                let consumed = if step.ready {
+                    let (terminal, consumed) = Terminal::decode_ready(input)?;
+                    self.terminal = Some(terminal);
+                    consumed
                 } else {
-                    let (consumed,finished)=self.terminal.as_mut().context("snapshot READY missing")?.decode_next(input)?;
-                    ensure!(finished==step.finish,"snapshot FINISH boundary mismatch");
+                    let (consumed, finished) = self
+                        .terminal
+                        .as_mut()
+                        .context("snapshot READY missing")?
+                        .decode_next(input)?;
+                    ensure!(finished == step.finish, "snapshot FINISH boundary mismatch");
                     consumed
                 };
-                self.snapshot.advance(step,consumed)?;
+                self.snapshot.advance(step, consumed)?;
                 if step.finish {
-                    let (total,tail)=self.snapshot.finish();self.snapshot_bytes=total;
+                    let (total, tail) = self.snapshot.finish();
+                    self.snapshot_bytes = total;
                     return self.live(&tail);
                 }
             }
@@ -545,9 +738,11 @@ impl Replica {
         while !bytes.is_empty() {
             let (n, apcs) = self.terminal()?.step(bytes)?;
             bytes = &bytes[n..];
-            for (kind,apc) in apcs {
-                if kind==1 {
-                    if let Ok(text)=String::from_utf8(apc) {self.clipboard_write=Some(text);}
+            for (kind, apc) in apcs {
+                if kind == 1 {
+                    if let Ok(text) = String::from_utf8(apc) {
+                        self.clipboard_write = Some(text);
+                    }
                     continue;
                 }
                 let Ok(apc) = std::str::from_utf8(&apc) else {
@@ -585,235 +780,436 @@ impl Replica {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn snapshot_records(bytes:&[u8])->Vec<(u16,usize,usize)> {
-        let mut records=Vec::new();let mut start=10;
-        while start+10<=bytes.len() {
-            let tag=u16::from_le_bytes(bytes[start..start+2].try_into().unwrap());
-            let end=start+10+u32::from_le_bytes(bytes[start+2..start+6].try_into().unwrap()) as usize;
-            records.push((tag,start,end));start=end;if tag==6 {break;}
+    fn snapshot_records(bytes: &[u8]) -> Vec<(u16, usize, usize)> {
+        let mut records = Vec::new();
+        let mut start = 10;
+        while start + 10 <= bytes.len() {
+            let tag = u16::from_le_bytes(bytes[start..start + 2].try_into().unwrap());
+            let end = start
+                + 10
+                + u32::from_le_bytes(bytes[start + 2..start + 6].try_into().unwrap()) as usize;
+            records.push((tag, start, end));
+            start = end;
+            if tag == 6 {
+                break;
+            }
         }
         records
     }
     #[test]
     fn renders_ready_prefix_before_history_and_restores_fragmented_history_without_jumping() {
-        let mut original=Terminal::new(32,6).unwrap();
-        for n in 0..1600 {original.write(format!("history row {n:04}\r\n").as_bytes()).unwrap();}
+        let mut original = Terminal::new(32, 6).unwrap();
+        for n in 0..1600 {
+            original
+                .write(format!("history row {n:04}\r\n").as_bytes())
+                .unwrap();
+        }
         original.write(b"CURRENT PROMPT").unwrap();
-        let bytes=original.encode().unwrap();let records=snapshot_records(&bytes);
-        let ready=records.iter().find(|r|r.0==5).unwrap().2;
-        assert!(ready<bytes.len()/4,"fixture must have substantial history after READY");
-        let mut replica=Replica::new(7);
-        for b in &bytes[..ready] {replica.feed(&[*b]).unwrap();}
-        assert!(replica.ready());assert!(!replica.snapshot_complete());
-        assert!(replica.terminal().unwrap().frame().unwrap().text().contains("CURRENT PROMPT"));
-        let mut anchored=None;
+        let bytes = original.encode().unwrap();
+        let records = snapshot_records(&bytes);
+        let ready = records.iter().find(|r| r.0 == 5).unwrap().2;
+        assert!(
+            ready < bytes.len() / 4,
+            "fixture must have substantial history after READY"
+        );
+        let mut replica = Replica::new(7);
+        for b in &bytes[..ready] {
+            replica.feed(&[*b]).unwrap();
+        }
+        assert!(replica.ready());
+        assert!(!replica.snapshot_complete());
+        assert!(
+            replica
+                .terminal()
+                .unwrap()
+                .frame()
+                .unwrap()
+                .text()
+                .contains("CURRENT PROMPT")
+        );
+        let mut anchored = None;
         for chunk in bytes[ready..].chunks(137) {
             replica.feed(chunk).unwrap();
-            let terminal=replica.terminal().unwrap();
-            let frame=terminal.frame().unwrap();
-            if let Some(ref expected)=anchored {assert_eq!(&frame.text(),expected,"prepending history moved the viewport");}
-            else if frame.scroll_total>30 {terminal.scroll_viewport(-3);anchored=Some(terminal.frame().unwrap().text());}
+            let terminal = replica.terminal().unwrap();
+            let frame = terminal.frame().unwrap();
+            if let Some(ref expected) = anchored {
+                assert_eq!(
+                    &frame.text(),
+                    expected,
+                    "prepending history moved the viewport"
+                );
+            } else if frame.scroll_total > 30 {
+                terminal.scroll_viewport(-3);
+                anchored = Some(terminal.frame().unwrap().text());
+            }
         }
-        assert!(anchored.is_some());assert!(replica.snapshot_complete());
-        assert_eq!(replica.snapshot_bytes,bytes.len());
-        assert_eq!(replica.terminal().unwrap().text().unwrap(),original.text().unwrap());
+        assert!(anchored.is_some());
+        assert!(replica.snapshot_complete());
+        assert_eq!(replica.snapshot_bytes, bytes.len());
+        assert_eq!(
+            replica.terminal().unwrap().text().unwrap(),
+            original.text().unwrap()
+        );
         replica.terminal().unwrap().scroll_to_bottom();
         replica.feed(b" LIVE_AFTER_FINISH").unwrap();
-        assert!(replica.terminal().unwrap().frame().unwrap().text().contains("LIVE_AFTER_FINISH"));
+        assert!(
+            replica
+                .terminal()
+                .unwrap()
+                .frame()
+                .unwrap()
+                .text()
+                .contains("LIVE_AFTER_FINISH")
+        );
     }
     #[test]
-    fn incremental_history_checks_crcs_after_the_first_frame_and_never_replays_snapshot_clipboard() {
-        let mut original=Terminal::new(32,6).unwrap();
-        for n in 0..2000 {original.write(format!("history row {n:04}\r\n").as_bytes()).unwrap();}
+    fn incremental_history_checks_crcs_after_the_first_frame_and_never_replays_snapshot_clipboard()
+    {
+        let mut original = Terminal::new(32, 6).unwrap();
+        for n in 0..2000 {
+            original
+                .write(format!("history row {n:04}\r\n").as_bytes())
+                .unwrap();
+        }
         original.write(b"\x1b]52;c;c2VjcmV0\x07current").unwrap();
-        let mut bytes=original.encode().unwrap();let records=snapshot_records(&bytes);
-        let ready=records.iter().find(|r|r.0==5).unwrap().2;
-        let mut invalid_prefix=bytes[..ready].to_vec();invalid_prefix[16]^=1;
-        let mut rejected=Replica::new(1);assert!(rejected.feed(&invalid_prefix).is_err());assert!(!rejected.ready());
-        let page=records.iter().find(|r|r.0==3 && r.1>ready).unwrap();
-        bytes[page.1+6]^=1;
-        let mut replica=Replica::new(1);replica.feed(&bytes[..ready]).unwrap();
-        assert!(replica.ready());assert!(replica.clipboard_write.is_none());
+        let mut bytes = original.encode().unwrap();
+        let records = snapshot_records(&bytes);
+        let ready = records.iter().find(|r| r.0 == 5).unwrap().2;
+        let mut invalid_prefix = bytes[..ready].to_vec();
+        invalid_prefix[16] ^= 1;
+        let mut rejected = Replica::new(1);
+        assert!(rejected.feed(&invalid_prefix).is_err());
+        assert!(!rejected.ready());
+        let page = records.iter().find(|r| r.0 == 3 && r.1 > ready).unwrap();
+        bytes[page.1 + 6] ^= 1;
+        let mut replica = Replica::new(1);
+        replica.feed(&bytes[..ready]).unwrap();
+        assert!(replica.ready());
+        assert!(replica.clipboard_write.is_none());
         assert!(replica.feed(&bytes[ready..]).is_err());
-        assert!(!replica.snapshot_complete());assert!(replica.clipboard_write.is_none());
+        assert!(!replica.snapshot_complete());
+        assert!(replica.clipboard_write.is_none());
     }
     #[test]
     fn incremental_kitty_pixels_and_history_placements_survive_every_byte_boundary() {
-        let mut original=Terminal::new(32,6).unwrap();
-        original.write(b"\x1b_Ga=T,f=32,s=2,v=1,i=41,c=2,r=1;/wAA/wD/AP8=\x1b\\").unwrap();
-        for n in 0..2000 {original.write(format!("image history {n:04}\r\n").as_bytes()).unwrap();}
-        original.write(b"\x1b_Ga=T,f=32,s=2,v=1,i=42,c=2,r=1;/wAA/wD/AP8=\x1b\\").unwrap();
-        let bytes=original.encode().unwrap();let records=snapshot_records(&bytes);
-        assert!(records.iter().any(|r|r.0==9),"fixture needs late image pixels");
-        assert!(records.iter().any(|r|r.0==10),"fixture needs history image placements");
-        let mut replica=Replica::new(1);
-        let ready=records.iter().find(|r|r.0==5).unwrap().2;
-        replica.feed(&bytes[..ready]).unwrap();
-        let _=replica.terminal().unwrap().frame().unwrap(); // Cache a frame before image pixels arrive.
-        for b in &bytes[ready..] {replica.feed(&[*b]).unwrap();}
-        assert!(replica.snapshot_complete());
-        let frame=replica.terminal().unwrap().frame().unwrap();
-        assert!(frame.images.iter().any(|p|p.image.id==42));
-        let terminal=replica.terminal().unwrap();terminal.scroll_viewport(-10000);
-        let frame=terminal.frame().unwrap();
-        assert!(frame.images.iter().any(|p|p.image.id==41));
-    }
-    #[test] fn hidden_tui_cursor_keeps_its_input_position_without_becoming_visible() {
-        let mut terminal=Terminal::new(40,12).unwrap();
-        terminal.write(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[9;3H\x1b[?25l").unwrap();
-        let frame=terminal.frame().unwrap();
-        assert!(frame.cursor.is_none());assert_eq!(frame.cursor_position,Some((2,8)));
-        let mut replica=Replica::new(1);replica.feed(&terminal.encode().unwrap()).unwrap();
-        let restored=replica.terminal().unwrap().frame().unwrap();
-        assert!(restored.cursor.is_none());assert_eq!(restored.cursor_position,Some((2,8)));
-        terminal.write(b"\x1b[?25h").unwrap();let visible=terminal.frame().unwrap();
-        assert_eq!(visible.cursor,Some((2,8)));assert_eq!(visible.cursor_position,visible.cursor);
-    }
-    #[test] fn program_cursor_shapes_and_blink_modes_reach_frames() {
-        let mut terminal=Terminal::new(20,5).unwrap();
-        for (sequence,style,blinking) in [(b"\x1b[1 q".as_slice(),1,true),(b"\x1b[2 q",1,false),(b"\x1b[3 q",2,true),(b"\x1b[4 q",2,false),(b"\x1b[5 q",0,true),(b"\x1b[6 q",0,false)] {
-            terminal.write(sequence).unwrap();let frame=terminal.frame().unwrap();
-            assert_eq!((frame.cursor_style,frame.cursor_blinking),(style,blinking));
+        let mut original = Terminal::new(32, 6).unwrap();
+        original
+            .write(b"\x1b_Ga=T,f=32,s=2,v=1,i=41,c=2,r=1;/wAA/wD/AP8=\x1b\\")
+            .unwrap();
+        for n in 0..2000 {
+            original
+                .write(format!("image history {n:04}\r\n").as_bytes())
+                .unwrap();
         }
-        terminal.write(b"\x1b[?12h").unwrap();assert!(terminal.frame().unwrap().cursor_blinking);
-        terminal.write(b"\x1b[?12l").unwrap();assert!(!terminal.frame().unwrap().cursor_blinking);
-        terminal.write(b"\x1b[?25l").unwrap();assert!(terminal.frame().unwrap().cursor.is_none());
+        original
+            .write(b"\x1b_Ga=T,f=32,s=2,v=1,i=42,c=2,r=1;/wAA/wD/AP8=\x1b\\")
+            .unwrap();
+        let bytes = original.encode().unwrap();
+        let records = snapshot_records(&bytes);
+        assert!(
+            records.iter().any(|r| r.0 == 9),
+            "fixture needs late image pixels"
+        );
+        assert!(
+            records.iter().any(|r| r.0 == 10),
+            "fixture needs history image placements"
+        );
+        let mut replica = Replica::new(1);
+        let ready = records.iter().find(|r| r.0 == 5).unwrap().2;
+        replica.feed(&bytes[..ready]).unwrap();
+        let _ = replica.terminal().unwrap().frame().unwrap(); // Cache a frame before image pixels arrive.
+        for b in &bytes[ready..] {
+            replica.feed(&[*b]).unwrap();
+        }
+        assert!(replica.snapshot_complete());
+        let frame = replica.terminal().unwrap().frame().unwrap();
+        assert!(frame.images.iter().any(|p| p.image.id == 42));
+        let terminal = replica.terminal().unwrap();
+        terminal.scroll_viewport(-10000);
+        let frame = terminal.frame().unwrap();
+        assert!(frame.images.iter().any(|p| p.image.id == 41));
+    }
+    #[test]
+    fn hidden_tui_cursor_keeps_its_input_position_without_becoming_visible() {
+        let mut terminal = Terminal::new(40, 12).unwrap();
+        terminal
+            .write(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[9;3H\x1b[?25l")
+            .unwrap();
+        let frame = terminal.frame().unwrap();
+        assert!(frame.cursor.is_none());
+        assert_eq!(frame.cursor_position, Some((2, 8)));
+        let mut replica = Replica::new(1);
+        replica.feed(&terminal.encode().unwrap()).unwrap();
+        let restored = replica.terminal().unwrap().frame().unwrap();
+        assert!(restored.cursor.is_none());
+        assert_eq!(restored.cursor_position, Some((2, 8)));
+        terminal.write(b"\x1b[?25h").unwrap();
+        let visible = terminal.frame().unwrap();
+        assert_eq!(visible.cursor, Some((2, 8)));
+        assert_eq!(visible.cursor_position, visible.cursor);
+    }
+    #[test]
+    fn program_cursor_shapes_and_blink_modes_reach_frames() {
+        let mut terminal = Terminal::new(20, 5).unwrap();
+        for (sequence, style, blinking) in [
+            (b"\x1b[1 q".as_slice(), 1, true),
+            (b"\x1b[2 q", 1, false),
+            (b"\x1b[3 q", 2, true),
+            (b"\x1b[4 q", 2, false),
+            (b"\x1b[5 q", 0, true),
+            (b"\x1b[6 q", 0, false),
+        ] {
+            terminal.write(sequence).unwrap();
+            let frame = terminal.frame().unwrap();
+            assert_eq!(
+                (frame.cursor_style, frame.cursor_blinking),
+                (style, blinking)
+            );
+        }
+        terminal.write(b"\x1b[?12h").unwrap();
+        assert!(terminal.frame().unwrap().cursor_blinking);
+        terminal.write(b"\x1b[?12l").unwrap();
+        assert!(!terminal.frame().unwrap().cursor_blinking);
+        terminal.write(b"\x1b[?25l").unwrap();
+        assert!(terminal.frame().unwrap().cursor.is_none());
     }
 
-    #[test] fn default_cursor_blinks_but_explicit_steady_survives_snapshot_and_reset() {
-        let mut terminal=Terminal::new(20,5).unwrap();
+    #[test]
+    fn default_cursor_blinks_but_explicit_steady_survives_snapshot_and_reset() {
+        let mut terminal = Terminal::new(20, 5).unwrap();
         assert!(terminal.frame().unwrap().cursor_blinking);
-        for request in [b"\x1b[2 q".as_slice(),b"\x1b[4 q",b"\x1b[6 q"] {
-            terminal.write(request).unwrap();assert!(!terminal.frame().unwrap().cursor_blinking);
-            let (mut restored,_)=Terminal::decode(&terminal.encode().unwrap()).unwrap();
-            assert!(!restored.frame().unwrap().cursor_blinking,"explicit steady request must survive reconnect: {:?}",request);
-            restored.write(b"\x1b[0 q").unwrap();assert!(restored.frame().unwrap().cursor_blinking);
-            terminal.write(b"\x1b[0 q").unwrap();assert!(terminal.frame().unwrap().cursor_blinking);
+        for request in [b"\x1b[2 q".as_slice(), b"\x1b[4 q", b"\x1b[6 q"] {
+            terminal.write(request).unwrap();
+            assert!(!terminal.frame().unwrap().cursor_blinking);
+            let (mut restored, _) = Terminal::decode(&terminal.encode().unwrap()).unwrap();
+            assert!(
+                !restored.frame().unwrap().cursor_blinking,
+                "explicit steady request must survive reconnect: {:?}",
+                request
+            );
+            restored.write(b"\x1b[0 q").unwrap();
+            assert!(restored.frame().unwrap().cursor_blinking);
+            terminal.write(b"\x1b[0 q").unwrap();
+            assert!(terminal.frame().unwrap().cursor_blinking);
         }
-        terminal.write(b"\x1b[2 q\x1bc").unwrap();assert!(terminal.frame().unwrap().cursor_blinking);
+        terminal.write(b"\x1b[2 q\x1bc").unwrap();
+        assert!(terminal.frame().unwrap().cursor_blinking);
     }
-    #[test] fn osc52_delivers_decoded_text_only_from_live_writes() {
-        let mut terminal=Terminal::new(30,6).unwrap();
+    #[test]
+    fn osc52_delivers_decoded_text_only_from_live_writes() {
+        let mut terminal = Terminal::new(30, 6).unwrap();
         terminal.write(b"\x1b]52;c;b2xk\x07").unwrap();
-        let mut replica=Replica::new(42);replica.feed(&terminal.encode().unwrap()).unwrap();
-        assert!(replica.clipboard_write.is_none(),"snapshot must not repeat clipboard side effects");
-        for byte in b"\x1b]52;c;aGVsbG8K8J+mgA==\x1b\\" {replica.feed(&[*byte]).unwrap();}
-        assert_eq!(replica.clipboard_write.take().as_deref(),Some("hello\n🦀"));
+        let mut replica = Replica::new(42);
+        replica.feed(&terminal.encode().unwrap()).unwrap();
+        assert!(
+            replica.clipboard_write.is_none(),
+            "snapshot must not repeat clipboard side effects"
+        );
+        for byte in b"\x1b]52;c;aGVsbG8K8J+mgA==\x1b\\" {
+            replica.feed(&[*byte]).unwrap();
+        }
+        assert_eq!(replica.clipboard_write.take().as_deref(), Some("hello\n🦀"));
         replica.feed(b"\x1b]52;c;?\x07").unwrap();
-        assert!(replica.clipboard_write.is_none(),"read queries cannot become writes");
-        replica.feed(b"\x1b]52;c;!!!!\x07\x1b]52;c;/w==\x07").unwrap();
-        assert!(replica.clipboard_write.is_none(),"malformed base64 and non-UTF-8 are ignored");
-        replica.feed(b"\x1b]52;p;b25l\x07\x1b]52;c;dHdv\x07").unwrap();
-        assert_eq!(replica.clipboard_write.take().as_deref(),Some("two"));
-        let large=format!("\x1b]52;c;{}\x07","YWFh".repeat(90000));
-        replica.feed(large.as_bytes()).unwrap();assert!(replica.clipboard_write.is_none());
+        assert!(
+            replica.clipboard_write.is_none(),
+            "read queries cannot become writes"
+        );
+        replica
+            .feed(b"\x1b]52;c;!!!!\x07\x1b]52;c;/w==\x07")
+            .unwrap();
+        assert!(
+            replica.clipboard_write.is_none(),
+            "malformed base64 and non-UTF-8 are ignored"
+        );
+        replica
+            .feed(b"\x1b]52;p;b25l\x07\x1b]52;c;dHdv\x07")
+            .unwrap();
+        assert_eq!(replica.clipboard_write.take().as_deref(), Some("two"));
+        let large = format!("\x1b]52;c;{}\x07", "YWFh".repeat(90000));
+        replica.feed(large.as_bytes()).unwrap();
+        assert!(replica.clipboard_write.is_none());
         replica.feed(b"\x1b]52;c;b2s=\x07").unwrap();
-        assert_eq!(replica.clipboard_write.take().as_deref(),Some("ok"));
+        assert_eq!(replica.clipboard_write.take().as_deref(), Some("ok"));
     }
     fn input_rows(frame: &Frame) -> Vec<u16> {
-        let mut rows=frame.cells.iter().filter(|c|c.attributes & (1<<30)!=0).map(|c|c.y).collect::<Vec<_>>();
-        rows.sort();rows.dedup();rows
+        let mut rows = frame
+            .cells
+            .iter()
+            .filter(|c| c.attributes & (1 << 30) != 0)
+            .map(|c| c.y)
+            .collect::<Vec<_>>();
+        rows.sort();
+        rows.dedup();
+        rows
     }
-    #[test] fn semantic_input_tracks_command_lifecycle_and_only_current_prompt() {
-        let mut t=Terminal::new(30,8).unwrap();
+    #[test]
+    fn semantic_input_tracks_command_lifecycle_and_only_current_prompt() {
+        let mut t = Terminal::new(30, 8).unwrap();
         t.write(b"\x1b]133;A\x07$ ").unwrap();
-        assert_eq!(t.frame().unwrap().input_flags & 16,0);
+        assert_eq!(t.frame().unwrap().input_flags & 16, 0);
         t.write(b"\x1b]133;B\x07").unwrap();
-        assert_eq!(input_rows(&t.frame().unwrap()),vec![0]);
+        assert_eq!(input_rows(&t.frame().unwrap()), vec![0]);
         t.write(b"echo hi\x1b]133;C\x07").unwrap();
         assert!(input_rows(&t.frame().unwrap()).is_empty());
-        t.write(b"\r\nhi\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ \x1b]133;B\x07").unwrap();
-        assert_eq!(input_rows(&t.frame().unwrap()),vec![2]);
-        let snapshot=t.encode().unwrap();let (mut restored,_)=Terminal::decode(&snapshot).unwrap();
-        assert_eq!(input_rows(&restored.frame().unwrap()),vec![2]);
-        t.write(b"\x1b[?1049h").unwrap();assert!(input_rows(&t.frame().unwrap()).is_empty());
-        t.write(b"\x1b[?1049l").unwrap();assert_eq!(input_rows(&t.frame().unwrap()),vec![2]);
+        t.write(b"\r\nhi\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ \x1b]133;B\x07")
+            .unwrap();
+        assert_eq!(input_rows(&t.frame().unwrap()), vec![2]);
+        let snapshot = t.encode().unwrap();
+        let (mut restored, _) = Terminal::decode(&snapshot).unwrap();
+        assert_eq!(input_rows(&restored.frame().unwrap()), vec![2]);
+        t.write(b"\x1b[?1049h").unwrap();
+        assert!(input_rows(&t.frame().unwrap()).is_empty());
+        t.write(b"\x1b[?1049l").unwrap();
+        assert_eq!(input_rows(&t.frame().unwrap()), vec![2]);
     }
-    #[test] fn semantic_input_handles_line_limited_and_wrapped_input() {
-        let mut t=Terminal::new(10,8).unwrap();
-        t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07abcdefghijklmnop").unwrap();
-        assert_eq!(input_rows(&t.frame().unwrap()),vec![0,1]);
-        t.write(b"\r\n\x1b]133;P;k=c\x07> \x1b]133;B\x07more").unwrap();
-        assert_eq!(input_rows(&t.frame().unwrap()),vec![0,1,2]);
-        t.write(b"\x1b]133;C\x07\r\n\x1b]133;D\x07\x1b]133;A\x07$ \x1b]133;I\x07x").unwrap();
-        assert_eq!(input_rows(&t.frame().unwrap()),vec![3]);
-        t.write(b"\r\noutput").unwrap();assert!(input_rows(&t.frame().unwrap()).is_empty());
+    #[test]
+    fn semantic_input_handles_line_limited_and_wrapped_input() {
+        let mut t = Terminal::new(10, 8).unwrap();
+        t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07abcdefghijklmnop")
+            .unwrap();
+        assert_eq!(input_rows(&t.frame().unwrap()), vec![0, 1]);
+        t.write(b"\r\n\x1b]133;P;k=c\x07> \x1b]133;B\x07more")
+            .unwrap();
+        assert_eq!(input_rows(&t.frame().unwrap()), vec![0, 1, 2]);
+        t.write(b"\x1b]133;C\x07\r\n\x1b]133;D\x07\x1b]133;A\x07$ \x1b]133;I\x07x")
+            .unwrap();
+        assert_eq!(input_rows(&t.frame().unwrap()), vec![3]);
+        t.write(b"\r\noutput").unwrap();
+        assert!(input_rows(&t.frame().unwrap()).is_empty());
     }
-    #[test] fn semantic_copy_is_available_after_restoring_a_running_command() {
-        let mut t=Terminal::new(30,4).unwrap();
+    #[test]
+    fn semantic_copy_is_available_after_restoring_a_running_command() {
+        let mut t = Terminal::new(30, 4).unwrap();
         t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07long-task\x1b]133;C\x07\r\none\r\ntwo\r\nthree\r\nfour\r\nfive").unwrap();
-        let (mut restored,_)=Terminal::decode(&t.encode().unwrap()).unwrap();
-        assert_eq!(restored.frame().unwrap().input_flags & 32,32);
-        assert_eq!(restored.command_text(0,1,false).unwrap().as_deref(),Some("long-task"));
+        let (mut restored, _) = Terminal::decode(&t.encode().unwrap()).unwrap();
+        assert_eq!(restored.frame().unwrap().input_flags & 32, 32);
+        assert_eq!(
+            restored.command_text(0, 1, false).unwrap().as_deref(),
+            Some("long-task")
+        );
     }
-    #[test] fn semantic_copy_uses_command_boundaries_and_unwraps_long_commands() {
-        let mut t=Terminal::new(20,5).unwrap();
+    #[test]
+    fn semantic_copy_uses_command_boundaries_and_unwraps_long_commands() {
+        let mut t = Terminal::new(20, 5).unwrap();
         t.write(b"\x1b]133;A\x07project $ \x1b]133;B\x07echo abcdefghijklmnopqrstuvwxyz\x1b]133;C\x07\r\nfirst\r\nsecond\r\nthird\r\nfourth\r\nfifth\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ \x1b]133;B\x07").unwrap();
         t.scroll_viewport(-1000);
-        assert_eq!(t.command_text(10,0,false).unwrap().as_deref(),Some("echo abcdefghijklmnopqrstuvwxyz"));
-        assert_eq!(t.command_text(10,0,true).unwrap().as_deref(),Some("first\nsecond\nthird\nfourth\nfifth"));
-        assert_eq!(t.command_text(0,2,false).unwrap().as_deref(),Some("echo abcdefghijklmnopqrstuvwxyz"));
-        let (mut restored,_)=Terminal::decode(&t.encode().unwrap()).unwrap();restored.scroll_viewport(-1000);
-        assert_eq!(restored.command_text(0,2,true).unwrap().as_deref(),Some("first\nsecond\nthird\nfourth\nfifth"));
+        assert_eq!(
+            t.command_text(10, 0, false).unwrap().as_deref(),
+            Some("echo abcdefghijklmnopqrstuvwxyz")
+        );
+        assert_eq!(
+            t.command_text(10, 0, true).unwrap().as_deref(),
+            Some("first\nsecond\nthird\nfourth\nfifth")
+        );
+        assert_eq!(
+            t.command_text(0, 2, false).unwrap().as_deref(),
+            Some("echo abcdefghijklmnopqrstuvwxyz")
+        );
+        let (mut restored, _) = Terminal::decode(&t.encode().unwrap()).unwrap();
+        restored.scroll_viewport(-1000);
+        assert_eq!(
+            restored.command_text(0, 2, true).unwrap().as_deref(),
+            Some("first\nsecond\nthird\nfourth\nfifth")
+        );
     }
-    #[test] fn semantic_copy_omits_multiline_prompt_text_and_rejects_unmarked_apps() {
-        let mut t=Terminal::new(30,8).unwrap();
+    #[test]
+    fn semantic_copy_omits_multiline_prompt_text_and_rejects_unmarked_apps() {
+        let mut t = Terminal::new(30, 8).unwrap();
         t.write("\x1b]133;A\x07$ \x1b]133;B\x07echo 'λ\r\n\x1b]133;P;k=c\x07> \x1b]133;B\x07🦀'\x1b]133;C\x07\r\nλ\r\n🦀\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ \x1b]133;B\x07".as_bytes()).unwrap();
-        assert_eq!(t.command_text(0,2,false).unwrap().as_deref(),Some("echo 'λ\n🦀'"));
-        assert_eq!(t.command_text(0,2,true).unwrap().as_deref(),Some("λ\n🦀"));
-        t.write(b"\x1b[?1049hneovim").unwrap();assert!(t.command_text(0,0,true).unwrap().is_none());
-        let mut plain=Terminal::new(20,4).unwrap();plain.write(b"$ fake command\r\nfake output").unwrap();
-        assert!(plain.command_text(0,1,true).unwrap().is_none());
+        assert_eq!(
+            t.command_text(0, 2, false).unwrap().as_deref(),
+            Some("echo 'λ\n🦀'")
+        );
+        assert_eq!(
+            t.command_text(0, 2, true).unwrap().as_deref(),
+            Some("λ\n🦀")
+        );
+        t.write(b"\x1b[?1049hneovim").unwrap();
+        assert!(t.command_text(0, 0, true).unwrap().is_none());
+        let mut plain = Terminal::new(20, 4).unwrap();
+        plain.write(b"$ fake command\r\nfake output").unwrap();
+        assert!(plain.command_text(0, 1, true).unwrap().is_none());
     }
-    #[test] fn prompt_navigation_uses_retained_semantic_boundaries_after_restore() {
-        let mut t=Terminal::new(30,4).unwrap();
+    #[test]
+    fn prompt_navigation_uses_retained_semantic_boundaries_after_restore() {
+        let mut t = Terminal::new(30, 4).unwrap();
         for command in 0..8 {
             t.write(format!("\x1b]133;A\x07$ \x1b]133;B\x07command_{command}\x1b]133;C\x07\r\noutput_{command}\r\n\x1b]133;D;0\x07").as_bytes()).unwrap();
         }
         t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07").unwrap();
-        let (mut restored,_)=Terminal::decode(&t.encode().unwrap()).unwrap();
-        let bottom=restored.frame().unwrap().scroll_offset;
-        restored.scroll_prompts(-1);let previous=restored.frame().unwrap();
-        assert!(previous.scroll_offset<bottom);assert!(previous.text().starts_with("$ command_"));
-        restored.scroll_prompts(-1);let earlier=restored.frame().unwrap();assert!(earlier.scroll_offset<previous.scroll_offset);
-        restored.scroll_prompts(1);assert_eq!(restored.frame().unwrap().scroll_offset,previous.scroll_offset);
-        restored.write(b"\x1b[?1049hfullscreen").unwrap();restored.scroll_prompts(-1);
-        assert_eq!(restored.frame().unwrap().scroll_offset,0);
-        let mut plain=Terminal::new(20,4).unwrap();plain.write(b"a\r\nb\r\nc\r\nd\r\ne").unwrap();
-        let before=plain.frame().unwrap().scroll_offset;plain.scroll_prompts(-1);assert_eq!(plain.frame().unwrap().scroll_offset,before);
+        let (mut restored, _) = Terminal::decode(&t.encode().unwrap()).unwrap();
+        let bottom = restored.frame().unwrap().scroll_offset;
+        restored.scroll_prompts(-1);
+        let previous = restored.frame().unwrap();
+        assert!(previous.scroll_offset < bottom);
+        assert!(previous.text().starts_with("$ command_"));
+        restored.scroll_prompts(-1);
+        let earlier = restored.frame().unwrap();
+        assert!(earlier.scroll_offset < previous.scroll_offset);
+        restored.scroll_prompts(1);
+        assert_eq!(
+            restored.frame().unwrap().scroll_offset,
+            previous.scroll_offset
+        );
+        restored.write(b"\x1b[?1049hfullscreen").unwrap();
+        restored.scroll_prompts(-1);
+        assert_eq!(restored.frame().unwrap().scroll_offset, 0);
+        let mut plain = Terminal::new(20, 4).unwrap();
+        plain.write(b"a\r\nb\r\nc\r\nd\r\ne").unwrap();
+        let before = plain.frame().unwrap().scroll_offset;
+        plain.scroll_prompts(-1);
+        assert_eq!(plain.frame().unwrap().scroll_offset, before);
     }
-    #[test] fn semantic_input_remains_tappable_when_the_program_hides_the_cursor() {
-        let mut t=Terminal::new(20,6).unwrap();
-        t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07hello\x1b[?25l").unwrap();
-        let frame=t.frame().unwrap();assert!(frame.cursor.is_none());
-        assert_eq!(input_rows(&frame),vec![0]);
+    #[test]
+    fn semantic_input_remains_tappable_when_the_program_hides_the_cursor() {
+        let mut t = Terminal::new(20, 6).unwrap();
+        t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07hello\x1b[?25l")
+            .unwrap();
+        let frame = t.frame().unwrap();
+        assert!(frame.cursor.is_none());
+        assert_eq!(input_rows(&frame), vec![0]);
     }
-    #[test] fn semantic_input_survives_prompt_redraws_and_reflow() {
-        let mut t=Terminal::new(20,8).unwrap();
-        t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07abcdefghijklmnop").unwrap();
-        t.resize(10,8,8,16).unwrap();assert_eq!(input_rows(&t.frame().unwrap()),vec![0,1]);
-        t.write(b"\r\x1b[1A\x1b]133;P;k=i\x07$ \x1b]133;B\x07redrawn\x1b[K").unwrap();
-        assert!(t.frame().unwrap().input_flags & 16!=0);
-        t.write(b"\x1b]133;C\x07").unwrap();assert!(input_rows(&t.frame().unwrap()).is_empty());
+    #[test]
+    fn semantic_input_survives_prompt_redraws_and_reflow() {
+        let mut t = Terminal::new(20, 8).unwrap();
+        t.write(b"\x1b]133;A\x07$ \x1b]133;B\x07abcdefghijklmnop")
+            .unwrap();
+        t.resize(10, 8, 8, 16).unwrap();
+        assert_eq!(input_rows(&t.frame().unwrap()), vec![0, 1]);
+        t.write(b"\r\x1b[1A\x1b]133;P;k=i\x07$ \x1b]133;B\x07redrawn\x1b[K")
+            .unwrap();
+        assert!(t.frame().unwrap().input_flags & 16 != 0);
+        t.write(b"\x1b]133;C\x07").unwrap();
+        assert!(input_rows(&t.frame().unwrap()).is_empty());
     }
-    #[test] fn semantic_input_is_not_exposed_over_history() {
-        let mut t=Terminal::new(20,4).unwrap();
-        t.write(b"one\r\ntwo\r\nthree\r\nfour\r\nfive\r\n\x1b]133;A\x07$ \x1b]133;B\x07").unwrap();
+    #[test]
+    fn semantic_input_is_not_exposed_over_history() {
+        let mut t = Terminal::new(20, 4).unwrap();
+        t.write(b"one\r\ntwo\r\nthree\r\nfour\r\nfive\r\n\x1b]133;A\x07$ \x1b]133;B\x07")
+            .unwrap();
         assert!(!input_rows(&t.frame().unwrap()).is_empty());
-        t.scroll_viewport(-100);assert!(input_rows(&t.frame().unwrap()).is_empty());
-        t.scroll_to_bottom();assert!(!input_rows(&t.frame().unwrap()).is_empty());
+        t.scroll_viewport(-100);
+        assert!(input_rows(&t.frame().unwrap()).is_empty());
+        t.scroll_to_bottom();
+        assert!(!input_rows(&t.frame().unwrap()).is_empty());
     }
     #[test]
     fn overscan_rows_carry_scrollback_around_the_viewport_for_smooth_scrolling() {
         let mut terminal = Terminal::new(10, 3).unwrap();
-        for i in 0..20 {terminal.write(format!("L{i:02}\r\n").as_bytes()).unwrap();}
+        for i in 0..20 {
+            terminal.write(format!("L{i:02}\r\n").as_bytes()).unwrap();
+        }
         terminal.write(b"END").unwrap();
         let bottom = terminal.frame().unwrap();
         // At the bottom: history above, nothing below; cells stay in the grid.
         assert_eq!(bottom.below.len(), 0);
         assert!(!bottom.above.is_empty() && bottom.above.len() <= 16); // RP_OVERSCAN in native/ghostty_shim.c
         let line = |row: &Vec<Cell>| row.iter().map(|c| c.text.as_str()).collect::<String>();
-        assert_eq!(line(bottom.above.last().unwrap()).trim(), "L17", "nearest row above the visible L18, L19, END");
+        assert_eq!(
+            line(bottom.above.last().unwrap()).trim(),
+            "L17",
+            "nearest row above the visible L18, L19, END"
+        );
         assert!(bottom.cells.iter().all(|c| c.y < 3));
         assert!(bottom.above.iter().flatten().all(|c| c.y == 0));
         assert!(bottom.text().contains("END"));
@@ -821,9 +1217,17 @@ mod tests {
         terminal.scroll_viewport(-5);
         let back = terminal.frame().unwrap();
         assert!(!back.below.is_empty());
-        let first_visible: String = back.cells.iter().filter(|c| c.y == 0).map(|c| c.text.as_str()).collect();
+        let first_visible: String = back
+            .cells
+            .iter()
+            .filter(|c| c.y == 0)
+            .map(|c| c.text.as_str())
+            .collect();
         let nearest_above = line(back.above.last().unwrap());
-        assert_eq!(nearest_above.trim()[1..].parse::<u32>().unwrap() + 1, first_visible.trim()[1..].parse::<u32>().unwrap());
+        assert_eq!(
+            nearest_above.trim()[1..].parse::<u32>().unwrap() + 1,
+            first_visible.trim()[1..].parse::<u32>().unwrap()
+        );
     }
     #[test]
     fn restored_scrollback_scrolls_locally_and_keeps_new_output_anchored() {
@@ -952,8 +1356,9 @@ mod tests {
         assert_ne!(bg.attributes & 1024, 0);
         assert_eq!((bg.attributes >> 19) & 255, 2);
     }
-    #[test] fn synchronized_redraw_holds_partial_frames_and_has_a_bounded_timeout() {
-        let mut terminal=Terminal::new(40,5).unwrap();
+    #[test]
+    fn synchronized_redraw_holds_partial_frames_and_has_a_bounded_timeout() {
+        let mut terminal = Terminal::new(40, 5).unwrap();
         terminal.write(b"complete screen").unwrap();
         assert!(terminal.render_ready_at(0).unwrap());
         terminal.write(b"\x1b[?2026h\x1b[2J\x1b[H").unwrap();
@@ -970,64 +1375,118 @@ mod tests {
         // A new hold must reset the timer even if its end/start share one chunk.
         terminal.write(b"\x1b[?2026l\x1b[?2026h").unwrap();
         assert!(!terminal.render_ready_at(1800).unwrap());
-        terminal.resize(40,6,8,16).unwrap();
+        terminal.resize(40, 6, 8, 16).unwrap();
         assert!(terminal.render_ready_at(1810).unwrap());
     }
 
-    #[test] fn clicks_obey_mouse_modes_and_pair_press_with_release() {
-        let mut terminal=Terminal::new(80,24).unwrap();
-        assert!(terminal.click(4,5,10,20).unwrap().is_empty());
+    #[test]
+    fn clicks_obey_mouse_modes_and_pair_press_with_release() {
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        assert!(terminal.click(4, 5, 10, 20).unwrap().is_empty());
         terminal.write(b"\x1b[?1000h\x1b[?1006h").unwrap();
-        assert_eq!(terminal.click(4,5,10,20).unwrap(),b"\x1b[<0;5;6M\x1b[<0;5;6m");
-        assert_eq!(terminal.click(-20,999,0,0).unwrap(),b"\x1b[<0;1;24M\x1b[<0;1;24m");
-        let snapshot=terminal.encode().unwrap();let (mut restored,_)=Terminal::decode(&snapshot).unwrap();
-        assert_eq!(restored.click(79,23,10,20).unwrap(),b"\x1b[<0;80;24M\x1b[<0;80;24m");
+        assert_eq!(
+            terminal.click(4, 5, 10, 20).unwrap(),
+            b"\x1b[<0;5;6M\x1b[<0;5;6m"
+        );
+        assert_eq!(
+            terminal.click(-20, 999, 0, 0).unwrap(),
+            b"\x1b[<0;1;24M\x1b[<0;1;24m"
+        );
+        let snapshot = terminal.encode().unwrap();
+        let (mut restored, _) = Terminal::decode(&snapshot).unwrap();
+        assert_eq!(
+            restored.click(79, 23, 10, 20).unwrap(),
+            b"\x1b[<0;80;24M\x1b[<0;80;24m"
+        );
         restored.write(b"\x1b[?1006l").unwrap();
-        assert_eq!(restored.click(4,5,10,20).unwrap(),b"\x1b[M %&\x1b[M#%&");
-        restored.write(b"\x1b[?1000l").unwrap();assert!(restored.click(4,5,10,20).unwrap().is_empty());
+        assert_eq!(restored.click(4, 5, 10, 20).unwrap(), b"\x1b[M %&\x1b[M#%&");
+        restored.write(b"\x1b[?1000l").unwrap();
+        assert!(restored.click(4, 5, 10, 20).unwrap().is_empty());
     }
 
-    #[test] fn mouse_modes_survive_snapshots_and_encode_wheel_direction() {
-        let mut terminal=Terminal::new(80,24).unwrap();
-        terminal.write(b"\x1b[?1049h\x1b[?1007l\x1b[?1000h\x1b[?1006h").unwrap();
-        assert_eq!(terminal.input_flags().unwrap()&7,3);
-        assert_eq!(terminal.wheel(false,4,5,10,20).unwrap(),b"\x1b[<64;5;6M");
-        assert_eq!(terminal.wheel(true,4,5,10,20).unwrap(),b"\x1b[<65;5;6M");
-        let snapshot=terminal.encode().unwrap();let (mut restored,_)=Terminal::decode(&snapshot).unwrap();
-        assert_eq!(restored.frame().unwrap().input_flags&7,3);
-        restored.write(b"\x1b[?1000l\x1b[?1007h").unwrap();assert_eq!(restored.input_flags().unwrap()&7,6);
+    #[test]
+    fn mouse_modes_survive_snapshots_and_encode_wheel_direction() {
+        let mut terminal = Terminal::new(80, 24).unwrap();
+        terminal
+            .write(b"\x1b[?1049h\x1b[?1007l\x1b[?1000h\x1b[?1006h")
+            .unwrap();
+        assert_eq!(terminal.input_flags().unwrap() & 7, 3);
+        assert_eq!(
+            terminal.wheel(false, 4, 5, 10, 20).unwrap(),
+            b"\x1b[<64;5;6M"
+        );
+        assert_eq!(
+            terminal.wheel(true, 4, 5, 10, 20).unwrap(),
+            b"\x1b[<65;5;6M"
+        );
+        let snapshot = terminal.encode().unwrap();
+        let (mut restored, _) = Terminal::decode(&snapshot).unwrap();
+        assert_eq!(restored.frame().unwrap().input_flags & 7, 3);
+        restored.write(b"\x1b[?1000l\x1b[?1007h").unwrap();
+        assert_eq!(restored.input_flags().unwrap() & 7, 6);
     }
 
     #[test]
     fn osc8_destinations_survive_wrapping_snapshot_and_metadata_only_replacement() {
-        let mut terminal=Terminal::new(8,5).unwrap();
-        terminal.write(b"\x1b]8;id=docs;https://example.com/one\x1b\\Open docs now\x1b]8;;\x1b\\!").unwrap();
-        let first=terminal.frame().unwrap();
-        let linked: Vec<_>=first.cells.iter().filter(|c|c.hyperlink.is_some()).collect();
-        assert!(linked.len()>=12);assert!(linked.iter().any(|c|c.y>0));
-        assert!(linked.iter().all(|c|c.hyperlink.as_deref()==Some("https://example.com/one")));
-        assert!(first.cells.iter().any(|c|c.text=="!" && c.hyperlink.is_none()));
-        let snapshot=terminal.encode().unwrap();let (mut restored,_)=Terminal::decode(&snapshot).unwrap();
-        assert_eq!(first.cells,restored.frame().unwrap().cells);
-        restored.write(b"\x1b[H\x1b]8;;https://example.com/two\x07Open\x1b]8;;\x07").unwrap();
-        let next=restored.frame().unwrap();
-        assert_eq!(next.cells[0].text,first.cells[0].text);
-        assert_eq!(next.cells[0].hyperlink.as_deref(),Some("https://example.com/two"));
-        assert_ne!(next.cells[0],first.cells[0]);
+        let mut terminal = Terminal::new(8, 5).unwrap();
+        terminal
+            .write(b"\x1b]8;id=docs;https://example.com/one\x1b\\Open docs now\x1b]8;;\x1b\\!")
+            .unwrap();
+        let first = terminal.frame().unwrap();
+        let linked: Vec<_> = first
+            .cells
+            .iter()
+            .filter(|c| c.hyperlink.is_some())
+            .collect();
+        assert!(linked.len() >= 12);
+        assert!(linked.iter().any(|c| c.y > 0));
+        assert!(
+            linked
+                .iter()
+                .all(|c| c.hyperlink.as_deref() == Some("https://example.com/one"))
+        );
+        assert!(
+            first
+                .cells
+                .iter()
+                .any(|c| c.text == "!" && c.hyperlink.is_none())
+        );
+        let snapshot = terminal.encode().unwrap();
+        let (mut restored, _) = Terminal::decode(&snapshot).unwrap();
+        assert_eq!(first.cells, restored.frame().unwrap().cells);
+        restored
+            .write(b"\x1b[H\x1b]8;;https://example.com/two\x07Open\x1b]8;;\x07")
+            .unwrap();
+        let next = restored.frame().unwrap();
+        assert_eq!(next.cells[0].text, first.cells[0].text);
+        assert_eq!(
+            next.cells[0].hyperlink.as_deref(),
+            Some("https://example.com/two")
+        );
+        assert_ne!(next.cells[0], first.cells[0]);
     }
 
     #[test]
     fn soft_wrap_flags_survive_snapshots_and_distinguish_hard_newlines() {
-        let mut terminal=Terminal::new(10,5).unwrap();
+        let mut terminal = Terminal::new(10, 5).unwrap();
         terminal.write(b"https://example.com/abc\r\nNEXT").unwrap();
-        let frame=terminal.frame().unwrap();
-        let flags=|row:u16|frame.cells.iter().find(|c|c.x==0 && c.y==row).unwrap().attributes;
-        assert_ne!(flags(0)&(1<<29),0);assert_ne!(flags(0)&(1<<27),0);
-        assert_ne!(flags(1)&(1<<28),0);assert_ne!(flags(1)&(1<<27),0);
-        assert_ne!(flags(2)&(1<<28),0);assert_eq!(flags(2)&(1<<27),0);
-        assert_eq!(flags(3)&(1<<28),0);
-        let (mut restored,_)=Terminal::decode(&terminal.encode().unwrap()).unwrap();
-        assert_eq!(frame.cells,restored.frame().unwrap().cells);
+        let frame = terminal.frame().unwrap();
+        let flags = |row: u16| {
+            frame
+                .cells
+                .iter()
+                .find(|c| c.x == 0 && c.y == row)
+                .unwrap()
+                .attributes
+        };
+        assert_ne!(flags(0) & (1 << 29), 0);
+        assert_ne!(flags(0) & (1 << 27), 0);
+        assert_ne!(flags(1) & (1 << 28), 0);
+        assert_ne!(flags(1) & (1 << 27), 0);
+        assert_ne!(flags(2) & (1 << 28), 0);
+        assert_eq!(flags(2) & (1 << 27), 0);
+        assert_eq!(flags(3) & (1 << 28), 0);
+        let (mut restored, _) = Terminal::decode(&terminal.encode().unwrap()).unwrap();
+        assert_eq!(frame.cells, restored.frame().unwrap().cells);
     }
-
 }

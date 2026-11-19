@@ -72,10 +72,16 @@ fn rows(frame: &Frame) -> Vec<&[Cell]> {
 }
 /// Cells compare without `y`, so a row that only moved still matches.
 fn same_row(a: &[Cell], b: &[Cell]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(a, b)| {
-        a.x == b.x && a.width == b.width && a.attributes == b.attributes && a.foreground == b.foreground
-            && a.background == b.background && a.text == b.text && a.hyperlink == b.hyperlink
-    })
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(a, b)| {
+            a.x == b.x
+                && a.width == b.width
+                && a.attributes == b.attributes
+                && a.foreground == b.foreground
+                && a.background == b.background
+                && a.text == b.text
+                && a.hyperlink == b.hyperlink
+        })
 }
 /// Scroll distance between two frames: how far the viewport's top moved in
 /// the scrollback (scrolling, or output pushing a bottom-pinned view up).
@@ -86,44 +92,55 @@ fn row_shift(old: &[&[Cell]], next: &[&[Cell]], previous: &Frame, frame: &Frame)
 }
 fn checked_shift(old: &[&[Cell]], next: &[&[Cell]], shift: i64) -> i16 {
     let rows = next.len() as i64;
-    if shift == 0 || shift.abs() >= rows || shift.abs() > i64::from(i16::MAX) {return 0;}
-    let overlap: Vec<_> = (0..rows).filter(|y| (0..rows).contains(&(y + shift))).collect();
-    let same = overlap.iter().filter(|y| same_row(old[(**y + shift) as usize], next[**y as usize])).count();
-    if same * 2 >= overlap.len() {shift as i16} else {0}
+    if shift == 0 || shift.abs() >= rows || shift.abs() > i64::from(i16::MAX) {
+        return 0;
+    }
+    let overlap: Vec<_> = (0..rows)
+        .filter(|y| (0..rows).contains(&(y + shift)))
+        .collect();
+    let same = overlap
+        .iter()
+        .filter(|y| same_row(old[(**y + shift) as usize], next[**y as usize]))
+        .count();
+    if same * 2 >= overlap.len() {
+        shift as i16
+    } else {
+        0
+    }
 }
 fn encode_row(out: &mut Vec<u8>, row: &[Cell]) {
     u16le(out, row.len() as u16);
     for cell in row {
-            u16le(out, cell.x);
-            out.push(cell.width);
-            u32le(out, cell.attributes);
-            u32le(out, rgb(cell.foreground));
-            u32le(out, rgb(cell.background));
-            text(out, &cell.text);
+        u16le(out, cell.x);
+        out.push(cell.width);
+        u32le(out, cell.attributes);
+        u32le(out, rgb(cell.foreground));
+        u32le(out, rgb(cell.background));
+        text(out, &cell.text);
+    }
+    // Sparse contiguous link ranges keep ordinary rows cheap.
+    let mut links: Vec<(u16, u16, &str)> = Vec::new();
+    for cell in row {
+        if cell.width == 0 {
+            continue;
         }
-        // Sparse contiguous link ranges keep ordinary rows cheap.
-        let mut links: Vec<(u16, u16, &str)> = Vec::new();
-        for cell in row {
-            if cell.width == 0 {
-                continue;
+        if let Some(uri) = cell.hyperlink.as_deref() {
+            if let Some(last) = links
+                .last_mut()
+                .filter(|last| last.1 == cell.x && last.2 == uri)
+            {
+                last.1 = cell.x + u16::from(cell.width);
+            } else {
+                links.push((cell.x, cell.x + u16::from(cell.width), uri));
             }
-            if let Some(uri) = cell.hyperlink.as_deref() {
-                if let Some(last) = links
-                    .last_mut()
-                    .filter(|last| last.1 == cell.x && last.2 == uri)
-                {
-                    last.1 = cell.x + u16::from(cell.width);
-                } else {
-                    links.push((cell.x, cell.x + u16::from(cell.width), uri));
-                }
-            }
         }
-        u16le(out, links.len() as u16);
-        for (start, end, uri) in links {
-            u16le(out, start);
-            u16le(out, end);
-            text(out, uri);
-        }
+    }
+    u16le(out, links.len() as u16);
+    for (start, end, uri) in links {
+        u16le(out, start);
+        u16le(out, end);
+        text(out, uri);
+    }
 }
 fn encode_frame(out: &mut Vec<u8>, frame: &Frame, previous: Option<&Frame>) {
     out.push(if previous.is_some() { 2 } else { 3 });
@@ -149,7 +166,10 @@ fn encode_frame(out: &mut Vec<u8>, frame: &Frame, previous: Option<&Frame>) {
     let old = previous.map(|old| rows(old));
     // RXT5 shift: content moved by `shift` rows (positive: up). The decoder
     // moves its rows first, so only rows that are really new are sent.
-    let shift = old.as_ref().zip(previous).map_or(0, |(old, previous)| row_shift(old, &next, previous, frame));
+    let shift = old
+        .as_ref()
+        .zip(previous)
+        .map_or(0, |(old, previous)| row_shift(old, &next, previous, frame));
     out.extend(shift.to_le_bytes());
     let base = |y: usize| -> Option<&[Cell]> {
         let old = old.as_ref()?;
@@ -168,10 +188,17 @@ fn encode_frame(out: &mut Vec<u8>, frame: &Frame, previous: Option<&Frame>) {
     }
     // RXT5: 255 retains an unchanged overscan side on a delta. Ordinary typing
     // must not resend the same history rows on every frame.
-    for (side,old) in [(&frame.above,previous.map(|f|&f.above)),(&frame.below,previous.map(|f|&f.below))] {
-        if old==Some(side) {out.push(255);} else {
+    for (side, old) in [
+        (&frame.above, previous.map(|f| &f.above)),
+        (&frame.below, previous.map(|f| &f.below)),
+    ] {
+        if old == Some(side) {
+            out.push(255);
+        } else {
             out.push(side.len() as u8);
-            for row in side {encode_row(out,row);}
+            for row in side {
+                encode_row(out, row);
+            }
         }
     }
     u32le(out, frame.image_cell_width);
@@ -209,8 +236,11 @@ fn encode_frame(out: &mut Vec<u8>, frame: &Frame, previous: Option<&Frame>) {
         }
     }
     // RXT7: input/IME anchoring is independent of whether the cursor is drawn.
-    let (x,y)=frame.cursor_position.map_or((-1,-1),|(x,y)|(i32::from(x),i32::from(y)));
-    out.extend(x.to_le_bytes());out.extend(y.to_le_bytes());
+    let (x, y) = frame
+        .cursor_position
+        .map_or((-1, -1), |(x, y)| (i32::from(x), i32::from(y)));
+    out.extend(x.to_le_bytes());
+    out.extend(y.to_le_bytes());
 }
 pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     if after >= state.revision {
@@ -328,18 +358,27 @@ mod wire_tests {
     }
     #[test]
     fn cursor_only_changes_encode_without_repeating_rows() {
-        let old=frame();let mut next=frame();next.cursor_style=0;next.cursor_blinking=true;
-        let mut bytes=Vec::new();encode_frame(&mut bytes,&next,Some(&old));
+        let old = frame();
+        let mut next = frame();
+        next.cursor_style = 0;
+        next.cursor_blinking = true;
+        let mut bytes = Vec::new();
+        encode_frame(&mut bytes, &next, Some(&old));
         // Geometry 4, cursor 8, colors 8, scroll 24, input 1, cursor flags 1.
-        assert_eq!(bytes[46],4);
-        assert_eq!(u16::from_le_bytes(bytes[49..51].try_into().unwrap()),0);
+        assert_eq!(bytes[46], 4);
+        assert_eq!(u16::from_le_bytes(bytes[49..51].try_into().unwrap()), 0);
     }
-    #[test] fn hidden_cursor_position_is_carried_without_drawing_a_cursor_or_resending_rows() {
-        let old=frame();let mut next=frame();next.cursor=None;next.cursor_position=Some((4,6));
-        let mut bytes=Vec::new();encode_frame(&mut bytes,&next,Some(&old));
-        assert_eq!(i32::from_le_bytes(bytes[5..9].try_into().unwrap()),-1);
-        assert_eq!(u16::from_le_bytes(bytes[49..51].try_into().unwrap()),0);
-        assert_eq!(&bytes[bytes.len()-8..],&[4,0,0,0,6,0,0,0]);
+    #[test]
+    fn hidden_cursor_position_is_carried_without_drawing_a_cursor_or_resending_rows() {
+        let old = frame();
+        let mut next = frame();
+        next.cursor = None;
+        next.cursor_position = Some((4, 6));
+        let mut bytes = Vec::new();
+        encode_frame(&mut bytes, &next, Some(&old));
+        assert_eq!(i32::from_le_bytes(bytes[5..9].try_into().unwrap()), -1);
+        assert_eq!(u16::from_le_bytes(bytes[49..51].try_into().unwrap()), 0);
+        assert_eq!(&bytes[bytes.len() - 8..], &[4, 0, 0, 0, 6, 0, 0, 0]);
     }
     #[test]
     fn packets_diff_against_delivered_frame_and_reset_on_unknown_base() {
@@ -464,31 +503,49 @@ mod wire_tests {
         let mut f = frame();
         f.scroll_total = 1000;
         f.scroll_offset = offset;
-        for c in &mut f.cells {c.text = format!("{}", (offset + u64::from(c.y)) % 10);c.attributes = (offset + u64::from(c.y)) as u32;}
+        for c in &mut f.cells {
+            c.text = format!("{}", (offset + u64::from(c.y)) % 10);
+            c.attributes = (offset + u64::from(c.y)) as u32;
+        }
         f
     }
     fn shift_and_rows(packet: &[u8]) -> (i16, u16) {
         // Header: magic 4, revision 8, metadata len 4 (+ bytes), flag 1, cols 2, rows 2, cursor 8, colors 8, scroll 24, input 1.
         let meta = u32::from_le_bytes(packet[12..16].try_into().unwrap()) as usize;
         let at = 16 + meta + 1 + 2 + 2 + 8 + 8 + 24 + 1 + 1;
-        (i16::from_le_bytes(packet[at..at + 2].try_into().unwrap()), u16::from_le_bytes(packet[at + 2..at + 4].try_into().unwrap()))
+        (
+            i16::from_le_bytes(packet[at..at + 2].try_into().unwrap()),
+            u16::from_le_bytes(packet[at + 2..at + 4].try_into().unwrap()),
+        )
     }
     #[test]
     fn ordinary_typing_reuses_unchanged_overscan_without_resending_history() {
-        let mut old=frame();old.above=vec![old.cells[..100].to_vec()];old.below=vec![old.cells[..100].to_vec()];
-        let mut next=frame();next.above=old.above.clone();next.below=old.below.clone();next.cursor=Some((1,0));
-        let mut delta=Vec::new();encode_frame(&mut delta,&next,Some(&old));
+        let mut old = frame();
+        old.above = vec![old.cells[..100].to_vec()];
+        old.below = vec![old.cells[..100].to_vec()];
+        let mut next = frame();
+        next.above = old.above.clone();
+        next.below = old.below.clone();
+        next.cursor = Some((1, 0));
+        let mut delta = Vec::new();
+        encode_frame(&mut delta, &next, Some(&old));
         // Fixed frame header through changed-row count is 51 bytes. No cell
         // changed here, so the two overscan retain markers immediately follow it.
-        assert_eq!(&delta[51..53],&[255,255]);
-        let mut full=Vec::new();encode_frame(&mut full,&next,None);
-        assert!(delta.len()*10<full.len());
+        assert_eq!(&delta[51..53], &[255, 255]);
+        let mut full = Vec::new();
+        encode_frame(&mut full, &next, None);
+        assert!(delta.len() * 10 < full.len());
     }
     #[test]
     fn scrolling_sends_a_shift_and_only_the_new_rows() {
         let mut state = Shared {
-            revision: 1, json: "{}".into(), pending_previews: BTreeMap::new(),
-            frame: Some(Arc::new(scrolled(100))), key: "a".into(), wire: WireBase::default(), activity: Arc::default(),
+            revision: 1,
+            json: "{}".into(),
+            pending_previews: BTreeMap::new(),
+            frame: Some(Arc::new(scrolled(100))),
+            key: "a".into(),
+            wire: WireBase::default(),
+            activity: Arc::default(),
         };
         let full = encode(&mut state, 0);
         assert_eq!(shift_and_rows(&full), (0, 50));
@@ -497,7 +554,12 @@ mod wire_tests {
         state.revision = 2;
         let delta = encode(&mut state, 1);
         assert_eq!(shift_and_rows(&delta), (3, 3));
-        assert!(delta.len() < full.len() / 10, "{} vs {}", delta.len(), full.len());
+        assert!(
+            delta.len() < full.len() / 10,
+            "{} vs {}",
+            delta.len(),
+            full.len()
+        );
         // Scroll back up 2: shift -2, two new rows at the top.
         state.frame = Some(Arc::new(scrolled(101)));
         state.revision = 3;
