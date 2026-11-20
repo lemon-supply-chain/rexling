@@ -2,6 +2,7 @@ package dev.lemon.rex
 
 import android.content.res.AssetManager
 import android.content.res.Resources
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorSpace
@@ -18,9 +19,10 @@ import android.graphics.Shader
 import androidx.core.graphics.PathParser
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.ceil
 import kotlin.math.max
 
-/** Cached vector drawing commands, replayed at the final pixel size and angle. */
+/** Cached vector commands; unrotated tiles are rasterized once per exact size. */
 internal class ProgramVectorPicture private constructor(
     private val key: String,
     private val flat: Picture,
@@ -40,6 +42,11 @@ internal class ProgramVectorPicture private constructor(
     private val symbolRim=Paint(Paint.ANTI_ALIAS_FLAG).apply {
         colorFilter=PorterDuffColorFilter(Color.WHITE,PorterDuff.Mode.SRC_IN)
         alpha=84
+    }
+    private val tilePaint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    // Evicted bitmaps are not recycled: an older display list may still reference them.
+    private val tileBitmaps=object:LinkedHashMap<Long,Bitmap>(8,.75f,true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long,Bitmap>?)=size>4
     }
     private val rimPaint=Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style=Paint.Style.STROKE
@@ -71,6 +78,22 @@ internal class ProgramVectorPicture private constructor(
      * tile is large enough to resolve it.
      */
     fun drawTile(canvas: Canvas,width: Float,height: Float,rotation: Float=0f) {
+        if(rotation==0f) {
+            val key=(width.toBits().toLong() shl 32) or (height.toBits().toLong() and 0xffffffffL)
+            val cached=tileBitmaps[key] ?: run {
+                val bitmap=Bitmap.createBitmap(ceil(width).toInt().coerceAtLeast(1),ceil(height).toInt().coerceAtLeast(1),Bitmap.Config.ARGB_8888)
+                drawTileDirect(Canvas(bitmap),width,height)
+                tileBitmaps[key]=bitmap
+                bitmap
+            }
+            canvas.drawBitmap(cached,0f,0f,tilePaint)
+            return
+        }
+        drawTileDirect(canvas,width,height,rotation)
+    }
+
+    /** Vector source for the size-specific bitmap cache and the rare rotated direct draw. */
+    private fun drawTileDirect(canvas: Canvas,width: Float,height: Float,rotation: Float=0f) {
         val density=Resources.getSystem().displayMetrics.density.coerceAtLeast(1f)
         val symbol=symbol
         val outline=outline

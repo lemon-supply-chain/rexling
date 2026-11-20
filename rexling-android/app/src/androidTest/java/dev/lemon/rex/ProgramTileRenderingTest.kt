@@ -104,6 +104,20 @@ class ProgramTileRenderingTest {
         }
         File(context.cacheDir,"program-tile-small.png").outputStream().use {atlas.compress(Bitmap.CompressFormat.PNG,100,it)}
     }
+    @Test fun sizeCachedTileReplayIsDeterministic() {
+        val picture=ProgramVectorPicture.load(context.assets,"neovim")
+        fun draw(width: Float,height: Float): Bitmap {
+            val bitmap=Bitmap.createBitmap(kotlin.math.ceil(width).toInt(),kotlin.math.ceil(height).toInt(),Bitmap.Config.ARGB_8888)
+            picture.drawTile(Canvas(bitmap),width,height)
+            return bitmap
+        }
+        val first=draw(93.5f,74.25f);val second=draw(93.5f,74.25f)
+        assertTrue("A cached tile must match its initial vector raster exactly",first.sameAs(second))
+        val other=draw(60.5f,49.5f)
+        assertTrue("Different pixel sizes need their own cache entry",other.width!=first.width && other.height!=first.height)
+        first.recycle();second.recycle();other.recycle()
+    }
+
     @Test fun catalogResolvesTilesGlyphsVariantsAndAliases() {
         fun tile(vararg names: String)=ProgramCatalog.tile(ProgramIdentity.resolve(names.toList()),context.assets)
         fun glyph(vararg names: String)=ProgramCatalog.glyph(ProgramIdentity.resolve(names.toList()),context.assets)

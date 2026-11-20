@@ -72,7 +72,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, ADD, KEYBOARD, HIDE_KEYBOARD, LEFT, RIGHT, UP, DOWN, TAB, CLOSE, ESCAPE, CONTROL, ALT, SHIFT, POINTER, EYE, BACKSPACE, ARROWS, ENTER, SETTINGS, PASTE, IMAGE, FILE, SERVER, REFRESH, SUN, MOON, EDIT, UNPLUG, DELETE, QR, FLOAT, CHECK, PLAY, STOP }
+internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, ADD, KEYBOARD, HIDE_KEYBOARD, LEFT, RIGHT, UP, DOWN, TAB, CLOSE, ESCAPE, CONTROL, ALT, SHIFT, POINTER, EYE, BACKSPACE, ARROWS, ENTER, SETTINGS, PASTE, IMAGE, FILE, SERVER, PORT_FORWARD, REFRESH, SUN, MOON, EDIT, UNPLUG, DELETE, QR, FLOAT, CHECK, PLAY, STOP }
 
 @Composable internal fun ChromeSymbol(icon: ChromeIcon, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
     Canvas(modifier.size(19.dp)) {
@@ -117,6 +117,17 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
             ChromeIcon.IMAGE -> {box(3f,4f,18f,16f);drawCircle(color,1.4f*u,Offset(16f*u,8f*u));line(3f,17f,8f,12f);line(8f,12f,12f,16f);line(12f,16f,15f,13f);line(15f,13f,21f,18f)}
             ChromeIcon.SERVER -> {
                 for(y in listOf(4f,14f)) {box(4f,y,16f,6f,1.5f);drawCircle(color,.8f*u,Offset(7f*u,(y+3f)*u));line(11f,y+3f,17f,y+3f)}
+            }
+            ChromeIcon.PORT_FORWARD -> {
+                val route=Path().apply {
+                    moveTo(7f*u,6f*u);lineTo(7f*u,9f*u);cubicTo(7f*u,12f*u,9f*u,14f*u,12f*u,16f*u)
+                    moveTo(17f*u,6f*u);lineTo(17f*u,9f*u);cubicTo(17f*u,12f*u,15f*u,14f*u,12f*u,16f*u)
+                }
+                drawPath(route,color,style=Stroke(width,cap=StrokeCap.Round,join=StrokeJoin.Round))
+                line(12f,16f,12f,21f)
+                line(4f,5f,7f,2f);line(7f,2f,10f,5f)
+                line(14f,5f,17f,2f);line(17f,2f,20f,5f)
+                line(9f,18f,12f,21f);line(12f,21f,15f,18f)
             }
             ChromeIcon.REFRESH -> {drawArc(color,50f,270f,false,Offset(4f*u,4f*u),Size(16f*u,16f*u),style=Stroke(width));line(18f,7f,13f,7f);line(18f,7f,18f,2f)}
             ChromeIcon.SETTINGS -> {
@@ -405,6 +416,7 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
     val tabsDescription=stringResource(R.string.a11y_tabs)
     val context=androidx.compose.ui.platform.LocalContext.current
     val marquee=rememberRainbowMarquee(animateWorking && windows.any(paneWorking))
+    val settledMarquee=remember {RainbowMarquee(mutableStateOf(0f),mutableStateOf(0f))}
     val drag=remember(reorderKey) {TabDrag()}
     var menuId by remember(reorderKey) {mutableStateOf<String?>(null)}
     val ids=windows.map {it.id}
@@ -536,7 +548,7 @@ internal enum class ChromeIcon { SPLIT, SEARCH, CHEVRON, SESSIONS, COPY, MORE, A
                         Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal=6.dp),
                             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(showTitle) Arrangement.spacedBy(2.dp) else Arrangement.Center) {
                             Box(Modifier.semantics {testTag="Tab program icon ${w.id}"}) {
-                                ProgramStack(programs,pane,fixedSlot=true,marquee=marquee,isPaneWorking={isPaneWorking(w,it)},progress=progress)
+                                ProgramStack(programs,pane,fixedSlot=true,marquee=if(active || marquee==null) marquee else settledMarquee,isPaneWorking={isPaneWorking(w,it)},progress=progress)
                                 if(unread>0) {
                                     val layers=programs.size.coerceIn(1,3)
                                     val painted=if(layers==1) 22f else 21f+4f*(layers-1)

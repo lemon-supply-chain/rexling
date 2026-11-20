@@ -3388,3 +3388,14 @@ Build 91 installation follow-up: installed over USB on S22+ `RFCT21390SD`; verif
 - Updated `AboutSheet.kt` and `README.md` to reference the new Rex app icon (`rex_app_icon.png`).
 - Unit tests and debug assembly passed.
 
+### 2026-11-20 — Program tile rendering performance
+
+- Profiled on a dedicated physical Xiaomi/Redmi `21091116AC` (Android 13/API 33, 60 Hz, thermal status 0), using only offline fixtures and an actual Activity/Choreographer clock. No server or existing terminal received input.
+- Unrotated catalog tiles now use a bounded four-entry bitmap cache per exact pixel size. Background panes and inactive tabs retain a fixed-phase marquee; only the header front pane and selected tab animate continuously.
+- A 34×27 dp Neovim tile draw improved from 0.738/0.870 ms median/p95 to 0.020/0.023 ms. Eight fixtures across four programs and two sizes had zero differing pixels.
+- Matched light-Perfetto samples showed UI draw mean 4.052 → 3.064 ms, RenderThread Drawing 12.793 → 9.549 ms, flush commands 8.842 → 4.889 ms, and `renderFrameImpl` 1.917 → 1.189 ms. Eight-second main-thread allocation fell 4.69 MB → 3.00 MB and object count 136,051 → 78,164.
+- Whole-frame jank did **not** reliably improve on this MIUI device: gfxinfo remained around 99–100% in the heavy animation workload, p50 40 ms. The result is lower CPU/render-section work, not a 60 FPS or battery-life claim. Buffer dequeue/backpressure increased.
+- Current-state optimized cold starts were 529 ms baseline versus 537 ms candidate (nine runs, overlapping distributions). An earlier 410 ms baseline was measured in a different device/ART state and is not used for the final claim. Terminal software-Canvas timing remained 7.737 → 7.709 ms, within run variation.
+- JVM: 311 passed, 1 optional skipped. Relevant Android checks passed, including cache determinism, 9 AdaptiveTabs and 6 SessionHeader checks. A 30-test targeted run had 26 passes and four unrelated failures in existing catalog JSON/alias and TerminalBackground dimension/row expectations; these paths were not modified. Release lint and optimized build passed. `verify_apk.py` could not run because `cmdline-tools/latest/bin/apkanalyzer` is absent; V2 signature was verified directly with `apksigner`.
+- Installed optimized APK SHA-256 `19598ab7742178a46fd1285224caaf1fd4eaaedf22ffb354b082fd0f20d8c441`. Full measurements and raw-artifact locations: `validation/ui-performance-2026-11-20.json`; research: `research/rainbow-marquee-zero-allocation-optimization.md`.
+

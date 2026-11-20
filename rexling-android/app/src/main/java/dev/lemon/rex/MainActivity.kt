@@ -301,7 +301,7 @@ private data class TerminalCloseTarget(val session: String,val id: String,val la
                                 menu=false;pasteClipboard()
                             })
                             TerminalMenuItem(stringResource(R.string.attach_file),ChromeIcon.FILE,enabled=controlled && model.images.state==null,onClick={menu=false;chooseFile()})
-                            TerminalMenuItem(stringResource(R.string.port_forwarding),ChromeIcon.SERVER,enabled=true,onClick={menu=false;forwards=true})
+                            TerminalMenuItem(stringResource(R.string.port_forwarding),ChromeIcon.PORT_FORWARD,enabled=true,onClick={menu=false;forwards=true})
                             TerminalMenuItem(stringResource(R.string.servers_connected_format,model.connectedCount),ChromeIcon.SERVER,enabled=true,onClick={menu=false;servers=true})
                             TerminalMenuItem(stringResource(R.string.refresh_sessions),ChromeIcon.REFRESH,enabled=state.connected,onClick={menu=false;client.refresh()})
                         }

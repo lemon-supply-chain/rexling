@@ -2,6 +2,7 @@ package dev.lemon.rex
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.background
@@ -38,6 +39,8 @@ import androidx.compose.ui.unit.dp
     val front=selected.coerceIn(items.indices)
     val others=(1 until minOf(items.size,3)).map {(front+it)%items.size}
     val active=items[front]
+    // Background tiles keep the working treatment without owning per-frame shader work.
+    val settledMarquee=remember {RainbowMarquee(mutableStateOf(0f),mutableStateOf(0f))}
     val frontY=if(framed) 4.dp else 3.5.dp
     val step=if(framed) 6.dp else 4.dp
     val slotWidth=(if(framed) 40.dp else 28.dp)+step*if(fixedSlot) 2 else others.size
@@ -49,7 +52,7 @@ import androidx.compose.ui.unit.dp
             val shift=step*(others.size-layer)
             PaneProgramTile(items[index],Modifier.offset(x=start+shift,y=frontY+1.dp)
                 .size(if(framed) 32.dp else 21.dp,if(framed) 25.dp else 16.dp),framed,3f+(others.size-layer-1)*3f,
-                marquee=if(isPaneWorking(index)) marquee else null)
+                marquee=if(isPaneWorking(index) && marquee!=null) settledMarquee else null)
         }
         PaneProgramTile(active,Modifier.offset(x=start,y=frontY)
             .size(if(framed) 34.dp else 22.dp,if(framed) 27.dp else 18.dp).then(tileHighlight),
