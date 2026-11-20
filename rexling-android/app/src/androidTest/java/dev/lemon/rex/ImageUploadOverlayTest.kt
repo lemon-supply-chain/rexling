@@ -52,7 +52,7 @@ class ImageUploadOverlayTest {
         }
         settle();val anchor=right()
         val actionAnchor=ui.onNodeWithContentDescription("Cancel file upload").fetchSemanticsNode().boundsInRoot.right
-        ui.onNodeWithText("Preparing image").assertIsDisplayed()
+        ui.onNodeWithText("Preparing file").assertIsDisplayed()
         ui.runOnIdle {state.value=state.value.copy(phase=ImagePhase.UPLOADING,progress=0f)};settle()
         ui.onNodeWithText("Uploading file").assertIsDisplayed()
         ui.onNodeWithContentDescription("0%").assertDoesNotExist()

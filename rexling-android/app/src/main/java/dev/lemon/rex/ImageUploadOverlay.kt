@@ -35,10 +35,12 @@ internal val UploadPillText=SettingsType.row.copy(fontSize=12.sp,lineHeight=18.s
     val percent=(status.progress.coerceIn(0f,1f)*100).roundToInt()
     val green=Color(0xff27884f)
     val ink=Color(0xff202a3c)
+    val dismissErrorDescription=stringResource(R.string.a11y_dismiss_upload_error)
+    val cancelUploadDescription=stringResource(R.string.a11y_cancel_file_upload)
     val container by animateColorAsState(if(success) Color(0xffdef2e5) else Color(0xffe5edff),tween(200),label="Upload success fill")
     val accent by animateColorAsState(if(success) green else scheme.primary,tween(200),label="Upload success ring")
     val titleColor by animateColorAsState(if(success) Color(0xff1e7143) else ink,tween(200),label="Upload success text")
-    TransferNoticeSurface(modifier,hazeState ?: localHaze,container,ink,"File upload") {
+    TransferNoticeSurface(modifier,hazeState ?: localHaze,container,ink,stringResource(R.string.file_upload)) {
         Column(Modifier.animateContentSize(spring(dampingRatio=.9f,stiffness=500f),alignment=Alignment.BottomEnd)) {
             Row(Modifier.then(if(failed) Modifier.fillMaxWidth() else Modifier)
                 .padding(start=8.dp,end=if(success) 8.dp else 2.dp).heightIn(min=32.dp),
@@ -46,11 +48,11 @@ internal val UploadPillText=SettingsType.row.copy(fontSize=12.sp,lineHeight=18.s
                 if(failed) ChromeSymbol(ChromeIcon.IMAGE,Modifier.size(14.dp),Color(0xffb3261e))
                 else UploadRing(status.progress,indeterminate=!uploading && !success,color=accent,success=success)
                 AnimatedContent(when(status.phase) {
-                    ImagePhase.PREPARING->"Preparing file"
-                    ImagePhase.UPLOADING->"Uploading file"
-                    ImagePhase.FINISHING->"Finishing upload"
-                    ImagePhase.SUCCESS->"File uploaded"
-                    ImagePhase.FAILED->"Upload failed"
+                    ImagePhase.PREPARING->stringResource(R.string.upload_preparing)
+                    ImagePhase.UPLOADING->stringResource(R.string.upload_uploading)
+                    ImagePhase.FINISHING->stringResource(R.string.upload_finishing)
+                    ImagePhase.SUCCESS->stringResource(R.string.upload_uploaded)
+                    ImagePhase.FAILED->stringResource(R.string.upload_failed)
                 },Modifier.weight(1f,fill=failed),transitionSpec={uploadTextTransition()},label="Upload label") {label->
                     val softness by transition.animateFloat(transitionSpec={tween(200)},label="Upload label softness") {
                         if(it==EnterExitState.Visible) 0f else 2.5f
@@ -60,7 +62,7 @@ internal val UploadPillText=SettingsType.row.copy(fontSize=12.sp,lineHeight=18.s
                 }
                 if(uploading) UploadPercentage(percent)
                 if(!success) IconButton(onClick=onCancel,modifier=Modifier.size(32.dp).semantics {
-                    contentDescription=if(failed) "Dismiss upload error" else "Cancel file upload"
+                    contentDescription=if(failed) dismissErrorDescription else cancelUploadDescription
                 }) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(13.dp),TransferInkMuted)}
             }
             if(failed) {

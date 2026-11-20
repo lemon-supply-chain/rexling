@@ -302,7 +302,7 @@ internal class SwitcherSessions(val count: Int,val current: String,val height: a
         .clickable(role=Role.Button,onClickLabel=stringResource(R.string.switch_session),onClick=onClick).padding(horizontal=4.dp,vertical=6.dp),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.session_label),style=SettingsType.detail,color=scheme.onSurfaceVariant)
-        Text(current.ifBlank {"None"},Modifier.weight(1f,fill=false),style=SettingsType.section,color=scheme.onSurface,maxLines=1,overflow=TextOverflow.Ellipsis)
+        Text(current.ifBlank {stringResource(R.string.none)},Modifier.weight(1f,fill=false),style=SettingsType.section,color=scheme.onSurface,maxLines=1,overflow=TextOverflow.Ellipsis)
         ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(14.dp).graphicsLayer {rotationZ=-90f},scheme.onSurfaceVariant)
     }
 }

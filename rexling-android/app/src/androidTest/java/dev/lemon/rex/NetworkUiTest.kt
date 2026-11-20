@@ -93,7 +93,7 @@ class NetworkUiTest {
     @Test fun signInStatusHasReadableLabelAndBusyFeedback() {
         var busy by androidx.compose.runtime.mutableStateOf(false)
         var clicks=0
-        compose.setContent {MaterialTheme {TailscaleStatusCard("NeedsLogin",busy) {clicks++;busy=true}}}
+        compose.setContent {MaterialTheme {TailscaleStatusCard("NeedsLogin",busy,onSignIn={clicks++;busy=true})}}
         compose.onNodeWithText("Sign-in required").assertIsDisplayed()
         compose.onNodeWithText("NeedsLogin").assertDoesNotExist()
         compose.onNodeWithText("Sign in").performClick()
@@ -102,7 +102,7 @@ class NetworkUiTest {
     }
     @Test fun connectedStatusReplacesSignInRatherThanOfferingItAgain() {
         var state by androidx.compose.runtime.mutableStateOf("NeedsLogin")
-        compose.setContent {MaterialTheme {TailscaleStatusCard(state,false) {}}}
+        compose.setContent {MaterialTheme {TailscaleStatusCard(state,false,onSignIn={})}}
         compose.onNodeWithText("Sign in").assertIsDisplayed()
         compose.runOnIdle {state="Running"}
         compose.onNodeWithText("Connected").assertIsDisplayed()
@@ -124,7 +124,7 @@ class NetworkUiTest {
         compose.setContent {RexTheme(dark,ThemeCatalog.defaults[if(dark) 0 else 1]) {
             androidx.compose.material3.Surface(color=MaterialTheme.colorScheme.background) {
             androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxWidth().padding(20.dp)) {
-                TailscaleStatusCard("Running",false,listOf(TailscalePeerStatus("shipyard-rex","Direct"),TailscalePeerStatus("MacBook","Tailscale relay"))) {}
+                TailscaleStatusCard("Running",false,listOf(TailscalePeerStatus("shipyard-rex","Direct"),TailscalePeerStatus("MacBook","Tailscale relay")),onSignIn={})
             }}
         }}
         for(value in listOf(false,true)) {
@@ -142,7 +142,7 @@ class NetworkUiTest {
     @Test fun phoneVpnConnectionIsSeparateFromUnconfiguredBuiltInTailscale() {
         compose.setContent {MaterialTheme {Column {
             ServerNetworkStatusCard("Shipyard",ServerNetworkRoute.PHONE,true)
-            TailscaleStatusCard("Off",false) {}
+            TailscaleStatusCard("Off",false,onSignIn={})
         }}}
         compose.onNodeWithText("Phone network / VPN").assertIsDisplayed()
         compose.onNodeWithText("Connected").assertIsDisplayed()
@@ -152,7 +152,7 @@ class NetworkUiTest {
     @Test fun pendingSignInCanBeCancelledAndItsBrowserLinkDisappears() {
         var pending by androidx.compose.runtime.mutableStateOf(true)
         var continued=0
-        compose.setContent {MaterialTheme {if(pending) PendingTailscaleSignIn(false,{continued++},{pending=false}) else TailscaleStatusCard("Off",false) {}}}
+        compose.setContent {MaterialTheme {if(pending) PendingTailscaleSignIn(false,{continued++},{pending=false}) else TailscaleStatusCard("Off",false,onSignIn={})}}
         compose.onNodeWithText("Continue in browser").assertIsDisplayed()
         compose.onNodeWithText("Cancel sign-in").performClick()
         compose.onNodeWithText("Continue in browser").assertDoesNotExist()

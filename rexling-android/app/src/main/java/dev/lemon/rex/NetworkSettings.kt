@@ -141,7 +141,7 @@ internal object NetworkSettings {
             val uri=runCatching {java.net.URI(trimmed)}.getOrNull()
             if(uri==null || uri.scheme !in listOf("http","https") || uri.host.isNullOrEmpty() || uri.userInfo!=null || uri.query!=null || uri.fragment!=null) return@withLock "Enter a complete control server HTTP(S) URL"
         }
-        val device=TailscaleHostname.normalize(name) ?: return@withLock TailscaleHostname.ERROR
+        val device=TailscaleHostname.normalize(name) ?: return@withLock context.getString(R.string.device_name_error)
         preferences.edit().putBoolean("tailscale_suspended",false).putBoolean("tailscale_prepared",true).putString("control_url",trimmed).putString("tailscale_hostname",device).commit();configure()
     }}
     suspend fun cancelLogin(): String? = withContext(Dispatchers.IO) {mutex.withLock {
@@ -212,7 +212,6 @@ internal object NetworkSettings {
 /** Validation for the built-in Tailscale device name: one DNS label, as Tailscale machine names are. */
 internal object TailscaleHostname {
     const val DEFAULT="rexling-android"
-    const val ERROR="Use letters, digits and hyphens for the device name (up to 63, not starting or ending with a hyphen)."
     private val label=Regex("[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
     /** The name to store: blank for the default, lower-cased otherwise; null if Tailscale would not accept it. */
     fun normalize(raw: String): String? {

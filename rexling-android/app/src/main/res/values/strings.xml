@@ -492,8 +492,14 @@
     <string name="label_next_command_short">Next</string>
     <string name="label_notification">Notification</string>
     <string name="label_ok">OK</string>
-    <string name="label_image_upload">Image upload</string>
     <string name="file_upload">File upload</string>
+    <string name="upload_preparing">Preparing file</string>
+    <string name="upload_uploading">Uploading file</string>
+    <string name="upload_finishing">Finishing upload</string>
+    <string name="upload_uploaded">File uploaded</string>
+    <string name="upload_failed">Upload failed</string>
+    <string name="a11y_dismiss_upload_error">Dismiss upload error</string>
+    <string name="a11y_cancel_file_upload">Cancel file upload</string>
     <string name="a11y_shortcuts_format">%1$s shortcuts</string>
     <string name="a11y_shortcut_menu_format">%1$s shortcut menu</string>
     <string name="a11y_shortcut_pages_format">%1$s shortcut pages</string>
@@ -600,7 +606,9 @@
     <string name="show_toolbar_only_with_keyboard_desc">Hide the key toolbar while the keyboard is closed.</string>
     <string name="device_name">Device name</string>
     <string name="device_name_hint">How this phone appears in your tailnet. A name set in the Tailscale admin console takes precedence.</string>
+    <string name="device_name_error">Use letters, digits and hyphens for the device name (up to 63, not starting or ending with a hyphen).</string>
     <string name="attach_file">Attach file</string>
     <string name="session_label">Session</string>
     <string name="switch_session">Switch session</string>
+    <string name="none">None</string>
 </resources>

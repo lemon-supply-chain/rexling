@@ -492,8 +492,14 @@
     <string name="label_next_command_short">下一条</string>
     <string name="label_notification">通知</string>
     <string name="label_ok">确定</string>
-    <string name="label_image_upload">图片上传</string>
     <string name="file_upload">文件上传</string>
+    <string name="upload_preparing">正在准备文件</string>
+    <string name="upload_uploading">正在上传文件</string>
+    <string name="upload_finishing">正在完成上传</string>
+    <string name="upload_uploaded">文件已上传</string>
+    <string name="upload_failed">上传失败</string>
+    <string name="a11y_dismiss_upload_error">关闭上传错误</string>
+    <string name="a11y_cancel_file_upload">取消文件上传</string>
     <string name="a11y_shortcuts_format">%1$s 快捷方式</string>
     <string name="a11y_shortcut_menu_format">%1$s 快捷菜单</string>
     <string name="a11y_shortcut_pages_format">%1$s 快捷页</string>
@@ -600,7 +606,9 @@
     <string name="show_toolbar_only_with_keyboard_desc">键盘收起时隐藏按键工具栏以留出终端高度。</string>
     <string name="device_name">设备名称</string>
     <string name="device_name_hint">此设备在 tailnet 中显示的名称。在 Tailscale 管理后台设置的名称优先。</string>
+    <string name="device_name_error">设备名称只能使用字母、数字和连字符（最长 63 个字符，且不能以连字符开头或结尾）。</string>
     <string name="attach_file">附加文件</string>
     <string name="session_label">会话</string>
     <string name="switch_session">切换会话</string>
+    <string name="none">无</string>
 </resources>
