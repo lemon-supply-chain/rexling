@@ -69,7 +69,54 @@ Rather than constructing three distinct brushes, the exact same `RotatingSweepBr
 
 ## 4. Verification & Results
 
-- **Allocations per frame**: Reduced from ~120 heap objects to **0 bytes**.
+- **Brush-construction allocations**: Reduced the marquee's previous ~120 heap objects per frame to zero in that specific path. This was not a whole-composable allocation measurement; see the 2026-11-20 follow-up below.
 - **Per-frame Math**: Reduced from 75 HSV + 41 `exp()` calls to **0 float math calls** during the render loop (only 1 scalar `sin` call for the breathing light alpha).
 - **Native Shaders**: Replaced 5 native shader allocations per frame per icon with **3 persistent native shaders** per `RainbowMarquee` instance.
 - **Tests**: Passed `./gradlew testDebugUnitTest` and full packaging with `./gradlew assembleDebug`.
+
+---
+
+## 5. Follow-up: whole-tile rendering and active-only animation (2026-11-20)
+
+A physical-device profile showed that persistent shaders alone did not remove the remaining cost. Every animated tile still replayed its static vector artwork, including color-filtered `saveLayer` calls, and every visible working tab ran the marquee.
+
+The follow-up makes two changes:
+
+1. `ProgramVectorPicture.drawTile` rasterizes an unrotated tile once per exact floating-point size and replays a bounded four-entry bitmap cache. Evicted bitmaps are not explicitly recycled because retained display lists may still reference them.
+2. Only the front pane in the header and the selected tab animate. Background panes and inactive tabs retain the same marquee at a fixed phase rather than owning per-frame shader work.
+
+### Measurement environment
+
+- Xiaomi/Redmi 21091116AC, Android 13/API 33, 60 Hz, thermal status 0.
+- Actual `ActivityScenario` and Choreographer clock, not `createComposeRule`'s virtual frame clock.
+- Working `SessionHeader` plus four `TerminalTabs`, including a three-pane stack.
+- Eight-second samples with light system Perfetto (`gfx`, `view`, `sched/sched_switch`).
+- Only offline fixtures; no server or user terminal input.
+
+| Measurement | Baseline | Follow-up | Change |
+| --- | ---: | ---: | ---: |
+| Single 34x27dp tile draw, median | 0.738 ms | 0.020 ms | 97.25% less |
+| Single tile allocation | 277 B / draw | 37 B / draw | 86.65% less |
+| Whole workload main-thread allocation | 4.69 MB | 3.00 MB | 36.0% less |
+| Whole workload main-thread objects | 136,051 | 78,164 | 42.55% less |
+| UI `Record View#draw()` mean | 4.052 ms | 3.064 ms | 24.38% less |
+| RenderThread `Drawing` mean | 12.793 ms | 9.549 ms | 25.36% less |
+| RenderThread `flush commands` mean | 8.842 ms | 4.889 ms | 44.70% less |
+| `renderFrameImpl` mean | 1.917 ms | 1.189 ms | 37.98% less |
+
+The single-tile timing uses 100 post-warmup software-Canvas draws. Whole-workload allocation covers eight seconds and includes code outside the marquee; it is not a per-frame guarantee. Perfetto populations are separate and must not be summed.
+
+### Rejected experiments
+
+- **Rotating a cached marquee bitmap**: rejected because it rotates the rounded-rectangle geometry, not only the hue/glint phase. Fixed-phase fixtures exposed the error immediately.
+- **Removing the two low-alpha bloom passes**: no measurable frame improvement on the test device, so the original passes were restored.
+- **Making every tab marquee static**: reduced allocations further but did not establish a whole-frame improvement. The selected tab remains animated.
+- **Virtual Compose test clock**: produced Choreographer callbacks without sustained real GPU frames and was discarded as a performance workload.
+
+### Limits and verification
+
+The MIUI gfxinfo result did not establish a whole-frame jank improvement: baseline and follow-up remained around 99–100% modern-jank frames in this heavy workload, with 40 ms p50. The verified claim is lower CPU/render-section work and allocation, not 60 FPS or better battery life. Buffer dequeue/backpressure increased and was not counted as an improvement.
+
+Eight tile fixtures at two sizes and four programs had **zero differing pixels**. Current-state optimized cold starts were 529 ms baseline versus 537 ms follow-up (nine runs each, overlapping distributions), so no material startup regression is established. Terminal renderer timing remained unchanged within variation.
+
+Full measurements, checks and limitations: [ui-performance-2026-11-20.json](../rexling-android/validation/ui-performance-2026-11-20.json).
