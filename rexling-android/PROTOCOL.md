@@ -18,13 +18,13 @@ The actor requires this session to still be selected and connected, then sends
 ```json
 {
   "session_id": "session:<id>",
-  "window_label": "",
+  "window_label": "Terminal 3",
   "focus": false,
   "layout": {"block": {"flavor": "com.superlogical.terminal.shell"}}
 }
 ```
 
-The label is left empty for dynamic title resolution. The reply supplies
+The label is generated from the current window count. The reply supplies
 `window_id`, `block_ids` and `revision`. The app opens the first returned block
 with the existing authenticated data-ticket/snapshot/VT path, refreshes the view,
 and selects the corresponding local tab. `focus:false` avoids requesting a
@@ -93,6 +93,14 @@ Floating rectangles use translucent fill and dashed borders, retaining their rea
 geometry and stacking order. A compact Hide/Show floating control removes/restores
 only those overlays, allowing normal touch selection on a covered tiled pane.
 Toggling visibility does not select, open, close or move anything on the server.
+When navigating away from a floating terminal, the native actor retains at most
+one inactive floating data stream and Ghostty replica. It continues consuming
+output without publishing frames, taking input ownership, or replaying clipboard
+writes. Reopening that pane reuses its stream rather than downloading another
+full scrollback snapshot. Session changes, connection recovery, terminal closure,
+and stream errors invalidate the retained terminal. Another floating terminal
+evicts the previous one.
+
 Floating panes remain in the full list with a Floating caption. Visibility
 survives geometry refreshes within the same window and can be inspected while
 terminal actions are disabled.
@@ -132,6 +140,31 @@ sequentially and never automatically replayed. A failed sequence refreshes the
 actual layout and reports a potentially partial move, rather than retrying an
 operation that might undo an already-applied swap. This is server layout order,
 not a separate phone-only preference.
+
+## Screen-first snapshot restoration
+
+The selected terminal becomes renderable at Ghostty's READY checkpoint rather
+than waiting for FINISH and all retained history. The native shim uses a
+persistent callback-backed `ghostty_snapshot_decoder_ready` / `next` decoder.
+The framed reader supplies complete decoder operations: the live prefix through
+READY, then each history page (including its optional Kitty placements and
+required look-ahead header), image payload, and FINISH. Ghostty remains responsible
+for payload validation, CRCs, screen routing and history attachment. Temporary
+network starvation is never presented as EOF to its synchronous reader. The
+callback retains no borrowed network slice between calls, and the decoder is
+freed before its terminal on cancellation or errors.
+
+The actor can publish and scroll the initial screen while later history arrives.
+History import preserves an already-scrolled viewport; loaded Kitty pixels update
+the same terminal. Snapshot records are never interpreted as PTY output or
+clipboard writes. Only bytes after validated FINISH enter the live VT path.
+One-shot previews still wait through FINISH so their images are complete.
+
+This changes time to first display, not the Rex wire protocol or transfer volume.
+Rex API revision 16 sends the complete snapshot followed by live output on one
+ordered stream, with no advertised history range or screen-only request. History
+continues downloading in the background, and new output follows it. The existing
+128 MiB snapshot limit remains; the staging buffer is released at FINISH.
 
 ## Read-only carousel previews and session details
 
@@ -246,9 +279,8 @@ native and Kotlin tests.
 
 SVG paths are from Simple Icons 15.0.0 (CC0), converted to Android vector assets.
 Pinned source URLs/checksums and the license ship in APK assets under `licenses/`.
-The Android label and control client name are Rexlet/rexlet. The application ID is
-`dev.lemon.rex`, which installs alongside `dev.shulhi.rex` with its own preferences;
-the JNI ABI follows the `dev.lemon.rex.NativeBridge` class name.
+The Android label and control client name are Rexlet/rexlet. The package remains
+`dev.shulhi.rex`, preserving the existing installation, preferences and JNI ABI.
 
 
 ## Local scrollback and edge rendering
@@ -491,11 +523,10 @@ the frozen screen. The existing Copy viewport menu remains available.
 The pane picker now uses the current program tile, live title (or executable
 name), directory caption, and selected-pane marker. The supplied Superlogical
 catalog SVGs are retained under artwork/program-icons/superlogical with hashes
-and attribution. A local WebKit converter renders the same sources into
-test-only reference PNGs, while runtime Android rendering compiles them to
-native Canvas paths and needs no browser or network request. Supported kinds use
-those tiles in the header, tabs, pane picker and swipe preview; unsupported kinds
-retain their fallback.
+and attribution. A local WebKit converter renders their SVG masks, gradients
+and Display-P3 colors into packaged PNG tiles. Runtime Android rendering needs
+no browser or network request. Supported kinds use those tiles in the header,
+tabs, pane picker and swipe preview; unsupported kinds retain their fallback.
 The user's final transparent launcher PNG is copied exactly, preserving alpha.
 
 
@@ -840,9 +871,9 @@ It was verified against both configured Rex servers and throttled loopback peers
 
 ## Kitty graphics and local RXT4 frames
 
-The pinned libghostty-vt image API is enabled with a 64 MiB per-screen storage limit. A bounded PNG callback allocates output using Ghostty's allocator; RGB/RGBA/gray pixels are copied into shared immutable RGBA buffers only when image generation changes. Snapshot decoding applies the same storage limit before restoration. Phone file, temporary-file and shared-memory media are disabled. Live inline data and Rex-normalized remote file images use the normal terminal stream; no new server RPC is required.
+The pinned libghostty-vt image API is enabled with a 16 MiB per-screen storage limit. A bounded pure-Rust PNG callback allocates output using Ghostty's allocator; RGB/RGBA/gray pixels are copied into shared immutable RGBA buffers only when image generation changes. Snapshot decoding applies the same storage limit before restoration. Phone file, temporary-file and shared-memory media are disabled. Live inline data and Rex-normalized remote file images use the normal terminal stream; no new server RPC is required.
 
-The public render-state image iterator supplies cropped source rectangles, destination pixels/cell offsets, viewport coordinates, layer and z-index, including Unicode/relative placements. Frames own pixel references, never borrowed Ghostty pointers. Placeholder glyphs are omitted from text drawing/copying.
+The public render-state image iterator supplies cropped source rectangles, destination pixels/cell offsets, viewport coordinates, layer and z-index, including Unicode/relative placements. Frames own pixel references, never borrowed Ghostty pointers. Image animation ticks use a terminal-local monotonic clock; the actor schedules the next library deadline only while a visible frame has images. Placeholder glyphs are omitted from text drawing/copying.
 
 Private JNI packets now use `RXT4`, retaining RXT3's header, input flags, changed-row/cell and hyperlink encoding. Every full/delta frame appends:
 
@@ -854,23 +885,403 @@ Unchanged pixels reuse the delivered delta base. Full frames include every refer
 
 Android draws images below cell backgrounds, between backgrounds/text or above text in z order, clipped to terminal content. Image-free terminals retain the existing row cache. Image bitmaps are cached by owned image identity, so IDs reused in another pane/server cannot display old pixels. Cropping, pixel-to-cell scaling and alpha are applied during Canvas rendering; snapshots retain pixels for disconnected/cached pane views.
 
-## Row-shift deltas and local RXT5 frames
+## TCP forwarding (API 14)
 
-Private JNI packets now use `RXT5`, retaining RXT4's header, input flags, changed-row/cell, hyperlink and image layout. One signed little-endian i16 row shift follows the input-flags byte, for both full and delta frames.
+Verified against Rex preview.19 (`ad5a836cb95bf1685a2b2976762949c44f1d0828`) using the official CLI and an isolated server. Forwarding negotiates revision 14 on a separate control connection. `session.new_block` creates a detached `com.superlogical.tunnel.dial` with host, port and display-only client_address. Each accepted phone-local TCP connection uses a random base32 `conn:` data reference, a `data.connect` ticket and `rex.data.bytes.v1`. The 17-byte HELLO and 32-byte WELCOME precede binary TCP bytes. An empty binary message marks one direction’s EOF, allowing the other direction to finish.
 
-Scrolling moves the whole visible grid by one offset delta, so a delta frame declares that shift instead of resending every row: encode sends only the rows the shift exposes, and the decoder moves the previous frame's rows by `shift`, restamping each cell's viewport `y`. A shift is used only when both frames hold every row, the offset change is smaller than the viewport and at least half the overlapping rows match cell for cell; otherwise the existing sparse dirty-row path sends the changed rows without a shift. The decoder requires a delta base for a non-zero shift, `|shift| < rows`, and every row the shift exposes present in the packet; otherwise it rejects the packet without committing the revision. The decoder accepts historical `RXT1`–`RXT4` and the current `RXT5`. This is a local packet format only; no Rex wire format, server RPC or Ghostty ABI changes.
+Listeners bind 127.0.0.1 and keep their port across reconnects. Control reconnect tokens, session.attach and request-mode ownership restore the same tunnel block. Lost creation replies are reconciled by a per-worker UUID label. A control failure drops active streams, with no byte replay. Stop closes only the worker’s detached tunnel, with a bounded cleanup attempt. A force-stop or stop while unreachable may leave an orphan on Rex, removable through `rex forward close`. Forwarding remains independent of terminal control and the terminal API revision.
 
-The `RXT` tag is this project's own: upstream Rexling reuses the same four bytes for a different graphics layout, so a tag match never proves compatibility. Nothing reads a foreign packet, and the tag exists only to catch a stale native library or decoder inside this APK.
+The Android connected-device foreground service carries active forwards while the browser is open. Its notification provides Stop all. Removing Rexling from Recents stops the service. There is no automatic start at boot or after process death. This implementation provides local forwarding, equivalent to `-L`. Reverse/listen forwarding and management of tunnels created by other clients are not implemented.
 
-The Android view moves its recorded row render nodes by the same offset and re-records a row when its text, styles, colors or links differ, ignoring only physical row numbers in that comparison.
+### Semantic input regions (OSC 133)
 
-## Built-in Tailscale sign-out and node deregistration
+libghostty parses shell-integration markers, including A/B/C/D, line-limited I,
+P prompt kinds, and N/L. The semantic callback tracks whether command input is
+active; the cursor-at-prompt and row metadata identify the current prompt and
+its soft-wrapped/continuation rows. Old prompts, output, history viewports and
+alternate screens are not marked as active input regions.
 
-When built-in Tailscale is connected (`BackendState` is `Running`), the Network preferences sheet provides a **Sign out** action. Initiating sign out requests confirmation via a dialog. Upon confirmation:
+Private JNI input flags add bit 4 (16: active semantic input) and bit 5 (32:
+semantic integration known on the primary screen). Cell attribute bit 30 marks
+current input rows, including empty cells. Existing RXT4 full/delta records carry
+these bits without a packet-layout change. Android uses these regions for
+tap-to-type while retaining mouse-click and hyperlink behavior. Programs without
+semantic integration retain existing tap behavior. OSC 133 does not generate
+activity notifications; those continue to use Rex program status.
 
-1. The Android client sends the `logout` command over the native bridge to `rexling-network`.
-2. The Go background daemon invokes `local.Logout(ctx)` via the Tailscale LocalClient to notify the control plane / coordination server and invalidate the node key.
-3. The daemon closes the `tsnet.Server` instance, cleans up all local cached state files in the control-server directory, and marks the configuration as suspended (`built_in_suspended`).
-4. Android updates preferences (`tailscale_suspended = true`, `tailscale_prepared = false`) and refreshes status, returning the UI state to unconfigured (`Off` / Not set up).
+### Remote clipboard writes (OSC 52)
+
+libghostty's clipboard-write callback supplies decoded text/plain data. The shim
+forwards at most 256 KiB per write; invalid UTF-8 and unsupported content are
+ignored. Only live stream writes produce an event, never snapshot restoration.
+The latest write is coalesced with a monotonic serial and the source block,
+connection epoch and navigation ID in private JNI metadata. Android consumes
+that serial once and writes to its clipboard only while foreground, viewing the
+matching pane, and not navigating. Background/stale writes are discarded rather
+than replayed. Standard and primary-selection text are mapped to Android's single
+clipboard. Remote reads have no callback and remain denied. Normal Paste uses
+the existing clipboard/input path, including bracketed-paste handling.
+
+### OSC 133 command navigation
+
+The arrow popup offers Previous/Next command when semantic prompt information
+is known. The guarded `scroll_prompt` command carries session, block, navigation
+ID and connection epoch, and moves the local viewport with libghostty's public
+DELTA_PROMPT API. It neither sends terminal keys nor claims ownership, works on
+retained history while disconnected, and ignores stale/hidden targets. Prompt
+boundaries survive native snapshots and reflow; unmarked and alternate-screen
+terminals remain unchanged. Input hit regions use the cursor's position even
+when the program hides the visual cursor.
+
+### Copy command / output
+
+Long-press selection offers Copy command and Copy output when OSC 133 integration
+is known. A guarded `copy_semantic` request identifies the source session, pane,
+epoch, navigation, viewport dimensions/history position and frozen visible text.
+If the terminal changed, extraction is rejected rather than using a different
+command. No ownership or network connection is needed for retained history.
+
+The public libghostty selection/formatter APIs extract the command's retained
+output and unwrap soft-wrapped lines. Command extraction uses semantic INPUT
+cells and omits primary/continuation prompt text, preserving real line breaks.
+Both are bounded to the Android clipboard's 256 KiB text budget. Explicit local
+copies use the existing deduplicated clipboard-delivery path, including while
+offline; remote OSC 52 writes still require a live foreground connection.
+
+### OSC 9;4 progress
+
+The canonical Rex server reports this terminal effect through `progress_report`
+events (control session events and nonce-bound data APCs). The client validates,
+coalesces and scopes reports to the source session/pane. Set reports carry a
+0–100 percentage; indeterminate reports omit it. Pause/error can retain the prior
+percentage. Remove clears progress without inventing a completion notification.
+Process replacement/exit, pane removal and connection loss clear stale reports.
+Initial progress depends on the server delivering a report; no current-progress
+query is present in the discovered API.
+
+Tabs use a thin percentage bar or moving highlight, amber for paused and the
+error colour for failed progress. Activity enriches active root OSC 7501 records
+when they lack their own percentage, preserving their state and notification
+identity. Otherwise an ephemeral progress-only row appears for the pane. These
+rows never contribute unread dots, mark-seen actions or Android notifications.
+
+Run `sh rexling-android/scripts/demo-progress.sh` in a Rex terminal to exercise
+all states. Cargo can be explicitly enabled with
+`env CARGO_TERM_PROGRESS_TERM_INTEGRATION=true cargo build`.
+
+### Pasting SSH private keys
+
+The SSH host editor offers Paste SSH key alongside file import. Clipboard text
+is read only after that explicit action, then shown in a masked, editable field
+with password keyboard input and suggestions disabled. Empty clipboards allow
+manual pasting. Pasted and file keys share the 128 KiB limit, passphrase parser,
+validation and Android Keystore encrypted storage. Drafts are not saved across
+host changes or dialog cancellation, and importing prevents duplicate submission.
+
+### Current-word IME editing and compact server editor
+
+The terminal exposes a real Editable for the currently pending IME composition,
+including surrounding/extracted text, selection and composing regions. Batch
+edits finalize locally before sending text; a newly composing suffix stays local
+when a committed prefix is flushed. Unicode-aware local cursor/backspace keys
+never delete remote text while a word remains pending. Finalized input still
+uses the ordered terminal-input path, and stale connection targets are rejected.
+This does not expose or make already-sent remote terminal text editable by IMEs.
+
+The server editor places its icon selector beside the name and uses settings
+font sizes. A compact SSH-key section keeps import, paste and removal together.
+
+### Superseded navigation
+
+The native session publishes the latest accepted pane/session navigation ID before
+its actor consumes the queue. Obsolete pane/session selections and their takeover
+or resize requests are skipped before execution. Queue rejection does not advance
+this watermark. Input, paste, release and mutations retain their ordering and
+existing target checks. A request already sent is allowed to finish; an obsolete
+non-transport error cannot acknowledge or overwrite the latest navigation. Transport
+failures still use normal recovery, and uncertain input is never replayed.
+
+### IME correction model
+
+`TerminalImeLine` models only text sent through one active InputConnection. It
+calculates cursor-aware changes without reading terminal output. External-action
+flushes and connection invalidation retain their existing behavior. The extraction
+does not change keyboard types, restart/focus policy, composition batching or the
+button row. Tests check both resulting text and remote cursor after corrections,
+Unicode edits, context resets, long replacements and randomized editing sequences.
+
+### Smooth text scrollback (RXT5)
+
+Local scrollback is handled independently of queued input. libghostty captures up
+to four spare text rows above and below the viewport. Android draws the sub-row
+remainder and compensates for whole rows awaiting a native frame, bounded to the
+captured rows. At rest the grid settles on whole rows. Application wheel events
+keep their existing behavior; image-bearing frames retain whole-row movement
+until image placements outside the viewport can be represented completely.
+
+RXT5 is an app-local JNI format, not a Rex server protocol change. A signed i16 row
+shift precedes the changed-row count. Shifted rows are validated against content,
+and uncovered rows must be present. Overscan sides follow the changed rows: a u8
+count then normal row records; 255 retains that side from a valid delta base.
+Full frames cannot retain old overscan. Image framing follows the RXT4 layout.
+Older RXT1–RXT4 fixtures remain readable. Content reuse also re-tags cell/link row
+coordinates. Interior cached row drawings move using the known viewport offset;
+padded edge rows and changed content are recorded again. Stopping a fling snaps
+before hit testing, and the stop tap cannot activate a link or terminal action.
+
+The implementation adapts michaelcosj/rexling's smooth-scroll work, with offset-
+based row reuse, unchanged-overscan reuse, bounded fractional movement, explicit
+image fallback and stop-tap handling. Source attribution is in THIRD_PARTY_NOTICES.
+
+### Activity badge destinations
+
+Unread badges are routed from the existing version-aware Activity seen state.
+Notifiable records on the active saved server and displayed session badge the tab
+that currently contains their pane. Current block membership takes precedence over
+possibly stale activity window metadata. Hidden panes in the selected tab can keep
+that tab badged; merely selecting a tab does not acknowledge its other panes.
+Records from other sessions/servers or unavailable panes remain on the Activity
+eye. Working, progress-only, seen and disconnected-source records do not badge.
+This is presentation only: foreground acknowledgement, server mark-seen sync and
+Android notification delivery retain their existing rules. Tab dots sit on the
+program icon stack's upper-right corner without changing tab allocation or spacing.
+
+### Tab-switch keyboard handoff
+
+When a tab switch removes the focused terminal while the keyboard is visible,
+the carousel retains at most one outgoing editor and frame offscreen until
+Android serves the incoming editor's input connection. The outgoing view loses
+input ownership immediately; it cannot accept input or claim dimensions. This
+retains no additional remote stream. Once the incoming editor is served, the
+outgoing view is removed. Cached frames and rapid tab switches use the same
+bounded handoff. This prevents Gboard briefly falling back to its number-row
+layout while the incoming tab is loading.
+
+### Android replacement edits
+
+Android 14+ `InputConnection.replaceText` is handled as a committed edit using
+the same cursor-aware diff and batch boundary as `commitText`. Gboard uses this
+API for space-triggered autocorrection; the base implementation edits the local
+Editable without calling `commitText`. Replacement edits therefore explicitly
+mark a pending commit and flush it at the outer batch boundary, without needing
+a terminal tap. Stale input connections reject replacements before modifying
+the buffer or sending any input.
+
+### Keep screen awake
+
+Preferences → Display offers System default (initial setting), While a terminal
+is visible, and While the visible terminal is active. The active mode refreshes the
+screen-awake flag for typing, touching the terminal, or changed terminal
+output, then releases it on the next display frame so Android owns the normal
+idle timeout. There is no extra app-specific grace period. Only the centered terminal
+view can request the flag. Neighbor and retained handoff views are disabled.
+The View keepScreenOn flag is cleared on window focus/visibility loss and detach;
+no wake lock or background service is used. Manual locking remains available.
+
+### Program-requested cursor presentation
+
+The native renderer carries libghostty's cursor visual style and blinking flag
+through local JNI packets (RXT6 adds one cursor-flags byte after input flags).
+The Rex server wire protocol is unchanged. RXT1–RXT5 decode with the previous
+steady-block default. Bar, filled block, underline and hollow block are supported.
+DECSCUSR and DEC private mode 12 are interpreted by libghostty rather than
+reparsed by Android. Hidden cursors remain hidden. Cursor-only changes do not
+repeat unchanged rows.
+
+Android blinks at 500 ms per phase only when requested and the terminal is the
+interactive visible pane in a focused window. Cursor movement, mode changes and
+typing restart the visible phase. Inactive panes and background windows stop
+the timer; steady cursors schedule no timer. Blink redraws use the existing row
+cache and do not generate terminal frames or extend the screen-awake policy.
+
+### Stable keyboard viewport during editor navigation
+
+After keyboard geometry settles, the viewport keeps its existing offset while
+the cursor remains visible. Crossing an edge adjusts only enough to reveal the
+cursor. Status/footer distance no longer re-centers the whole terminal on each
+arrow step. Keyboard geometry changes still use the original prompt/context
+placement, and hidden cursor/scrollback frames retain the last anchor. This
+changes placement only; the terminal grid is not resized.
+
+The configured native cursor default is blinking, including after reconnect and
+DECSCUSR default/reset. Explicit DECSCUSR steady block/bar/underline requests
+retain priority, including snapshot restoration. DEC mode 12 still controls live
+blinking; libghostty snapshots do not distinguish a mode-12-only override from
+the configured default when the cursor shape still follows that default.
+
+### Per-server network routes and Tailscale sign-in
+
+Add/Edit server shows Phone network/VPN or Built-in Tailscale once a valid
+HTTP(S), WS(S) or SSH endpoint is entered. The route belongs to that normalized
+endpoint; there is no app-wide routing choice in the UI. Existing app-wide
+choices are migrated once to each saved endpoint so upgrading does not change
+its connection path. New servers start with Phone network/VPN. Native HTTP and
+SSH dials use the same route decision. HTTP root slashes added by the Rust URL
+formatter are normalized before matching the saved route. Network preferences
+manage the Tailscale account/control server and show status with active peers
+and their direct/relay routes together in one card.
+
+The server editor links directly to built-in setup. Sign in applies the setup,
+starts interactive authentication, polls for AuthURL, and opens it in the
+browser. A visible busy state and bounded timeout/error replace silent clicks.
+NeedsLogin and NeedsMachineAuth are shown as Sign-in required and Device
+approval required in a connection status card. Browser approval remains with
+the user.
+
+Empty installations lead with Add server and open the full server editor rather
+than a Tailscale-specific quick-connect form. Connected tailnets show Connected
+with a checkmark, including in the server editor; stale AuthURL values do not
+restore sign-in actions after BackendState becomes Running. Add server's plus
+icon inherits the button content color.
+
+Network preferences distinguish the current server connection from the embedded
+client. The Current server card shows its configured Phone network/VPN or
+Built-in Tailscale route and Rex connection status. The separate Built-in
+Tailscale card shows Not set up when unconfigured, and an empty backend status
+is Not connected rather than an indefinite Starting message. This does not
+claim to inspect the separate Android Tailscale app's account or tunnel state.
+
+Pending browser enrollment offers Continue in browser and Cancel sign-in.
+Cancellation logs out only an unfinished enrollment, stops the embedded node,
+and persists a suspended state so saved built-in routes cannot restart it
+until the user explicitly sets up again. It clears the pending status/link and
+returns to Not set up while preserving server routes and the control-server
+URL. It does not reconfigure SSH clients or increment the network retry
+revision. Native cancellation refuses a node already in Running state.
+
+## Automatic localhost forwarding
+
+Tapping an HTTP(S) localhost, 127.0.0.1 or [::1] terminal link creates or reuses
+an outbound TCP forward through that pane's server and session. Paths, encoded
+queries, fragments and HTTPS are preserved. Browser opening is limited to the
+foreground activity; the notice also offers Open and Copy. Other links retain
+normal browser behavior, and copying a terminal link keeps its original URL.
+
+The phone listener prefers the remote port. Preferences offer Ask (default),
+Choose another phone port, or Stop the other Rexling forward. Replacement only
+stops an identified Rexling-owned forward; an unavailable port belonging to
+another app prompts instead. Automatic selection binds port zero atomically.
+Generation guards prevent delayed stop/poll events from overwriting a restart.
+
+The forwarding drawer groups saved forwards across all servers and offers
+Start, Stop, Remove, Open and Copy. Up to eight forwards may run concurrently;
+up to 64 configurations are saved. Saved configurations restore stopped, without
+persisting clicked URL queries or automatically opening a browser. Removing a
+server or changing its endpoint removes its forwards. Stopping releases the
+phone listener before remote cleanup, permitting immediate reuse of its port.
+
+## Custom keyboard toolbar
+
+Preferences → Keyboard toolbar edits up to seven terminal buttons; the keyboard
+toggle remains pinned at the right. Layouts may contain fewer buttons, including
+none. Empty layouts retain access to extra keys. Existing installs keep the
+original seven buttons. The editor has a toolbar area and an available-button palette. Hold and drag
+within the toolbar to reorder, into it to add, or back into the palette to
+remove. At capacity, dropping a new button onto a slot replaces it. Canceled
+drags leave the draft untouched. The editor uses fixed bottom-dialog chrome without a bottom sheet draggable
+or nested-scroll dismiss handler, so the grid owns normal scrolling and flings.
+It uses the haze effect without the continuous popup backdrop invalidator.
+Close, Back and outside taps remain supported; inside blank taps do not dismiss.
+Taps and accessibility actions offer the same
+editing operations. Changes and resets stay in a draft until Save.
+Stable IDs are stored in the model's preferences, with unknown and duplicate IDs
+filtered and the seven-button cap enforced on load and save.
+
+The toolbar uses the existing Ctrl shortcut, Shift press/release, joystick and
+keyboard components. Changing the layout does not recreate the terminal input
+view or change its keyboard configuration. The expanded function/navigation keys
+remain available independently of the chosen primary buttons.
+
+## Custom Ctrl shortcut buttons
+
+Preferences → Ctrl shortcut buttons shows an editable list with key chips.
+Add shortcut opens a key recorder; Ctrl is assumed for the first key. The
+recorder accepts typed or hardware keys, exposes special-key buttons, and
+supports optional names, Undo, Clear and Cancel. The keyboard Done action records
+Enter. Rows can be edited, removed or held and dragged to reorder. The list
+position survives editing. Changes stay in a draft until the list is saved.
+The stored format remains a validated, labeled sequence per line, optionally
+`Name = keys`, preserving previously saved entries. The first key receives Ctrl automatically;
+following `+`-separated keys are plain unless explicitly prefixed Ctrl or Shift.
+`L` sends form feed (Ctrl+L), `Space + L` sends NUL followed by lowercase l,
+and `Space + Ctrl + L` sends NUL followed by form feed. Space has an explicit
+NUL mapping rather than relying on the generic text-modifier helper. Named
+navigation/function keys use the existing terminal key encoder.
+
+Existing installations retain their ten default shortcuts. Larger custom lists
+use twelve-cell pages; the popup's hold/double-tap and trigger-close behavior is
+preserved. Changing the input target or configuration closes the popup. The
+connection validates the sequence and captured pane target before sending the
+whole sequence in one input command, clearing latched modifiers first. Invalid
+editor contents do not replace saved settings.
+
+## Structured Neovim shortcut editor
+
+Neovim shortcut preferences show shortcut rows and one-level group rows instead
+of a raw document. Add group creates a named draft group; groups open their own
+lists and can be renamed, reordered as a unit, or ungrouped while keeping their
+shortcuts. Individual shortcuts can be moved with a group picker. Empty draft
+groups remain visible and must be filled or removed before saving, rather than
+silently disappearing. The backend's existing JSON format and execution policy
+are unchanged; migration preserves root menu order and each group's key order.
+
+Add/edit shortcut offers Command and Key sequence modes. Commands have a colon
+prefix and retain automatic Enter execution. Key sequences record literal keys,
+case and special-key tokens, with Ctrl/Alt applied only when requested. Space,
+Tab, Esc, Enter and arrows have explicit recorder buttons; Undo removes a whole
+token. Names and group assignment have separate controls. Complex commands must
+round-trip exactly through the legacy serializer; ambiguous unnamed assignments
+require a name instead of silently changing their keys.
+
+The main editor keeps the enable switch, while Menu appearance contains layout,
+opening effect and haptics settings. The editor uses fixed drawer chrome, keeps
+its list position through edits, and saves the shortcut/group draft atomically.
+
+The editor displays a collapsible Ungrouped section, expanded by default,
+separately from named Groups. This is a visual editor section, not a persisted
+group or submenu. The group picker uses Ungrouped for direct menu entries.
+Reordering within either root section preserves the other section's original
+menu positions; merely opening, collapsing or saving the editor does not
+canonicalize the wheel/grid's root order.
 
 
+## Reusable SSH key library
+
+Preferences → SSH keys manages named private keys and their SHA-256 public-key
+fingerprints. The key library stores one AES-GCM Android-Keystore-encrypted
+secret per identity, with separate endpoint-to-key references. Import validates
+and normalizes the key in the native SSH library, accepting a transient
+passphrase when needed. Duplicate public-key fingerprints select the existing
+entry. Names, fingerprints and references are the only key data exposed to UI
+state; private keys and passphrases are never saved in UI restoration state.
+
+Existing endpoint-specific encrypted keys migrate before network configuration.
+Migration retains their original ciphertext, deduplicates identities when public
+metadata can be read, and preserves a separate entry and binding when metadata
+inspection fails. Saving the new library and removing the legacy map is atomic.
+Forgetting a server clears its binding while retaining its reusable key. Deleting
+a library key requires confirmation and clears only that key's bindings.
+
+SSH server setup offers saved keys, No key for keyless/Tailscale SSH, and adding a
+new key by paste or file import. Names and optional passphrases use separate
+fields. Imported files are bounded at 128 KiB. A new key is added to the library
+and selected in the server draft; the endpoint binding changes only on Save &
+connect. A failed server save restores the previous route and key selection.
+Adding an unassigned key or renaming one does not reconfigure/retry connections.
+
+
+## Hidden TUI cursor input anchors (RXT7)
+
+Ghostty's cursor viewport position and its visible cursor glyph are separate.
+The native frame retains `cursor_position` whenever the position is in the
+viewport, even with DEC mode 25 disabled; the existing `cursor` remains absent
+when the glyph must not be painted. RXT7 appends this optional coordinate pair to
+each full/delta frame after image placements. Android still accepts RXT1–RXT6,
+and validates RXT7 positions against the frame grid before committing a packet.
+
+For a live foreground Claude/Codex pane, TerminalView can use this hidden
+position as its input-row tap target and IME pan anchor. Mouse reporting still
+forwards the original click, with the existing target/ownership/grid guards.
+The input anchor never draws or blinks a cursor. Hidden positions are not used
+for other programs, including Neovim, or while viewing scrollback; existing
+viewport stabilization and keyboard/PTY sizing behavior are unchanged.

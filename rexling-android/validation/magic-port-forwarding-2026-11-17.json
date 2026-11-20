@@ -1,0 +1,19 @@
+{
+  "build": 144,
+  "native": {
+    "passed": 118,
+    "ignored": 18
+  },
+  "jvm": {
+    "tests": 207,
+    "skipped": 1,
+    "failures": 0
+  },
+  "release_lint": "passed",
+  "phone": "SM-S906E",
+  "phone_tests": {
+    "passed": 5,
+    "notes": "Two UI checks retried successfully after waking phone. Live test includes same-port mapping, encoded URL preservation, reuse, five immediate restarts and external-port fallback."
+  },
+  "temporary_fixture": "Isolated API 16 Rex server and HTTP target; no user server modified."
+}

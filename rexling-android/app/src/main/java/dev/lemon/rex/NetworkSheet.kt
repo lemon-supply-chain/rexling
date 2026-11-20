@@ -33,6 +33,7 @@ import kotlinx.coroutines.withTimeoutOrNull
     val scope=rememberCoroutineScope()
     val status by NetworkSettings.status.collectAsState()
     var control by remember {mutableStateOf(NetworkSettings.controlUrl)}
+    var deviceName by remember {mutableStateOf(NetworkSettings.hostname)}
     var error by remember {mutableStateOf<String?>(null)}
     var busy by remember {mutableStateOf(false)}
     var confirmSignOut by remember {mutableStateOf(false)}
@@ -47,7 +48,7 @@ import kotlinx.coroutines.withTimeoutOrNull
         busy=true;error=null
         scope.launch {
             try {
-                error=NetworkSettings.prepareBuiltIn(control)
+                error=NetworkSettings.prepareBuiltIn(control,deviceName)
                 if(error==null) error=NetworkSettings.login()
                 if(error==null) {
                     val url=withTimeoutOrNull(20_000) {
@@ -78,7 +79,9 @@ import kotlinx.coroutines.withTimeoutOrNull
             Text(stringResource(R.string.choose_network_per_server),style=SettingsType.detail)
             OutlinedTextField(control,{control=it},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.control_server_optional))},placeholder={Text("https://headscale.example.com")},singleLine=true)
             Text(stringResource(R.string.control_server_hint),style=SettingsType.detail)
-            Button(enabled=!busy,onClick={busy=true;scope.launch {error=NetworkSettings.prepareBuiltIn(control);busy=false}}) {Text(if(busy) stringResource(R.string.applying) else stringResource(R.string.apply))}
+            OutlinedTextField(deviceName,{deviceName=it},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.device_name))},placeholder={Text(TailscaleHostname.DEFAULT)},singleLine=true)
+            Text(stringResource(R.string.device_name_hint),style=SettingsType.detail)
+            Button(enabled=!busy,onClick={busy=true;scope.launch {error=NetworkSettings.prepareBuiltIn(control,deviceName);busy=false}}) {Text(if(busy) stringResource(R.string.applying) else stringResource(R.string.apply))}
             error?.let {Text(it,color=MaterialTheme.colorScheme.error,style=SettingsType.detail)}
         }
         if(confirmSignOut) SettingsConfirmDialog(
@@ -167,11 +170,8 @@ internal fun tailscalePeers(status: org.json.JSONObject?): List<TailscalePeerSta
                 Text(stringResource(tailscaleStatusLabelRes(state)),style=SettingsType.row)
                 Text(if(state=="Running") stringResource(R.string.tailscale_ready_desc) else if(state=="NeedsMachineAuth") stringResource(R.string.tailscale_machine_auth_desc) else if(state=="Off") stringResource(R.string.tailscale_off_desc) else stringResource(R.string.tailscale_browser_signin_desc),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if(state=="Running") Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                ChromeSymbol(ChromeIcon.CHECK,Modifier.size(22.dp).testTag("Tailscale connected icon"),color=MaterialTheme.colorScheme.primary)
-                TextButton(enabled=!busy,onClick=onSignOut,modifier=Modifier.testTag("Tailscale sign out button")) {
-                    Text(stringResource(R.string.sign_out),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)
-                }
+            if(state=="Running") TextButton(enabled=!busy,onClick=onSignOut,modifier=Modifier.testTag("Tailscale sign out button")) {
+                Text(stringResource(R.string.sign_out),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)
             }
             else if(busy) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp)
             else TextButton(onClick=onSignIn) {Text(if(state=="Off") stringResource(R.string.set_up) else stringResource(R.string.sign_in),style=SettingsType.detail)}
@@ -192,65 +192,6 @@ internal fun tailscalePeers(status: org.json.JSONObject?): List<TailscalePeerSta
         }
         if(networkError.isNotBlank()) Text(networkError,Modifier.padding(start=16.dp,end=16.dp,bottom=16.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)
     }
-}
-
-@Composable internal fun SshKeyEditor(endpoint: String) {
-    val context=LocalContext.current;val scope=rememberCoroutineScope()
-    var source by remember(endpoint) {mutableStateOf<String?>(null)}
-    var pasted by remember(endpoint) {mutableStateOf(false)}
-    var passphrase by remember(endpoint) {mutableStateOf("")}
-    var error by remember(endpoint) {mutableStateOf<String?>(null)}
-    var busy by remember(endpoint) {mutableStateOf(false)}
-    var imported by remember(endpoint) {mutableStateOf(NetworkSettings.hasKey(endpoint))}
-    fun dismiss() {if(!busy) {source=null;passphrase="";error=null;pasted=false}}
-    val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {uri->
-        if(uri!=null) runCatching {context.contentResolver.openInputStream(uri)?.use {stream->
-            val output=java.io.ByteArrayOutputStream();val buffer=ByteArray(4096)
-            while(true) {val count=stream.read(buffer);if(count<0) break;require(output.size()+count<=131072) {"SSH key is too large"};output.write(buffer,0,count)}
-            source=String(output.toByteArray());pasted=false;passphrase="";error=null
-        }}.onFailure {error=it.message}
-    }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-        Text(stringResource(R.string.ssh_key),style=SettingsType.row)
-        Text(if(imported) stringResource(R.string.ssh_key_saved) else stringResource(R.string.ssh_key_optional),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(2.dp)) {
-            TextButton(contentPadding=PaddingValues(horizontal=6.dp,vertical=4.dp),onClick={picker.launch(arrayOf("*/*"))}) {Text(stringResource(R.string.import_file),style=SettingsType.detail)}
-            TextButton(contentPadding=PaddingValues(horizontal=6.dp,vertical=4.dp),onClick={
-                pasted=true;source="";passphrase="";error=null
-                runCatching {
-                    val clip=(context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip
-                    val text=if(clip!=null && clip.itemCount>0) clip.getItemAt(0).text?.toString().orEmpty() else ""
-                    require(text.toByteArray().size<=131072) {"SSH key is too large"}
-                    source=text
-                }.onFailure {error=it.message}
-            }) {Text(stringResource(R.string.paste_key),style=SettingsType.detail)}
-
-            Spacer(Modifier.weight(1f))
-            if(imported) TextButton(contentPadding=PaddingValues(horizontal=6.dp,vertical=4.dp),onClick={scope.launch {NetworkSettings.removeKey(endpoint);imported=false}}) {Text(stringResource(R.string.remove),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)}
-        }
-        if(source==null) error?.let {Text(it,color=MaterialTheme.colorScheme.error,style=SettingsType.detail)}
-    }
-    if(source!=null) AlertDialog(onDismissRequest={dismiss()},title={Text(if(pasted) stringResource(R.string.paste_ssh_key) else stringResource(R.string.import_ssh_key),style=SettingsType.title)},text={
-        Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.ssh_key_encrypted_hint),style=SettingsType.detail)
-            if(pasted) OutlinedTextField(source.orEmpty(),{text->
-                if(text.toByteArray().size<=131072) {source=text;error=null} else error="SSH key is too large"
-            },Modifier.fillMaxWidth(),label={Text(stringResource(R.string.private_key))},supportingText={Text(stringResource(R.string.private_key_lines_hint),style=SettingsType.detail)},
-                minLines=3,maxLines=5,enabled=!busy,textStyle=SettingsType.detail,
-                visualTransformation=PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,autoCorrectEnabled=false))
-            OutlinedTextField(passphrase,{passphrase=it;error=null},label={Text(stringResource(R.string.passphrase_optional))},visualTransformation=PasswordVisualTransformation(),singleLine=true,textStyle=SettingsType.body,
-                enabled=!busy,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,autoCorrectEnabled=false))
-            error?.let {Text(it,color=MaterialTheme.colorScheme.error,style=SettingsType.detail)}
-        }
-    },confirmButton={TextButton(enabled=!busy && !source.isNullOrBlank(),onClick={
-        val key=source.orEmpty();val phrase=passphrase;busy=true
-        scope.launch {
-            error=runCatching {NetworkSettings.importKey(endpoint,key,phrase)}.getOrElse {"Could not import SSH key"}
-            busy=false
-            if(error==null) {source=null;passphrase="";imported=true;pasted=false}
-        }
-    }) {Text(if(busy) stringResource(R.string.importing) else stringResource(R.string.import_action))}},dismissButton={TextButton(enabled=!busy,onClick={dismiss()}) {Text(stringResource(R.string.cancel))}})
-
 }
 
 @Composable internal fun NetworkPrompts() {

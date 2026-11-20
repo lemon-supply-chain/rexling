@@ -32,9 +32,12 @@ import dev.chrisbanes.haze.HazeState
     val context=LocalContext.current
     var editing by remember {mutableStateOf(false)}
     val canAdd=servers.any {it.connected && it.session.isNotBlank()} && PortForwards.items.size<64
+    // Built outside the sheet on purpose: the frost redraws when its host window draws, and inside the
+    // sheet that host is the sheet's own window, which then redraws itself every frame while open.
+    val frost=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
         containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
-        Column(Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).padding(bottom=4.dp)) {
+        Column(frost.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).padding(bottom=4.dp)) {
             DrawerHandle()
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
                 Text(stringResource(R.string.port_forwarding),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold)
@@ -61,7 +64,7 @@ import dev.chrisbanes.haze.HazeState
                     }
                     items(entries,key={it.id}) {item->
                         val actionDesc=stringResource(if(item.running) R.string.stop_forward else R.string.start_forward)
-                        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh,RoundedCornerShape(12.dp)).padding(start=4.dp,end=0.dp,top=4.dp,bottom=4.dp)) {
+                        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),RoundedCornerShape(12.dp)).padding(start=4.dp,end=0.dp,top=4.dp,bottom=4.dp)) {  // alpha-ok item surface
                             Row(Modifier.heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
                                 val stateColor=when(item.phase) {
                                     "active"->MaterialTheme.colorScheme.primary

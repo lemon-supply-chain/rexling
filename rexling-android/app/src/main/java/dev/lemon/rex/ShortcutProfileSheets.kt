@@ -22,9 +22,15 @@ import androidx.compose.ui.unit.dp
 @Composable internal fun ShortcutProfilesSheet(profiles: List<ShortcutProfile>,onEdit: (String)->Unit,onNew: ()->Unit,onEnabled: (String,Boolean)->Unit,onClose: ()->Unit,
     layout: NeovimShortcutLayout=NeovimShortcutLayout.CIRCULAR,onLayout: (NeovimShortcutLayout)->Unit={},
     effect: NeovimShortcutEffect=NeovimShortcutEffect.FAN_OUT,onEffect: (NeovimShortcutEffect)->Unit={},
-    hapticsEnabled: Boolean=true,onHaptics: (Boolean)->Unit={}) {
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface) {
-        Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
+    hapticsEnabled: Boolean=true,onHaptics: (Boolean)->Unit={},hazeState: dev.chrisbanes.haze.HazeState?=null) {
+    val frost=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
+    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
+        containerColor=androidx.compose.ui.graphics.Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,
+        tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            Column(frost.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                DrawerHandle()
+                Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
             SettingsHeader(stringResource(R.string.shortcuts),stringResource(R.string.close_shortcuts),onClose,subtitle=stringResource(R.string.shortcuts_subtitle))
             SettingsSection(stringResource(R.string.shortcut_profiles)) {
                 profiles.forEachIndexed {index,profile->
@@ -60,6 +66,8 @@ import androidx.compose.ui.unit.dp
             Text(stringResource(R.string.shortcuts_hint),
                 style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        }
+        }
     }
 }
 
@@ -88,7 +96,7 @@ internal fun shortcutCount(items: List<NeovimShortcut>): String {
 /** Edits one profile, or creates one when [profile] is null. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun ShortcutProfileSheet(profile: ShortcutProfile?,onSave: (name: String,match: String,prefix: String,enter: ShortcutEnter,shortcuts: String)->String?,
-    onClose: ()->Unit,onDelete: (()->Unit)?=null,defaults: List<NeovimShortcut>?=null) {
+    onClose: ()->Unit,onDelete: (()->Unit)?=null,defaults: List<NeovimShortcut>?=null,hazeState: dev.chrisbanes.haze.HazeState?=null) {
     var name by rememberSaveable {mutableStateOf(profile?.name.orEmpty())}
     var match by rememberSaveable {mutableStateOf(profile?.matchText.orEmpty())}
     var prefix by rememberSaveable {mutableStateOf(profile?.prefix.orEmpty())}
@@ -98,8 +106,14 @@ internal fun shortcutCount(items: List<NeovimShortcut>): String {
     var deleting by remember {mutableStateOf(false)}
     val defaultTitle=stringResource(R.string.new_profile)
     val title=profile?.name ?: defaultTitle
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface) {
-        Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+    val frost=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
+    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
+        containerColor=androidx.compose.ui.graphics.Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,
+        tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            Column(frost.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                DrawerHandle()
+                Column(Modifier.fillMaxWidth().heightIn(max=680.dp).verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
             SettingsHeader(title,stringResource(R.string.close_title_format,title),onClose)
             SettingsTextField(stringResource(R.string.name),name,{name=it;error=null})
             SettingsTextField(stringResource(R.string.programs),match,{match=it;error=null},mono=true,
@@ -129,6 +143,8 @@ internal fun shortcutCount(items: List<NeovimShortcut>): String {
                 Spacer(Modifier.weight(1f))
                 Button(onClick={error=onSave(name,match,prefix,enter,draft);if(error==null) onClose()}) {Text(stringResource(R.string.save))}
             }
+        }
+        }
         }
     }
     if(deleting && onDelete!=null) SettingsConfirmDialog(stringResource(R.string.delete_profile_title,title),stringResource(R.string.delete_profile_confirm),stringResource(R.string.delete),

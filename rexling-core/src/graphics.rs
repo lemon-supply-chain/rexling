@@ -186,7 +186,11 @@ pub(crate) struct Images {
 impl Images {
     /// `rows` is the viewport height: placements wholly inside the overscan
     /// rows (captured for smooth scrolling) aren't drawn, matching no overscan.
-    pub fn frame(&mut self, terminal: *mut c_void, rows: u16) -> Result<(u32, u32, Vec<Placement>)> {
+    pub fn frame(
+        &mut self,
+        terminal: *mut c_void,
+        rows: u16,
+    ) -> Result<(u32, u32, Vec<Placement>)> {
         self.placements.clear();
         let mut cw = 0;
         let mut ch = 0;
@@ -221,15 +225,13 @@ impl Images {
                 ) else {
                     return;
                 };
-                entry.insert(
-                    Arc::new(Image {
-                        id: r.id,
-                        generation: r.generation,
-                        width: r.width,
-                        height: r.height,
-                        rgba: rgba.into(),
-                    }),
-                );
+                entry.insert(Arc::new(Image {
+                    id: r.id,
+                    generation: r.generation,
+                    width: r.width,
+                    height: r.height,
+                    rgba: rgba.into(),
+                }));
             }
             this.placements.push(Placement {
                 image: this.cache[&key].clone(),
@@ -340,14 +342,20 @@ mod tests {
         let pending = terminal.frame().unwrap();
         assert!(!pending.images.is_empty());
         assert_eq!(&*pending.images[0].image.rgba, &original);
-        assert!(Arc::ptr_eq(&before.images[0].image, &pending.images[0].image));
+        assert!(Arc::ptr_eq(
+            &before.images[0].image,
+            &pending.images[0].image
+        ));
         terminal
             .write(format!("\x1b_Gm=0;{last}\x1b\\").as_bytes())
             .unwrap();
         let complete = terminal.frame().unwrap();
         assert!(!complete.images.is_empty());
         assert_eq!(&*complete.images[0].image.rgba, &replacement);
-        assert!(!Arc::ptr_eq(&before.images[0].image, &complete.images[0].image));
+        assert!(!Arc::ptr_eq(
+            &before.images[0].image,
+            &complete.images[0].image
+        ));
     }
     #[test]
     fn png_decoder_and_chunked_transmission_preserve_alpha() {
@@ -454,4 +462,3 @@ mod tests {
         assert_eq!(&*second.images[0].image.rgba, &[0; 8]);
     }
 }
-

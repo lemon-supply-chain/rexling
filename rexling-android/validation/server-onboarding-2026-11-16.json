@@ -1,0 +1,21 @@
+{
+  "build": 139,
+  "jvm": {
+    "tests": 205,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "lint_release": "passed",
+  "phone_tests": "10 passed on SM-S948B; network-card theme screenshot test repeated with full Surface fixture",
+  "coverage": [
+    "Empty state Add server action",
+    "No network choices until a valid endpoint is entered",
+    "Two per-server routes only, with legacy route migration",
+    "Connected replaces sign-in actions and ignores stale AuthURL",
+    "Active device and direct/relay rows grouped inside status card",
+    "Compact SSH editor in both themes",
+    "Add server plus uses button content color"
+  ],
+  "apk_verification": "passed"
+}

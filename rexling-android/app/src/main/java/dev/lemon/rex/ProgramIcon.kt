@@ -67,14 +67,9 @@ import kotlin.math.sin
     Canvas(modifier.semantics { contentDescription = progress?.description ?: "Countdown" }) {
         val u = size.minDimension / 24f
         val cx = size.width / 2f
-        val cy = size.height / 2f + 0.8f * u
-        val r = 7.2f * u
+        val cy = size.height / 2f
+        val r = 8.5f * u
         val strokeW = 1.6f * u
-
-        // Top crown/knob
-        val crownY = cy - r - 2.4f * u
-        drawLine(tint, Offset(cx - 2.2f * u, crownY), Offset(cx + 2.2f * u, crownY), 1.5f * u, StrokeCap.Round)
-        drawLine(tint, Offset(cx, crownY), Offset(cx, cy - r), 1.4f * u, StrokeCap.Round)
 
         // Outer dial track
         drawCircle(tint.copy(alpha = 0.22f), radius = r, center = Offset(cx, cy), style = Stroke(strokeW))

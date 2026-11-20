@@ -29,11 +29,15 @@ internal object NetworkSettings {
     private val mutex=Mutex()
     val status=MutableStateFlow(JSONObject())
     val revision=MutableStateFlow(0L)
+    val sshKeys=MutableStateFlow<List<SshKeyInfo>>(emptyList())
+    val sshKeyBindings=MutableStateFlow<Map<String,String>>(emptyMap())
     private val preferences get()=context.getSharedPreferences("network",Context.MODE_PRIVATE)
     val builtIn get()=preferences.getBoolean("built_in",false)
     fun route(endpoint: String)=ServerNetworkRoute.decode(JSONObject(preferences.getString("routes","{}")!!).optString(endpoint))
     val tailscaleEnabled get()=!preferences.getBoolean("tailscale_suspended",false) && (builtIn || preferences.getBoolean("tailscale_prepared",false) || JSONObject(preferences.getString("routes","{}")!!).let {routes->routes.keys().asSequence().any {routes.optString(it)=="builtin"}})
     val controlUrl get()=preferences.getString("control_url","").orEmpty()
+    /** The built-in Tailscale device name; blank means the default, rexling-android. */
+    val hostname get()=preferences.getString("tailscale_hostname","").orEmpty()
     private fun vaultKey(): SecretKey {
         val store=KeyStore.getInstance("AndroidKeyStore").apply {load(null)}
         (store.getKey("rexling-ssh",null) as? SecretKey)?.let {return it}
@@ -50,8 +54,25 @@ internal object NetworkSettings {
         val bytes=Base64.decode(text,Base64.NO_WRAP)
         return String(Cipher.getInstance("AES/GCM/NoPadding").apply {init(Cipher.DECRYPT_MODE,vaultKey(),GCMParameterSpec(128,bytes.copyOfRange(0,12)))}.doFinal(bytes.copyOfRange(12,bytes.size)))
     }
-    private fun keys()=JSONObject(preferences.getString("keys","{}")!!)
-    fun hasKey(endpoint: String)=keys().has(endpoint)
+    private fun keyLibrary()=SshKeyLibrary(preferences.getString("ssh_library",null))
+    fun selectedKey(endpoint: String)=keyLibrary().selected(endpoint)
+    fun hasKey(endpoint: String)=selectedKey(endpoint)!=null
+    fun keyEndpoints(id: String)=keyLibrary().endpoints(id)
+    private fun refreshLibrary(library: SshKeyLibrary) {sshKeys.value=library.list();sshKeyBindings.value=library.assigned()}
+    private fun saveLibrary(library: SshKeyLibrary) {
+        check(preferences.edit().putString("ssh_library",library.encode()).commit()) {"Could not save SSH keys"}
+        refreshLibrary(library)
+    }
+    private fun migrateKeys() {
+        if(!preferences.contains("ssh_library")) {
+            val library=SshKeyLibrary.migrate(JSONObject(preferences.getString("keys","{}")!!)) {encrypted->
+                val info=command("import_key",JSONObject().put("key",decrypt(encrypted)))
+                info.getString("fingerprint") to info.getString("kind")
+            }
+            check(preferences.edit().putString("ssh_library",library.encode()).remove("keys").commit()) {"Could not migrate SSH keys"}
+        }
+        refreshLibrary(keyLibrary())
+    }
     private fun command(type: String,body: JSONObject=JSONObject()): JSONObject = JSONObject(NativeBridge.networkCommand(body.put("type",type).toString()))
     fun initialize(application: Context) {
         context=application.applicationContext as Application
@@ -62,6 +83,7 @@ internal object NetworkSettings {
             preferences.edit().putString("routes",routes.toString()).putBoolean("tailscale_prepared",tailscaleEnabled)
                 .putBoolean("built_in",false).putBoolean("per_server_routes",true).commit()
         }
+        migrateKeys()
         // Install configuration before any terminal or monitoring service can connect.
         interfaces()
         configure()
@@ -88,9 +110,9 @@ internal object NetworkSettings {
         command("interfaces",JSONObject().put("interfaces",list))
     }
     private fun configure(): String? {
-        val ssh=JSONObject();val saved=keys()
-        saved.keys().forEach {endpoint->runCatching {ssh.put(endpoint,JSONObject().put("key",decrypt(saved.getString(endpoint))))}}
-        val config=JSONObject().put("built_in",builtIn).put("control_url",controlUrl).put("directory",context.filesDir.resolve("tailscale").absolutePath)
+        val ssh=JSONObject();val library=keyLibrary()
+        library.assigned().forEach {(endpoint,id)->runCatching {ssh.put(endpoint,JSONObject().put("key",decrypt(library.secret(id))))}}
+        val config=JSONObject().put("built_in",builtIn).put("control_url",controlUrl).put("hostname",hostname).put("directory",context.filesDir.resolve("tailscale").absolutePath)
             .put("built_in_suspended",preferences.getBoolean("tailscale_suspended",false)).put("built_in_enabled",tailscaleEnabled).put("routes",JSONObject(preferences.getString("routes","{}")!!))
             .put("ssh",ssh).put("trusted",JSONObject(preferences.getString("trusted","{}")!!))
         val error=command("configure",JSONObject().put("config",config)).optString("error").takeIf {it.isNotEmpty()}
@@ -113,13 +135,14 @@ internal object NetworkSettings {
         preferences.edit().putString("routes",routes.toString()).commit()
         configure()
     }}
-    suspend fun prepareBuiltIn(url: String): String? = withContext(Dispatchers.IO) {mutex.withLock {
+    suspend fun prepareBuiltIn(url: String,name: String=hostname): String? = withContext(Dispatchers.IO) {mutex.withLock {
         val trimmed=url.trim().trimEnd('/')
         if(trimmed.isNotEmpty()) {
             val uri=runCatching {java.net.URI(trimmed)}.getOrNull()
             if(uri==null || uri.scheme !in listOf("http","https") || uri.host.isNullOrEmpty() || uri.userInfo!=null || uri.query!=null || uri.fragment!=null) return@withLock "Enter a complete control server HTTP(S) URL"
         }
-        preferences.edit().putBoolean("tailscale_suspended",false).putBoolean("tailscale_prepared",true).putString("control_url",trimmed).commit();configure()
+        val device=TailscaleHostname.normalize(name) ?: return@withLock context.getString(R.string.device_name_error)
+        preferences.edit().putBoolean("tailscale_suspended",false).putBoolean("tailscale_prepared",true).putString("control_url",trimmed).putString("tailscale_hostname",device).commit();configure()
     }}
     suspend fun cancelLogin(): String? = withContext(Dispatchers.IO) {mutex.withLock {
         val response=command("cancel_login")
@@ -142,26 +165,58 @@ internal object NetworkSettings {
         error
     }}
     suspend fun refreshStatus()=withContext(Dispatchers.IO) {status.value=command("status")}
-    suspend fun importKey(endpoint: String,text: String,passphrase: String): String? = withContext(Dispatchers.IO) {mutex.withLock {
-        if(text.toByteArray().size>131072) return@withLock "SSH key is too large"
+    suspend fun addKey(name: String,text: String,passphrase: String): SshKeyImportResult = withContext(Dispatchers.IO) {mutex.withLock {
+        if(name.trim().isEmpty() || name.trim().length>80) return@withLock SshKeyImportResult(error="Enter a key name of up to 80 characters")
+        if(text.toByteArray().size>131072) return@withLock SshKeyImportResult(error="SSH key is too large")
         val response=command("import_key",JSONObject().put("key",text).put("passphrase",passphrase))
-        if(response.has("error")) return@withLock response.getString("error")
-        val saved=keys().put(endpoint,encrypt(response.getString("key")))
-        preferences.edit().putString("keys",saved.toString()).commit();configure()
+        if(response.has("error")) return@withLock SshKeyImportResult(error=response.getString("error"))
+        val library=keyLibrary()
+        val id=library.add(name,response.getString("fingerprint"),response.getString("kind"),encrypt(response.getString("key")))
+        saveLibrary(library) // An unassigned key must not restart any connections.
+        SshKeyImportResult(id=id)
     }}
-    suspend fun removeKey(endpoint: String)=withContext(Dispatchers.IO) {mutex.withLock {val saved=keys();saved.remove(endpoint);preferences.edit().putString("keys",saved.toString()).commit();configure()}}
+    suspend fun assignKey(endpoint: String,id: String?): String? = withContext(Dispatchers.IO) {mutex.withLock {
+        val library=keyLibrary()
+        if(library.selected(endpoint)==id) return@withLock null
+        library.assign(endpoint,id);saveLibrary(library);configure()
+    }}
+    suspend fun renameKey(id: String,name: String): String? = withContext(Dispatchers.IO) {mutex.withLock {
+        val library=keyLibrary();library.rename(id,name);saveLibrary(library);null
+    }}
+    suspend fun deleteKey(id: String): String? = withContext(Dispatchers.IO) {mutex.withLock {
+        val library=keyLibrary();val used=library.endpoints(id).isNotEmpty()
+        library.remove(id);saveLibrary(library);if(used) configure() else null
+    }}
+    suspend fun importKey(endpoint: String,text: String,passphrase: String): String? {
+        val result=addKey("${runCatching {java.net.URI(endpoint).host}.getOrNull() ?: "Imported"} key",text,passphrase)
+        return result.error ?: assignKey(endpoint,result.id)
+    }
+    suspend fun removeKey(endpoint: String)=assignKey(endpoint,null)
     suspend fun trust(host: String,fingerprint: String)=withContext(Dispatchers.IO) {mutex.withLock {
         val trusted=JSONObject(preferences.getString("trusted","{}")!!).put(host,fingerprint)
         preferences.edit().putString("trusted",trusted.toString()).commit();configure()
     }}
     fun forget(endpoint: String,remaining: List<String>) {scope.launch {mutex.withLock {
-        val saved=keys();saved.remove(endpoint)
+        val library=keyLibrary();if(endpoint !in remaining) library.assign(endpoint,null)
         val trusted=JSONObject(preferences.getString("trusted","{}")!!)
         fun authority(value: String): String? = runCatching {val uri=java.net.URI(value);val host=uri.host.removePrefix("[").removeSuffix("]");if(uri.scheme!="ssh") null else "${if(host.contains(':')) "[$host]" else host}:${if(uri.port<0) 22 else uri.port}"}.getOrNull()
         authority(endpoint)?.let {host->if(remaining.none {authority(it)==host}) trusted.remove(host)}
         val routes=JSONObject(preferences.getString("routes","{}")!!)
         if(endpoint !in remaining) routes.remove(endpoint)
-        preferences.edit().putString("keys",saved.toString()).putString("trusted",trusted.toString()).putString("routes",routes.toString()).commit();configure()
+        saveLibrary(library)
+        preferences.edit().putString("trusted",trusted.toString()).putString("routes",routes.toString()).commit();configure()
     }}}
     suspend fun login(): String? = withContext(Dispatchers.IO) {command("login").optString("error").takeIf {it.isNotEmpty()}}
+}
+
+/** Validation for the built-in Tailscale device name: one DNS label, as Tailscale machine names are. */
+internal object TailscaleHostname {
+    const val DEFAULT="rexling-android"
+    private val label=Regex("[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
+    /** The name to store: blank for the default, lower-cased otherwise; null if Tailscale would not accept it. */
+    fun normalize(raw: String): String? {
+        val name=raw.trim().lowercase()
+        if(name.isEmpty()) return ""
+        return name.takeIf {label.matches(it)}
+    }
 }

@@ -1,0 +1,38 @@
+{
+  "build": 163,
+  "behavior": "Selected terminal renders at READY and imports history and image pixels progressively until FINISH.",
+  "protocol_unchanged": true,
+  "all_history_still_downloaded": true,
+  "checks": {
+    "core_native_passed": 39,
+    "actor_native_passed": 63,
+    "actor_native_ignored": 15,
+    "android_unit_tests": 223,
+    "android_unit_skipped": 1,
+    "android_unit_failures": 0,
+    "lint": "passed",
+    "apk_signature_and_16k_alignment": "passed",
+    "installed_release_sha256": "27a8daf1510d517bc85331ce077620cd5ad9e434405a282ca931b53cb185dc05",
+    "installed_hash_matches": true,
+    "phone_shipyard_terminal_visible": true
+  },
+  "real_read_only_shipyard_stream": {
+    "first_render_ms": 517,
+    "bytes_received_at_first_render": 131072,
+    "snapshot_bytes": 22714465,
+    "complete_restore_and_comparison_ms": 2090,
+    "final_text_matches_one_shot_decoder": true,
+    "note": "Host native protocol check, not an Android frame-time benchmark. Completion timing includes verification against the one-shot decoder."
+  },
+  "coverage": [
+    "actor renders while history transfer is held back",
+    "every-byte fragmentation",
+    "scroll viewport stays anchored during history prepends",
+    "prefix and history CRC failures",
+    "late Kitty pixels after an initial render",
+    "history image placements",
+    "clipboard writes are not replayed from snapshots",
+    "live VT begins only after FINISH",
+    "one-shot previews still wait for complete images"
+  ]
+}

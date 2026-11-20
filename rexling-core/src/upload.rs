@@ -58,11 +58,11 @@ pub async fn upload(
     let mut phase = Phase::Preparing;
     let mut ws: Option<Ws> = None;
     let operation = async {
-        let mut file = std::fs::File::open(request.path).context("Could not read staged image")?;
+        let mut file = std::fs::File::open(request.path).context("Could not read staged file")?;
         let size = file.metadata()?.len();
         ensure!(
             size > 0 && size <= 100 * 1024 * 1024,
-            "Choose an image smaller than 100 MiB"
+            "Choose a file smaller than 100 MiB"
         );
         let mut control = Control::connect_upload(request.endpoint.clone()).await?;
         if control.welcome()["api_revision"].as_u64().unwrap_or(0) < 11 {
@@ -83,7 +83,7 @@ pub async fn upload(
                 }
                 if let Some(rpc) = error.downcast_ref::<RpcError>() {
                     match rpc.code.as_str() {
-                        "too_large" => bail!("This image exceeds the Rex server's upload limit"),
+                        "too_large" => bail!("This file exceeds the Rex server's upload limit"),
                         "conflict" => {
                             bail!("Rex cannot accept this upload right now. Try again shortly")
                         }
@@ -125,7 +125,7 @@ pub async fn upload(
         while sent < size {
             let limit = ((size - sent) as usize).min(buffer.len());
             let count = file.read(&mut buffer[..limit])?;
-            ensure!(count > 0, "Staged image changed during upload");
+            ensure!(count > 0, "Staged file changed during upload");
             tokio::time::timeout(
                 Duration::from_secs(30),
                 stream.send(Message::Binary(buffer[..count].to_vec().into())),
@@ -163,7 +163,7 @@ pub async fn upload(
         }
         ensure!(
             file.read(&mut [0u8; 1])? == 0,
-            "Staged image changed during upload"
+            "Staged file changed during upload"
         );
         // Anything after attempting EOF may have inserted the path: never offer a blind retry.
         phase = Phase::Finishing;
@@ -176,7 +176,7 @@ pub async fn upload(
                         let _ = stream.flush().await;
                         return Ok::<(), anyhow::Error>(());
                     }
-                    Message::Close(_) => bail!("Server refused the image upload"),
+                    Message::Close(_) => bail!("Server refused the file upload"),
                     Message::Ping(_) | Message::Pong(_) => stream.flush().await?,
                     _ => bail!("Unexpected upload response"),
                 }
@@ -205,7 +205,7 @@ pub async fn upload(
         Some(Err(error)) if phase == Phase::Finishing => (
             Phase::Uncertain,
             format!(
-                "The image may have been inserted. Check the original pane before trying again. {error}"
+                "The file may have been inserted. Check the original pane before trying again. {error}"
             ),
         ),
         Some(Err(error)) => (Phase::Failed, error.to_string()),

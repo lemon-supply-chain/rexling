@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.layout
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -35,9 +36,19 @@ internal class TerminalImePanState {
     }
 }
 
-/** Panning policies keep the full-height grid; RESIZE programs let the view and PTY shrink. */
+/** How much of the window bottom the keyboard covers above the navigation bar, in px. */
+private fun androidx.compose.ui.unit.Density.keyboardCover(ime: WindowInsets,navigation: WindowInsets)=
+    (ime.getBottom(this)-navigation.getBottom(this)).coerceAtLeast(0)
+
+/**
+ * Only the visible window shrinks for the IME; the PTY keeps its full-height grid.
+ *
+ * [keyboardChrome] is the full height of chrome shown only with the keyboard (an auto-hidden key
+ * toolbar, laid out by [keyboardRevealed]), in px. It is revealed as far as the keyboard covers, so
+ * counting the same amount as covered keeps one terminal height, and one PTY size, on every frame.
+ */
 @Composable
-internal fun Modifier.terminalImeViewport(ime: WindowInsets,navigation: WindowInsets,anchor: ImeAnchor,focus: ()->TerminalKeyboardFocus?): Modifier {
+internal fun Modifier.terminalImeViewport(ime: WindowInsets,navigation: WindowInsets,anchor: ImeAnchor=ImeAnchor.CURSOR,keyboardChrome: ()->Int={0},focus: ()->TerminalKeyboardFocus?): Modifier {
     val pan=remember {TerminalImePanState()}
     return layout {measurable,constraints->
         if(anchor==ImeAnchor.RESIZE) {
@@ -48,7 +59,8 @@ internal fun Modifier.terminalImeViewport(ime: WindowInsets,navigation: WindowIn
             val child=measurable.measure(constraints)
             layout(child.width,child.height) {child.placeRelative(0,0)}
         } else {
-            val covered=(ime.getBottom(this)-navigation.getBottom(this)).coerceAtLeast(0)
+            val keyboard=keyboardCover(ime,navigation)
+            val covered=keyboard+minOf(keyboardChrome().coerceAtLeast(0),keyboard)
             val fullHeight=constraints.maxHeight+covered
             val child=measurable.measure(constraints.copy(minHeight=fullHeight,maxHeight=fullHeight))
             layout(child.width,constraints.maxHeight) {
@@ -67,3 +79,16 @@ internal fun terminalImePan(focus: TerminalKeyboardFocus?,visibleHeight: Int,cov
     val limit=minOf(covered,floor(focus.top).toInt().coerceAtLeast(0))
     return ceil((bottom-visibleHeight).coerceAtLeast(0f)).toInt().coerceAtMost(limit)
 }
+
+/**
+ * Shows only as much of this chrome as the keyboard currently covers, so it rides in and out with the
+ * keyboard's own animation instead of switching on a visibility flag a frame or two late.
+ * [onFullHeight] receives the unclipped height for [terminalImeViewport].
+ */
+internal fun Modifier.keyboardRevealed(ime: WindowInsets,navigation: WindowInsets,onFullHeight: (Int)->Unit): Modifier =
+    clipToBounds().layout {measurable,constraints->
+        val child=measurable.measure(constraints.copy(minHeight=0))
+        onFullHeight(child.height)
+        val shown=minOf(child.height,keyboardCover(ime,navigation))
+        layout(child.width,shown) {child.placeRelative(0,0)}
+    }

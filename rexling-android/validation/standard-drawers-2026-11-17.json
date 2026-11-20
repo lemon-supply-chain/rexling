@@ -1,0 +1,34 @@
+{
+  "build": 153,
+  "scope": [
+    "Port forwarding",
+    "Preferences",
+    "Servers",
+    "Appearance",
+    "Network",
+    "Neovim shortcuts",
+    "About",
+    "Font size",
+    "Background alerts"
+  ],
+  "existing_reference_drawers": [
+    "Activity",
+    "Sessions",
+    "Tabs/Panes"
+  ],
+  "style": {
+    "header_min_dp": 48,
+    "horizontal_margin_dp": 16,
+    "row_radius_dp": 12,
+    "row_surface_alpha": 0.45,
+    "background": "drawerFrost",
+    "safe_bottom_insets": true
+  },
+  "checks": {
+    "phone_tests_passed": 12,
+    "release_lint": "passed",
+    "diff_check": "passed",
+    "upload_and_forwarding_popup_tests_passed": 2
+  },
+  "notes": "Shared upload/forwarding notice surface uses the existing light-blue tint, typography, padding and controls. Forwarding rows retain circular blue play/stop controls, status dot before the port, aligned URL and Copy/Remove columns. Confirmation and text-entry prompts remain dialogs."
+}

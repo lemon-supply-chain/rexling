@@ -94,10 +94,15 @@
     <string name="use_joystick">Use joystick for arrows</string>
     <string name="use_joystick_detail_on">Hold and slide; double-tap for arrow buttons</string>
     <string name="use_joystick_detail_off">Tap for arrow buttons</string>
+    <string name="keyboard_enter_sends">Keyboard Enter sends</string>
+    <string name="keyboard_enter_sends_detail_on">Submits, like a hardware Enter. Hold toolbar Shift for a newline.</string>
+    <string name="keyboard_enter_sends_detail_off">A newline. Programs such as Claude Code insert a line instead of submitting.</string>
     <string name="ctrl_shortcuts">Ctrl shortcuts</string>
     <string name="ctrl_shortcuts_detail">Open the ^ shortcut list with</string>
     <string name="ctrl_gesture_hold">Hold</string>
     <string name="ctrl_gesture_double_tap">Double tap</string>
+    <string name="ctrl_shortcut_buttons">Ctrl shortcut buttons</string>
+    <string name="ctrl_shortcut_buttons_detail">Customize keys and key sequences</string>
     <string name="neovim_shortcuts">Neovim shortcuts</string>
     <string name="neovim_shortcuts_detail">Customize the floating key menu</string>
     <string name="background_alerts">Background alerts</string>
@@ -279,6 +284,8 @@
     <!-- Network -->
     <string name="network">Network</string>
     <string name="network_detail">Built-in Tailscale and control server</string>
+    <string name="ssh_keys">SSH keys</string>
+    <string name="ssh_keys_detail">Save and reuse private keys across servers</string>
     <string name="close_network_settings">Close network settings</string>
     <string name="current_server">Current server</string>
     <string name="builtin_tailscale">Built-in Tailscale</string>
@@ -424,7 +431,6 @@
     <string name="a11y_control">Control</string>
     <string name="a11y_control_shortcuts">Control shortcuts</string>
     <string name="a11y_control_letter">Control %1$s</string>
-    <string name="a11y_close_tab_and_pane_switcher">Close tab and pane switcher</string>
     <string name="a11y_tab_and_pane_pages">Tab and pane pages</string>
     <string name="label_layout_unavailable">Layout unavailable</string>
     <string name="label_float_pane">Float pane</string>
@@ -486,7 +492,14 @@
     <string name="label_next_command_short">Next</string>
     <string name="label_notification">Notification</string>
     <string name="label_ok">OK</string>
-    <string name="label_image_upload">Image upload</string>
+    <string name="file_upload">File upload</string>
+    <string name="upload_preparing">Preparing file</string>
+    <string name="upload_uploading">Uploading file</string>
+    <string name="upload_finishing">Finishing upload</string>
+    <string name="upload_uploaded">File uploaded</string>
+    <string name="upload_failed">Upload failed</string>
+    <string name="a11y_dismiss_upload_error">Dismiss upload error</string>
+    <string name="a11y_cancel_file_upload">Cancel file upload</string>
     <string name="a11y_shortcuts_format">%1$s shortcuts</string>
     <string name="a11y_shortcut_menu_format">%1$s shortcut menu</string>
     <string name="a11y_shortcut_pages_format">%1$s shortcut pages</string>
@@ -514,4 +527,88 @@
     <string name="label_close_tab_confirm_one">Close “%1$s”? This ends the program in its pane.</string>
     <string name="label_close_tab_confirm_many">Close “%1$s”? This ends every program in its %2$d panes.</string>
     <string name="label_close_pane_confirm">Close “%1$s”? This ends the program running in this pane.</string>
+
+    <!-- Ctrl Shortcuts -->
+    <string name="ctrl_shortcuts_title">Ctrl shortcuts</string>
+    <string name="close_ctrl_shortcuts">Close Ctrl shortcut settings</string>
+    <string name="ctrl_shortcuts_drag_hint">Tap to edit · hold and drag to reorder</string>
+    <string name="add_shortcut">Add shortcut</string>
+    <string name="a11y_ctrl_shortcut_list">Ctrl shortcut list</string>
+    <string name="a11y_edit_ctrl_shortcut">Edit Ctrl shortcut %1$s</string>
+    <string name="a11y_remove_ctrl_shortcut">Remove Ctrl shortcut %1$s</string>
+    <string name="move_up">Move up</string>
+    <string name="move_down">Move down</string>
+    <string name="add_ctrl_shortcut">Add Ctrl shortcut</string>
+    <string name="edit_ctrl_shortcut">Edit Ctrl shortcut</string>
+    <string name="cancel_ctrl_recording">Cancel Ctrl shortcut recording</string>
+    <string name="ctrl_recording_hint">Ctrl is included for the first key. Each following key is added to the sequence.</string>
+    <string name="no_keys_recorded">No keys recorded</string>
+    <string name="press_keys">Press keys</string>
+    <string name="press_keys_placeholder">Tap here, then type your keys</string>
+    <string name="ctrl_for_next_key">Ctrl for next key</string>
+    <string name="undo">Undo</string>
+    <string name="clear">Clear</string>
+    <string name="name_optional">Name (optional)</string>
+    <string name="a11y_prev_ctrl_page">Previous Ctrl shortcuts page</string>
+    <string name="a11y_next_ctrl_page">Next Ctrl shortcuts page</string>
+
+    <!-- SSH Keys -->
+    <string name="no_key">No key</string>
+    <string name="no_key_tailscale">No key (Tailscale SSH)</string>
+    <string name="ssh_key_connect_without">Connect without a key when the host supports it.</string>
+    <string name="ssh_key_saved_securely">Saved securely on this phone</string>
+    <string name="paste_new_key">Paste new key</string>
+    <string name="import_new_key">Import new key</string>
+    <string name="close_ssh_keys">Close SSH keys</string>
+    <string name="ssh_keys_reuse_desc">Reuse a key across your servers.</string>
+    <string name="add_key">Add key</string>
+    <string name="no_ssh_keys_yet">No SSH keys yet. Add a private key here or during server setup.</string>
+    <string name="imported_key">Imported key</string>
+    <string name="not_assigned">Not assigned</string>
+    <string name="server_count_one">1 server</string>
+    <string name="server_count_many">%1$d servers</string>
+    <string name="delete_ssh_key_desc">Delete SSH key %1$s</string>
+    <string name="ssh_keys_encryption_note">Private keys are encrypted on this phone. Removing a server keeps its key in this library.</string>
+    <string name="rename_ssh_key">Rename SSH key</string>
+    <string name="delete_ssh_key_title">Delete SSH key?</string>
+    <string name="delete_ssh_key_confirm_single">This removes the key from this phone.</string>
+    <string name="delete_ssh_key_confirm_multi">%1$d servers use this key. Their saved key selection will be cleared.</string>
+    <string name="paste_ssh_key_title">Paste SSH key</string>
+    <string name="import_ssh_key_title">Import SSH key</string>
+    <string name="key_name">Key name</string>
+    <string name="key_name_placeholder">Work key</string>
+    <string name="choose_file">Choose file</string>
+    <string name="ssh_key_dialog_note">Saved encrypted on this phone. The same key can be selected for multiple servers.</string>
+    <string name="saving_with_ellipsis">Saving…</string>
+    <string name="save_key">Save key</string>
+
+    <!-- Neovim Menu Options & Shortcuts -->
+    <string name="circular_wheel_hint">Hold and slide to a segment; release to run. Swipe up/down on the outer ring for more pages.</string>
+    <string name="enable_neovim_shortcuts">Enable Neovim shortcuts</string>
+    <string name="menu_appearance">Menu appearance</string>
+    <string name="hold_and_drag_section">Hold and drag within a section</string>
+    <string name="add_group">Add group</string>
+    <string name="rename_group">Rename group</string>
+    <string name="group_name">Group name</string>
+    <string name="groups">Groups</string>
+    <string name="neovim_command">Neovim command</string>
+    <string name="command_mode_hint">Runs in Normal mode and confirms with Enter automatically.</string>
+    <string name="key_sequence_hint">Press your keys in order. Ctrl is only added when you choose it.</string>
+    <string name="ctrl_next">Ctrl next</string>
+    <string name="alt_next">Alt next</string>
+    <string name="group_format">Group: %1$s</string>
+    <string name="ungrouped">Ungrouped</string>
+    <string name="command">Command</string>
+    <string name="key_sequence">Key sequence</string>
+
+    <!-- Upstream build 169 sync -->
+    <string name="show_toolbar_only_with_keyboard">Show toolbar only with keyboard</string>
+    <string name="show_toolbar_only_with_keyboard_desc">Hide the key toolbar while the keyboard is closed.</string>
+    <string name="device_name">Device name</string>
+    <string name="device_name_hint">How this phone appears in your tailnet. A name set in the Tailscale admin console takes precedence.</string>
+    <string name="device_name_error">Use letters, digits and hyphens for the device name (up to 63, not starting or ending with a hyphen).</string>
+    <string name="attach_file">Attach file</string>
+    <string name="session_label">Session</string>
+    <string name="switch_session">Switch session</string>
+    <string name="none">None</string>
 </resources>

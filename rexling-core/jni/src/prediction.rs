@@ -155,7 +155,8 @@ impl Predictor {
     }
 
     fn timeout(&self) -> Duration {
-        self.srtt.map_or(MIN_TIMEOUT, |rtt| MIN_TIMEOUT.max(rtt * 4))
+        self.srtt
+            .map_or(MIN_TIMEOUT, |rtt| MIN_TIMEOUT.max(rtt * 4))
     }
 
     fn sample(&mut self, rtt: Duration) {
@@ -183,7 +184,7 @@ impl Predictor {
 
     fn eligible(frame: &Frame) -> bool {
         frame.input_flags & ALTERNATE_SCREEN == 0
-            && frame.cursor_at.is_some()
+            && frame.cursor_position.is_some()
             && frame.scroll_offset + frame.scroll_visible >= frame.scroll_total
     }
 
@@ -205,7 +206,16 @@ impl Predictor {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn push(&mut self, x: u16, y: u16, cell: Cell, kind: Kind, owner: u64, origin: (u16, u16), now: Instant) -> u64 {
+    fn push(
+        &mut self,
+        x: u16,
+        y: u16,
+        cell: Cell,
+        kind: Kind,
+        owner: u64,
+        origin: (u16, u16),
+        now: Instant,
+    ) -> u64 {
         if kind != Kind::FakeCursor {
             // A newer keystroke at the same cell supersedes the older guess.
             self.predictions
@@ -250,7 +260,9 @@ impl Predictor {
     /// Records predictions for input about to be sent to `target`.
     pub fn input(&mut self, target: &str, text: &str, program: Program, now: Instant) {
         self.retarget(target);
-        let Some(frame) = self.base.clone() else { return };
+        let Some(frame) = self.base.clone() else {
+            return;
+        };
         if self.mode == Mode::Off || program == Program::Other || !Self::eligible(&frame) {
             self.reset();
             return;
@@ -261,7 +273,9 @@ impl Predictor {
             return;
         }
         let hidden_cursor = frame.cursor.is_none();
-        let Some(origin) = frame.cursor_at else { return };
+        let Some(origin) = frame.cursor_position else {
+            return;
+        };
         for c in text.chars() {
             if c == '\r' && program == Program::Pi && self.awaiting.is_none() {
                 // pi submits the message and clears its editor; wait for that frame, staying visible.
@@ -274,7 +288,9 @@ impl Predictor {
                 // Typed before pi redrew: we cannot tell where it lands, so fall back to hidden guesses.
                 self.tentative();
             }
-            let Some((x, y)) = self.cursor.or(frame.cursor_at) else { return };
+            let Some((x, y)) = self.cursor.or(frame.cursor_position) else {
+                return;
+            };
             match c {
                 ' '..='~' => {
                     if x + 1 >= frame.columns {
@@ -304,7 +320,8 @@ impl Predictor {
                         _ => Some((x, y)),
                     };
                     // A TUI that hides the terminal cursor draws its own in reverse video; move it too.
-                    if hidden_cursor && under.is_some_and(|u| u.attributes & INVERSE != 0)
+                    if hidden_cursor
+                        && under.is_some_and(|u| u.attributes & INVERSE != 0)
                         && let Some(mut next) = self.shown(&frame, x + 1, y)
                     {
                         next.attributes |= INVERSE;
@@ -315,7 +332,11 @@ impl Predictor {
                 '\x7f' | '\x08' => {
                     // Only over text typed on this line; at the prompt, backspace does nothing.
                     let typed = self.floor.is_some_and(|(fx, fy)| fy == y && x > fx);
-                    let Some(left) = x.checked_sub(1).and_then(|left| self.shown(&frame, left, y)).filter(|_| typed) else {
+                    let Some(left) = x
+                        .checked_sub(1)
+                        .and_then(|left| self.shown(&frame, left, y))
+                        .filter(|_| typed)
+                    else {
                         self.tentative();
                         continue;
                     };
@@ -326,7 +347,9 @@ impl Predictor {
                     cell.attributes &= !(INVERSE | PREDICTED);
                     if hidden_cursor {
                         // pi: at the end of its input, the reverse-video cursor steps back over a blank.
-                        let at_end = self.shown(&frame, x, y).is_some_and(|u| u.attributes & INVERSE != 0 && blank(&u.text))
+                        let at_end = self
+                            .shown(&frame, x, y)
+                            .is_some_and(|u| u.attributes & INVERSE != 0 && blank(&u.text))
                             && self.rest_of_row_blank(&frame, x + 1, y);
                         let Some(mut old) = self.shown(&frame, x, y).filter(|_| at_end) else {
                             self.tentative();
@@ -358,7 +381,7 @@ impl Predictor {
             self.base.clone()
         };
         if let Some((origin, _)) = self.awaiting
-            && frame.cursor_at.is_some_and(|at| at != origin)
+            && frame.cursor_position.is_some_and(|at| at != origin)
         {
             // pi has handled Enter, so every earlier key too; leftovers would cover its cleared editor.
             self.awaiting = None;
@@ -367,8 +390,11 @@ impl Predictor {
         if self.predictions.is_empty() {
             return;
         }
-        if self.mode == Mode::Off || !Self::eligible(&frame)
-            || previous.as_ref().is_some_and(|p| p.columns != frame.columns || p.rows != frame.rows)
+        if self.mode == Mode::Off
+            || !Self::eligible(&frame)
+            || previous
+                .as_ref()
+                .is_some_and(|p| p.columns != frame.columns || p.rows != frame.rows)
         {
             self.reset();
             return;
@@ -377,7 +403,8 @@ impl Predictor {
         if let Some(previous) = &previous
             && frame.scroll_total > previous.scroll_total
         {
-            let shift = (frame.scroll_total - previous.scroll_total).min(u64::from(frame.rows)) as u16;
+            let shift =
+                (frame.scroll_total - previous.scroll_total).min(u64::from(frame.rows)) as u16;
             self.predictions.retain_mut(|p| {
                 if p.y < shift {
                     return false;
@@ -390,14 +417,18 @@ impl Predictor {
                 self.cursor = y.checked_sub(shift).map(|y| (x, y));
             }
         }
-        let Some((cx, cy)) = frame.cursor_at else {
+        let Some((cx, cy)) = frame.cursor_position else {
             self.reset();
             return;
         };
         let timeout = self.timeout();
         let mut confirmed = Vec::new();
         let mut failed = false;
-        for p in self.predictions.iter().filter(|p| p.kind != Kind::FakeCursor) {
+        for p in self
+            .predictions
+            .iter()
+            .filter(|p| p.kind != Kind::FakeCursor)
+        {
             let real = cell_at(&frame, p.x, p.y).map_or("", |c| c.text.as_str());
             let real = if real.is_empty() { " " } else { real };
             let past = cy > p.y || (cy == p.y && cx > p.x);
@@ -437,11 +468,18 @@ impl Predictor {
     /// Drops guesses the server never answered, even when no frames arrive. Returns true if any went.
     pub fn expire(&mut self, now: Instant) -> bool {
         let timeout = self.timeout();
-        if self.awaiting.is_some_and(|(_, at)| now.saturating_duration_since(at) > timeout) {
+        if self
+            .awaiting
+            .is_some_and(|(_, at)| now.saturating_duration_since(at) > timeout)
+        {
             // pi's cursor never moved (an empty Enter); predict from the current frame again.
             self.awaiting = None;
         }
-        if self.predictions.iter().any(|p| now.saturating_duration_since(p.at) > timeout) {
+        if self
+            .predictions
+            .iter()
+            .any(|p| now.saturating_duration_since(p.at) > timeout)
+        {
             self.predictions.clear();
             self.tentative();
             return true;
@@ -467,7 +505,11 @@ impl Predictor {
         if !self.visible() {
             return frame;
         }
-        let shown: Vec<&Prediction> = self.predictions.iter().filter(|p| p.epoch <= self.confirmed).collect();
+        let shown: Vec<&Prediction> = self
+            .predictions
+            .iter()
+            .filter(|p| p.epoch <= self.confirmed)
+            .collect();
         if shown.is_empty() {
             return frame;
         }
@@ -497,11 +539,22 @@ impl Predictor {
 
 /// Shells at their prompt and pi echo typing like a line editor; anything else is left alone.
 pub(crate) fn program(candidates: &serde_json::Value) -> Program {
-    const SHELLS: [&str; 9] = ["fish", "zsh", "bash", "sh", "dash", "ash", "ksh", "mksh", "nu"];
+    const SHELLS: [&str; 9] = [
+        "fish", "zsh", "bash", "sh", "dash", "ash", "ksh", "mksh", "nu",
+    ];
     let mut found = Program::Other;
-    for candidate in candidates.as_array().into_iter().flatten().filter_map(|c| c.as_str()) {
+    for candidate in candidates
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c.as_str())
+    {
         let path = candidate.replace('\\', "/").to_lowercase();
-        let name = path.rsplit('/').next().unwrap_or("").trim_start_matches('-');
+        let name = path
+            .rsplit('/')
+            .next()
+            .unwrap_or("")
+            .trim_start_matches('-');
         if name == "pi" || path.contains("/pi-coding-agent/") {
             return Program::Pi;
         }
@@ -524,13 +577,24 @@ mod tests {
     fn frame(lines: &[&str], cursor: (u16, u16), visible: bool, scroll: u64) -> Arc<Frame> {
         let mut cells = Vec::new();
         for y in 0..ROWS {
-            let line: Vec<char> = lines.get(y as usize).copied().unwrap_or("").chars().collect();
+            let line: Vec<char> = lines
+                .get(y as usize)
+                .copied()
+                .unwrap_or("")
+                .chars()
+                .collect();
             for x in 0..COLS {
                 let c = line.get(x as usize).copied().unwrap_or(' ');
                 cells.push(Cell {
                     x,
                     y,
-                    text: if c == '^' { " ".into() } else if c == ' ' { String::new() } else { c.to_string() },
+                    text: if c == '^' {
+                        " ".into()
+                    } else if c == ' ' {
+                        String::new()
+                    } else {
+                        c.to_string()
+                    },
                     foreground: [200; 3],
                     background: [0; 3],
                     attributes: if c == '^' { INVERSE } else { 0 },
@@ -543,7 +607,7 @@ mod tests {
             columns: COLS,
             rows: ROWS,
             cursor: visible.then_some(cursor),
-            cursor_at: Some(cursor),
+            cursor_position: Some(cursor),
             cursor_style: 1,
             cursor_blinking: true,
             foreground: [200; 3],
@@ -567,7 +631,13 @@ mod tests {
             .cells
             .iter()
             .filter(|c| c.y == y)
-            .map(|c| if c.text.is_empty() { " " } else { c.text.as_str() })
+            .map(|c| {
+                if c.text.is_empty() {
+                    " "
+                } else {
+                    c.text.as_str()
+                }
+            })
             .collect::<String>()
             .trim_end()
             .to_owned()
@@ -623,7 +693,10 @@ mod tests {
         p.observe(frame(&["$"], (2, 0), true, 0), now);
         let dirty = dirty_frame(&["$ ls"], &[0], (4, 0));
         let shown = p.display(dirty.clone());
-        assert!(Arc::ptr_eq(&shown, &dirty), "an unchanged frame must pass through");
+        assert!(
+            Arc::ptr_eq(&shown, &dirty),
+            "an unchanged frame must pass through"
+        );
         assert_eq!(shown.cells.len(), 20);
     }
 
@@ -666,9 +739,15 @@ mod tests {
         // A frame from before the server saw the keys confirms nothing.
         p.observe(f.clone(), now + Duration::from_millis(50));
         assert!(p.pending());
-        p.observe(frame(&["$ els"], (5, 0), true, 0), now + Duration::from_millis(300));
+        p.observe(
+            frame(&["$ els"], (5, 0), true, 0),
+            now + Duration::from_millis(300),
+        );
         assert!(!p.pending());
-        assert_eq!(p.display(frame(&["$ els"], (5, 0), true, 0)).cursor, Some((5, 0)));
+        assert_eq!(
+            p.display(frame(&["$ els"], (5, 0), true, 0)).cursor,
+            Some((5, 0))
+        );
     }
 
     #[test]
@@ -678,9 +757,16 @@ mod tests {
         let f = frame(&["$"], (2, 0), true, 0);
         p.observe(f.clone(), now);
         p.input("t", "a", Program::Shell, now);
-        p.observe(frame(&["$ a"], (3, 0), true, 0), now + Duration::from_millis(5));
+        p.observe(
+            frame(&["$ a"], (3, 0), true, 0),
+            now + Duration::from_millis(5),
+        );
         p.input("t", "b", Program::Shell, now);
-        assert_eq!(row(&p.display(frame(&["$ a"], (3, 0), true, 0)), 0), "$ a", "fast link: no overlay");
+        assert_eq!(
+            row(&p.display(frame(&["$ a"], (3, 0), true, 0)), 0),
+            "$ a",
+            "fast link: no overlay"
+        );
         let (mut slow, echoed) = warmed(now);
         slow.set_mode(Mode::Slow);
         slow.input("t", "x", Program::Shell, now);
@@ -704,7 +790,12 @@ mod tests {
         p.input("t", "\r", Program::Shell, now);
         let prompt = frame(&["$ e", "Password:"], (10, 1), true, 0);
         p.observe(prompt.clone(), now + Duration::from_millis(250));
-        p.input("t", "hunter2", Program::Shell, now + Duration::from_millis(260));
+        p.input(
+            "t",
+            "hunter2",
+            Program::Shell,
+            now + Duration::from_millis(260),
+        );
         assert_eq!(row(&p.display(prompt.clone()), 1), "Password:");
         // The prompt never echoes; the guesses expire without ever being drawn.
         p.observe(prompt.clone(), now + Duration::from_secs(5));
@@ -735,7 +826,10 @@ mod tests {
         let shown = p.display(f.clone());
         assert_eq!(row(&shown, 0), "$ ea");
         assert_eq!(shown.cursor, Some((4, 0)));
-        p.observe(frame(&["$ ea"], (4, 0), true, 0), now + Duration::from_millis(300));
+        p.observe(
+            frame(&["$ ea"], (4, 0), true, 0),
+            now + Duration::from_millis(300),
+        );
         assert!(!p.pending());
     }
 
@@ -750,13 +844,24 @@ mod tests {
         assert!(!p.pending());
         p.input("t", "\x7f", Program::Shell, now);
         let shown = p.display(suggestion.clone());
-        assert_eq!(row(&shown, 0), "$ echo hi", "the shell redraws the suggestion itself");
+        assert_eq!(
+            row(&shown, 0),
+            "$ echo hi",
+            "the shell redraws the suggestion itself"
+        );
         assert_eq!(shown.cursor, Some((3, 0)));
         p.input("t", "x", Program::Shell, now);
         let shown = p.display(suggestion);
-        assert_eq!(row(&shown, 0), "$ exho hi", "typing after a correction is not held back");
+        assert_eq!(
+            row(&shown, 0),
+            "$ exho hi",
+            "typing after a correction is not held back"
+        );
         assert_eq!(shown.cursor, Some((4, 0)));
-        p.observe(frame(&["$ ex"], (4, 0), true, 0), now + Duration::from_millis(400));
+        p.observe(
+            frame(&["$ ex"], (4, 0), true, 0),
+            now + Duration::from_millis(400),
+        );
         assert!(!p.pending());
     }
 
@@ -768,7 +873,11 @@ mod tests {
         assert_eq!(row(&p.display(f.clone()), 0), "$");
         let before = p.predictions.len();
         p.input("t", "\x7f", Program::Shell, now);
-        assert_eq!(p.predictions.len(), before, "the second backspace would reach the prompt");
+        assert_eq!(
+            p.predictions.len(),
+            before,
+            "the second backspace would reach the prompt"
+        );
         assert_eq!(row(&p.display(f), 0), "$");
     }
 
@@ -799,7 +908,10 @@ mod tests {
         assert_eq!(row(&shown, 0), "> h");
         assert_ne!(cell_at(&shown, 3, 0).unwrap().attributes & INVERSE, 0);
         assert_eq!(cell_at(&shown, 4, 0).unwrap().attributes & INVERSE, 0);
-        p.observe(frame(&["> h^"], (3, 0), false, 0), now + Duration::from_millis(400));
+        p.observe(
+            frame(&["> h^"], (3, 0), false, 0),
+            now + Duration::from_millis(400),
+        );
         assert!(!p.pending());
     }
 
@@ -843,7 +955,10 @@ mod tests {
         let f = frame(&["a", "b", "c", "$"], (2, 3), true, 0);
         p.observe(f, now);
         p.input("t", "e", Program::Shell, now);
-        p.observe(frame(&["a", "b", "c", "$ e"], (3, 3), true, 0), now + Duration::from_millis(200));
+        p.observe(
+            frame(&["a", "b", "c", "$ e"], (3, 3), true, 0),
+            now + Duration::from_millis(200),
+        );
         p.input("t", "x", Program::Shell, now);
         // Output scrolls the screen by one line before the echo arrives.
         let scrolled = frame(&["b", "c", "$ e", "!"], (3, 2), true, 1);
@@ -859,7 +974,10 @@ mod tests {
         let f = frame(&["> ^"], (2, 0), false, 0);
         p.observe(f, now);
         p.input("t", "h", Program::Shell, now);
-        p.observe(frame(&["> h^"], (3, 0), false, 0), now + Duration::from_millis(200));
+        p.observe(
+            frame(&["> h^"], (3, 0), false, 0),
+            now + Duration::from_millis(200),
+        );
         assert!(!p.pending());
         p.input("t", "i", Program::Shell, now);
         let shown = p.display(frame(&["> h^"], (3, 0), false, 0));
@@ -867,7 +985,10 @@ mod tests {
         assert_eq!(cell_at(&shown, 3, 0).unwrap().attributes & INVERSE, 0);
         assert_ne!(cell_at(&shown, 4, 0).unwrap().attributes & INVERSE, 0);
         assert_eq!(shown.cursor, None, "pi keeps the terminal cursor hidden");
-        p.observe(frame(&["> hi^"], (4, 0), false, 0), now + Duration::from_millis(400));
+        p.observe(
+            frame(&["> hi^"], (4, 0), false, 0),
+            now + Duration::from_millis(400),
+        );
         assert!(!p.pending());
     }
 
@@ -877,7 +998,10 @@ mod tests {
         p.set_mode(Mode::Always);
         p.observe(frame(&["", "> ^"], (2, 1), false, 0), now);
         p.input("t", "hi", Program::Pi, now);
-        p.observe(frame(&["", "> hi^"], (4, 1), false, 0), now + Duration::from_millis(200));
+        p.observe(
+            frame(&["", "> hi^"], (4, 1), false, 0),
+            now + Duration::from_millis(200),
+        );
         assert!(!p.pending());
         p
     }
@@ -891,7 +1015,11 @@ mod tests {
         let cleared = frame(&["hi", "> ^"], (2, 1), false, 0);
         p.observe(cleared.clone(), now + Duration::from_millis(400));
         p.input("t", "ok", Program::Pi, now + Duration::from_secs(5));
-        assert_eq!(row(&p.display(cleared), 1), "> ok", "no wait for an echo after Enter");
+        assert_eq!(
+            row(&p.display(cleared), 1),
+            "> ok",
+            "no wait for an echo after Enter"
+        );
     }
 
     #[test]
@@ -939,7 +1067,14 @@ mod tests {
     fn shells_and_pi_are_predictable_other_programs_are_not() {
         assert_eq!(program(&json!(["-fish", "fish"])), Program::Shell);
         assert_eq!(program(&json!(["/bin/zsh"])), Program::Shell);
-        assert_eq!(program(&json!(["pi", "/x/@earendil-works/pi-coding-agent/dist/cli.js", "bun"])), Program::Pi);
+        assert_eq!(
+            program(&json!([
+                "pi",
+                "/x/@earendil-works/pi-coding-agent/dist/cli.js",
+                "bun"
+            ])),
+            Program::Pi
+        );
         assert_eq!(program(&json!(["nvim"])), Program::Other);
         assert_eq!(program(&json!(["claude-code", "node"])), Program::Other);
         assert_eq!(program(&json!(null)), Program::Other);

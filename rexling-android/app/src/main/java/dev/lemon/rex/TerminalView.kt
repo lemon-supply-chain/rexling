@@ -115,6 +115,9 @@ class TerminalView(context: Context) : View(context) {
         get()=currentScreen
         set(value) {setScreen(value,false)}
     internal var onKeyboardFocus: (TerminalKeyboardFocus?)->Unit={}
+    internal var allowHiddenCursorInput: Boolean=false
+        set(value) {if(field!=value) {field=value;reportCursorViewport()}}
+    internal fun inputCursorRow(frame: TerminalScreen)=frame.cursorY ?: frame.cursorAnchorY.takeIf {allowHiddenCursorInput && frame.cursorAnchorX!=null}
     /** Chosen by program identity: pan to a hidden caret, or resize a full-screen TUI. */
     internal var imeAnchor: ImeAnchor = ImeAnchor.CURSOR
         set(value) {if(field!=value) {field=value;reportCursorViewport()}}
@@ -123,7 +126,7 @@ class TerminalView(context: Context) : View(context) {
         set(value) {if(field!=value) {field=value;clearRows();invalidate()}}
     internal val keyboardFocus: TerminalKeyboardFocus? get() {
         val frame=screen ?: return null
-        val row=frame.imeAnchorRow(imeAnchor) ?: return null
+        val row=(inputCursorRow(frame) ?: frame.imeAnchorRow(imeAnchor)) ?: return null
         val lastText=frame.lastPaintedRow()
         val bottom=insetTop+(row+1)*cellHeight+insetBottom
         return TerminalKeyboardFocus(insetTop+row*cellHeight,bottom,
@@ -154,6 +157,16 @@ class TerminalView(context: Context) : View(context) {
                     }
                 }
             }
+        }
+    /** The on-screen keyboard's Enter submits (CR) instead of inserting a newline (LF). */
+    var imeEnterSubmits: Boolean = false
+        set(value) {
+            if(field!=value) {field=value;if(controlled && hasFocus()) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)}
+        }
+    /** Any tap on a controlled pane opens the keyboard; set while the key toolbar hides without it. */
+    var tapOpensKeyboard: Boolean = false
+        set(value) {
+            if(field!=value) {field=value;if(controlled && hasFocus()) (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(this)}
         }
     var controlled: Boolean = false
         set(value) {
@@ -610,15 +623,18 @@ class TerminalView(context: Context) : View(context) {
                 col !in 0 until frame.columns || row !in 0 until frame.rows) return
             super.performClick()
             onMouseClick(col,row,cellWidth.roundToInt().coerceAtLeast(1),cellHeight.roundToInt().coerceAtLeast(1))
-            if(frame.isSemanticInputRow(row)) keyboard()
-            else if(frame.cursorX!=null && row==frame.cursorY) onCursorTap()
+            // Mouse-reporting programs (pi's fullscreen mode) still get the click; with no toolbar
+            // keyboard button showing, the tap must also be able to open the keyboard.
+            if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
+            else if(row==inputCursorRow(frame)) onCursorTap()
         } else if(controlled && frame?.hasSemanticPrompt==true) {
             val row=floor((y-insetTop)/cellHeight).toInt()
             if(pressedMouseTarget!=mouseTarget() || pressedMouseGrid!=(frame.columns to frame.rows) ||
                 x<insetHorizontal || x>=width-insetHorizontal || y<insetTop || y>=height-insetBottom) return
             super.performClick()
-            if(frame.isSemanticInputRow(row)) keyboard()
-            else if(frame.scroll.below==0L && frame.cursorX!=null && row==frame.cursorY) onCursorTap()
+            // Prompt-marked shells otherwise open it only from the prompt line.
+            if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
+            else if(frame.scroll.below==0L && row==inputCursorRow(frame)) onCursorTap()
         } else performClick()
     }
     internal fun copySemanticSelection(output: Boolean): Boolean {
@@ -782,7 +798,7 @@ class TerminalView(context: Context) : View(context) {
                     getComposingSpanStart(editor),getComposingSpanEnd(editor))
             }
             private fun submit(text: String,cursor: Int) {
-                val keys=imeLine.edit(text,cursor)
+                val keys=TerminalInput.imeKeys(imeLine.edit(text,cursor),imeEnterSubmits)
                 if(keys.isNotEmpty()) {
                     deliveringImeInput=true
                     try {onInput(keys)} finally {deliveringImeInput=false}

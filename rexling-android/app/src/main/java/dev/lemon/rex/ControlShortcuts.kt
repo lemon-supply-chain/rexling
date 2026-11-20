@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,14 +37,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-internal val controlShortcuts=listOf("c","d","z","r","l","a","e","w","j","]")
+internal val controlShortcuts=ControlShortcutConfig.defaults.map {it.keys}
 internal enum class ControlShortcutGesture { HOLD, DOUBLE_TAP }
 private const val CONTROL_SHORTCUT_COLUMNS=3
-private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-1)/CONTROL_SHORTCUT_COLUMNS
+private const val CONTROL_SHORTCUT_PAGE_SIZE=12
 
 @Composable internal fun ControlDockKey(enabled: Boolean,active: Boolean,readable: Boolean,modifier: Modifier,
-    onToggle: ()->Unit,onShortcut: (String)->Unit,gesture: ControlShortcutGesture=ControlShortcutGesture.HOLD) {
-    val context=androidx.compose.ui.platform.LocalContext.current
+    onToggle: ()->Unit,onShortcut: (String)->Unit,gesture: ControlShortcutGesture=ControlShortcutGesture.HOLD,
+    shortcuts: List<ControlShortcut> = ControlShortcutConfig.defaults,inputKey: String="") {
+    val pages=((shortcuts.size+CONTROL_SHORTCUT_PAGE_SIZE-1)/CONTROL_SHORTCUT_PAGE_SIZE).coerceAtLeast(1)
+    val pager=rememberPagerState(pageCount={pages})
+    val rows=((shortcuts.size.coerceAtMost(CONTROL_SHORTCUT_PAGE_SIZE)+CONTROL_SHORTCUT_COLUMNS-1)/CONTROL_SHORTCUT_COLUMNS).coerceAtLeast(1)
+    val footer=if(pages>1) 32.dp else 0.dp
     var visible by remember {mutableStateOf(false)}
     var pressed by remember {mutableStateOf(false)}
     var highlighted by remember {mutableIntStateOf(-1)}
@@ -59,16 +66,16 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
     val haptics=LocalHapticFeedback.current
     fun dismiss() {visible=false;highlighted=-1}
     fun closeFromTrigger() {dismiss();if(latched) toggle()}
-    LaunchedEffect(enabled,gesture) {dismiss();pressed=false}
-    fun choose(index: Int) {if(enabled) send(controlShortcuts[index]);dismiss()}
+    LaunchedEffect(enabled,gesture,shortcuts,inputKey) {dismiss();pressed=false;pager.scrollToPage(0)}
+    fun choose(index: Int) {if(enabled) shortcuts.getOrNull(index)?.let {send(it.keys)};dismiss()}
     fun hit(x: Float,y: Float): Int {
         val px=x-popup.left-padding;val py=y-popup.top-padding
         val w=(popup.width-2*padding-(CONTROL_SHORTCUT_COLUMNS-1)*gap)/CONTROL_SHORTCUT_COLUMNS
-        val h=(popup.height-2*padding-(controlShortcutRows-1)*gap)/controlShortcutRows
+        val h=(popup.height-with(density) {footer.toPx()}-2*padding-(rows-1)*gap)/rows
         if(w<=0 || h<=0 || px<0 || py<0) return -1
         val col=(px/(w+gap)).toInt();val row=(py/(h+gap)).toInt()
-        val index=row*CONTROL_SHORTCUT_COLUMNS+col
-        return if(col in 0 until CONTROL_SHORTCUT_COLUMNS && row in 0 until controlShortcutRows && index in controlShortcuts.indices && px-col*(w+gap)<w && py-row*(h+gap)<h) index else -1
+        val index=pager.currentPage*CONTROL_SHORTCUT_PAGE_SIZE+row*CONTROL_SHORTCUT_COLUMNS+col
+        return if(col in 0 until CONTROL_SHORTCUT_COLUMNS && row in 0 until rows && index in shortcuts.indices && px-col*(w+gap)<w && py-row*(h+gap)<h) index else -1
     }
     BackHandler(visible) {dismiss()}
     val provider=rememberSpeechBubblePositioner {popup=it}
@@ -79,9 +86,9 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
     }
         .clip(RoundedCornerShape(11.dp)).background(if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
         .semantics {
-            contentDescription=context.getString(R.string.a11y_control);this.selected=active;role=Role.Button
-            if(enabled) {onClick {if(visible) closeFromTrigger() else toggle();true};onLongClick(label=context.getString(R.string.a11y_control_shortcuts)) {visible=true;true}} else disabled()
-        }.pointerInput(enabled,gesture) {
+            contentDescription="Control";this.selected=active;role=Role.Button
+            if(enabled) {onClick {if(visible) closeFromTrigger() else toggle();true};onLongClick(label="Control shortcuts") {visible=true;true}} else disabled()
+        }.pointerInput(enabled,gesture,shortcuts,inputKey) {
             if(!enabled) return@pointerInput
             var lastTap: Long?=null
             awaitEachGesture {
@@ -107,7 +114,6 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
                             else if(opened) {if(visible && highlighted>=0) choose(highlighted)}
                             else if(!moved && change.position.x in 0f..size.width.toFloat() && change.position.y in 0f..size.height.toFloat()) {
                                 // Each tap toggles immediately; the second restores the first toggle.
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 toggle()
                                 if(doubleTap && change.uptimeMillis-down.uptimeMillis<configuration.longPressTimeoutMillis) {
                                     visible=true;haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -122,11 +128,7 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
             }
         },contentAlignment=Alignment.Center) {
         ChromeSymbol(ChromeIcon.CONTROL,Modifier.size(20.dp),
-            when {
-                !readable->MaterialTheme.colorScheme.onSurfaceVariant
-                selected->MaterialTheme.colorScheme.onPrimary
-                else->MaterialTheme.colorScheme.onSurface
-            })
+            (if(selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface).copy(alpha=if(readable) 1f else .38f))  // alpha-ok disabled glyph opacity
         if(visible) Popup(popupPositionProvider=provider,onDismissRequest={dismiss()},
             properties=PopupProperties(focusable=false,dismissOnClickOutside=true)) {
             val popupView=LocalView.current.rootView
@@ -139,22 +141,35 @@ private val controlShortcutRows=(controlShortcuts.size+CONTROL_SHORTCUT_COLUMNS-
                 }
                 onDispose {popupView.setOnTouchListener(null)}
             }
-            SpeechBubble(provider,Modifier.width(244.dp).semantics {contentDescription=context.getString(R.string.a11y_control_shortcuts)},shadowElevation=0.dp) {
+            SpeechBubble(provider,Modifier.width(244.dp).semantics {contentDescription="Control shortcuts"},shadowElevation=0.dp) {
             Column(Modifier.padding(8.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                repeat(controlShortcutRows) {row->
-                    Row(Modifier.fillMaxWidth().height(44.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                        repeat(CONTROL_SHORTCUT_COLUMNS) {col->
-                            val index=row*CONTROL_SHORTCUT_COLUMNS+col;val letter=controlShortcuts.getOrNull(index);val current=highlighted==index
-                            if(letter==null) Spacer(Modifier.weight(1f).fillMaxHeight())
-                            else Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(11.dp))
-                                .background(if(current) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
-                                .semantics {contentDescription=context.getString(R.string.a11y_control_letter,letter.uppercase());this.selected=current}
-                                .clickable(enabled=enabled,role=Role.Button) {choose(index)},contentAlignment=Alignment.Center) {
-                                Text("^${letter.uppercase()}",fontFamily=MonoUi,fontSize=13.sp,fontWeight=FontWeight.Bold,
-                                    color=if(current) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                VerticalPager(pager,Modifier.height((rows*44+(rows-1)*4).dp).fillMaxWidth(),userScrollEnabled=pages>1) {page->
+                    Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        repeat(rows) {row->
+                            Row(Modifier.fillMaxWidth().height(44.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                                repeat(CONTROL_SHORTCUT_COLUMNS) {col->
+                                    val index=page*CONTROL_SHORTCUT_PAGE_SIZE+row*CONTROL_SHORTCUT_COLUMNS+col
+                                    val item=shortcuts.getOrNull(index);val current=highlighted==index
+                                    if(item==null) Spacer(Modifier.weight(1f).fillMaxHeight())
+                                    else Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(11.dp))
+                                        .background(if(current) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
+                                        .semantics {contentDescription=item.description;this.selected=current}
+                                        .clickable(enabled=enabled,role=Role.Button) {choose(index)},contentAlignment=Alignment.Center) {
+                                        Text(item.label,Modifier.padding(horizontal=3.dp),fontFamily=MonoUi,fontSize=if(item.label.length>5) 11.sp else 13.sp,fontWeight=FontWeight.Bold,
+                                            maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            color=if(current) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
                             }
                         }
                     }
+                }
+                if(pages>1) Row(Modifier.fillMaxWidth().height(28.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+                    val prevPageDesc=stringResource(R.string.a11y_prev_ctrl_page)
+                    val nextPageDesc=stringResource(R.string.a11y_next_ctrl_page)
+                    TextButton(onClick={highlighted=-1;scope.launch {pager.animateScrollToPage(pager.currentPage-1)}},enabled=pager.currentPage>0,contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp).semantics {contentDescription=prevPageDesc}) {Text("↑",fontSize=13.sp)}
+                    Text("${pager.currentPage+1}/$pages",fontFamily=MonoUi,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick={highlighted=-1;scope.launch {pager.animateScrollToPage(pager.currentPage+1)}},enabled=pager.currentPage<pages-1,contentPadding=PaddingValues(0.dp),modifier=Modifier.height(28.dp).semantics {contentDescription=nextPageDesc}) {Text("↓",fontSize=13.sp)}
                 }
             }
             }

@@ -96,6 +96,16 @@ The build emits one command stream per tile with three offsets:
 
 `ProgramVectorPicture` records the flat plate, the ceramic surface and the
 symbol as separate pictures, so switching tiers costs no per-frame work.
+Unrotated tiles are then rasterized once per exact floating-point size. A
+four-entry LRU per artwork replays those bitmaps during animation instead of
+rebuilding paths, color-filter layers and the shadow matrix every frame.
+Evicted bitmaps are not explicitly recycled because an older display list may
+still reference them.
+
+Only the header's front pane and the selected tab animate their marquee.
+Background panes and inactive tabs retain the same treatment at a fixed phase;
+this keeps the working cue without paying for every visible shader on every
+frame.
 
 ---
 
@@ -148,8 +158,12 @@ than glossy.
 2. `ProgramCatalogDataTest` — layer offsets and plate paint are present.
 3. Instrumented check on device: `ProgramTileRenderingTest`, then a screenshot
    of the tab bar in both themes with a long session title and three busy tabs.
-4. Frame budget: `TerminalPerformanceTest` with four busy tabs; the compact tier
-   must not allocate layers per draw.
+4. Frame budget: `UiAnimationPerformanceTest` with a real Activity/Choreographer
+   clock, one busy header and four busy tabs. Compare UI and RenderThread
+   sections, not only frame callbacks. `sizeCachedTileReplayIsDeterministic`
+   covers cache replay; the 2026-11-20 fixture comparison found zero differing
+   pixels across eight size/program combinations. See
+   `rexling-android/validation/ui-performance-2026-11-20.json`.
 
 The previous `.preview/preview.html` reference was not checked in. Regenerate an
 18/27/34dp ladder before changing material constants again.
