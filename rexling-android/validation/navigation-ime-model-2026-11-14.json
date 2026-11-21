@@ -1,0 +1,28 @@
+{
+  "build": 127,
+  "native_passed": 111,
+  "native_ignored": 18,
+  "jvm_tests": 183,
+  "jvm_skipped": 1,
+  "jvm_failures": 0,
+  "lint_release": "passed",
+  "phone_tests_passed": 13,
+  "coverage": [
+    "Accepted navigation intent published ahead of actor processing",
+    "Rejected queue submissions do not supersede accepted work",
+    "Obsolete selection, takeover and resize requests skipped before execution",
+    "Mutation outcome acknowledgements retained",
+    "Old non-transport errors cannot overwrite the current navigation",
+    "Separate cursor-aware IME model",
+    "4000 deterministic insert, delete, replace and cursor edits",
+    "Unicode surrogate boundaries, external context reset and long corrections",
+    "Actual Gboard candidate taps, composition, stale targets and image input",
+    "Stable keyboard height during pane control handoff"
+  ],
+  "unchanged": [
+    "Button layout",
+    "Keyboard input types and focus/restart lifecycle",
+    "Input delivery ordering and no-replay policy"
+  ],
+  "scope": "Live pane stream caching is not included."
+}

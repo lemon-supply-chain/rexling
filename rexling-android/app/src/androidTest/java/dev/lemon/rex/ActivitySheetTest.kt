@@ -35,7 +35,7 @@ class ActivitySheetTest {
         val a=ServerProfile.create("Linux","https://linux.example","a");val b=ServerProfile.create("Mac","https://mac.example","b")
         val first=record("working","Building","s1","pane1");val second=record("blocked","Review","s2","pane2")
         var selected: ActivityTarget?=null
-        ui.setContent {RexTheme(false,ThemeCatalog.defaults[1]) {ActivitySheet(listOf(ActivitySource(a,true,false,"",false,listOf(first)),ActivitySource(b,true,false,"",false,listOf(second))),{},{selected=it},{})}}
+        ui.setContent {RexTheme(false,ThemeCatalog.defaults[1]) {ActivitySheet(listOf(ActivitySource(a,true,false,"",false,listOf(first)),ActivitySource(b,true,false,"",false,listOf(second))),{},{selected=it},{},initialFilter=ActivityFilter.ALL)}}
         ui.onNodeWithText("Linux").assertIsDisplayed();ui.onNodeWithText("Mac").assertIsDisplayed()
         capture("activity-compact-light.png")
         ui.onNodeWithContentDescription("Refresh activity").assertIsEnabled()
@@ -61,7 +61,7 @@ class ActivitySheetTest {
     @Test fun staleActivityIsDisabledAndShowsItsRefreshError() {
         val server=ServerProfile.create("Linux","https://linux.example","a");var selected=false
         val record=record("done","Finished task","s","p")
-        ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {ActivitySheet(listOf(ActivitySource(server,false,false,"Connection interrupted",false,listOf(record))),{},{selected=true},{})}}
+        ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {ActivitySheet(listOf(ActivitySource(server,false,false,"Connection interrupted",false,listOf(record))),{},{selected=true},{},initialFilter=ActivityFilter.ALL)}}
         ui.onNodeWithText("Connection interrupted").assertIsDisplayed()
         ui.onNodeWithContentDescription("Finished task, Finished, Session s, Linux").assertIsNotEnabled()
         capture("activity-compact-dark.png")
@@ -71,7 +71,7 @@ class ActivitySheetTest {
         val server=ServerProfile.create("Linux","https://linux.example","a");val task=record("done","Review","s","p").copy(message="")
         val older=record("done","Earlier task","s","older").copy(message="")
         val seen=androidx.compose.runtime.mutableStateOf(setOf(older.key));var opened=0
-        ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {ActivitySheet(listOf(ActivitySource(server,true,false,"",false,listOf(task,older),seen.value)),{},{opened++},{},onSeen={seen.value+=it.record.key})}}
+        ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {ActivitySheet(listOf(ActivitySource(server,true,false,"",false,listOf(task,older),seen.value)),{},{opened++},{},onSeen={seen.value+=it.record.key},initialFilter=ActivityFilter.ALL)}}
         val rowDescription="Review, Finished, Session s, Linux"
         fun textBounds()=ui.onNodeWithText("Review",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot.let {title->
             val context=ui.onNode(hasText("Session s · Tab") and hasAnyAncestor(hasContentDescription(rowDescription)),useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
@@ -146,7 +146,7 @@ class ActivitySheetTest {
         val loading=androidx.compose.runtime.mutableStateOf(false)
         val items=androidx.compose.runtime.mutableStateOf(listOf(record("done","Review","s","p")))
         ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {
-            ActivitySheet(listOf(ActivitySource(server,true,loading.value,"",false,items.value)),{},{},{})
+            ActivitySheet(listOf(ActivitySource(server,true,loading.value,"",false,items.value)),{},{},{},initialFilter=ActivityFilter.ALL)
         }}
         val before=ui.onNodeWithText("Review").fetchSemanticsNode().boundsInRoot
         ui.runOnIdle {loading.value=true}
@@ -154,6 +154,19 @@ class ActivitySheetTest {
         assertEquals(before,ui.onNodeWithText("Review").fetchSemanticsNode().boundsInRoot)
         ui.runOnIdle {items.value=emptyList()}
         ui.onNodeWithText("Checking activity…").assertIsDisplayed()
+    }
+    @Test fun activitySheetDefaultsToAttentionFilter() {
+        val server=ServerProfile.create("Mac","https://fixture.example","mac")
+        val blocked=record("blocked","Approval needed","s1","p1")
+        val done=record("done","Finished build","s2","p2")
+        ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {
+            ActivitySheet(listOf(ActivitySource(server,true,false,"",false,listOf(blocked,done))),{},{},{})
+        }}
+        ui.onNodeWithText("Approval needed").assertIsDisplayed()
+        ui.onNodeWithText("Finished build").assertDoesNotExist()
+        ui.onNodeWithText("All").performClick()
+        ui.onNodeWithText("Approval needed").assertIsDisplayed()
+        ui.onNodeWithText("Finished build").assertIsDisplayed()
     }
     @Test fun eyeHasAnAccessibleAttentionIndicator() {
         val dark=androidx.compose.runtime.mutableStateOf(false)

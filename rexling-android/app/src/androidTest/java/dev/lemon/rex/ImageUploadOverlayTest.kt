@@ -51,10 +51,10 @@ class ImageUploadOverlayTest {
             }
         }
         settle();val anchor=right()
-        val actionAnchor=ui.onNodeWithContentDescription("Cancel image upload").fetchSemanticsNode().boundsInRoot.right
-        ui.onNodeWithText("Preparing image").assertIsDisplayed()
+        val actionAnchor=ui.onNodeWithContentDescription("Cancel file upload").fetchSemanticsNode().boundsInRoot.right
+        ui.onNodeWithText("Preparing file").assertIsDisplayed()
         ui.runOnIdle {state.value=state.value.copy(phase=ImagePhase.UPLOADING,progress=0f)};settle()
-        ui.onNodeWithText("Uploading image").assertIsDisplayed()
+        ui.onNodeWithText("Uploading file").assertIsDisplayed()
         ui.onNodeWithContentDescription("0%").assertDoesNotExist()
         for(isDark in listOf(true,false)) {
             ui.runOnIdle {dark.value=isDark;state.value=state.value.copy(phase=ImagePhase.UPLOADING,progress=.42f)};settle()
@@ -64,8 +64,8 @@ class ImageUploadOverlayTest {
             ui.onNodeWithContentDescription("73%").assertIsDisplayed();assertEquals(anchor,right(),.5f)
             ui.runOnIdle {state.value=state.value.copy(phase=ImagePhase.FINISHING)};settle()
             ui.onNodeWithText("Finishing upload").assertIsDisplayed();assertEquals(anchor,right(),.5f)
-            ui.onNodeWithContentDescription("Cancel image upload").performClick()
-            ui.runOnIdle {state.value=state.value.copy(phase=ImagePhase.FAILED,error="The image may have been inserted. Check the original pane before trying again.");retryable.value=false};settle()
+            ui.onNodeWithContentDescription("Cancel file upload").performClick()
+            ui.runOnIdle {state.value=state.value.copy(phase=ImagePhase.FAILED,error="The file may have been inserted. Check the original pane before trying again.");retryable.value=false};settle()
             ui.onNodeWithText("Retry").assertDoesNotExist();assertEquals(anchor,right(),.5f)
             assertEquals(actionAnchor,ui.onNodeWithContentDescription("Dismiss upload error").fetchSemanticsNode().boundsInRoot.right,.5f)
             capture("upload-pill-error-${if(isDark) "dark" else "light"}.png")
@@ -74,8 +74,8 @@ class ImageUploadOverlayTest {
         }
         ui.runOnIdle {assertEquals(4,canceled);assertEquals(2,retried)}
         ui.runOnIdle {state.value=state.value.copy(phase=ImagePhase.SUCCESS,progress=1f)};settle()
-        ui.onNodeWithText("Image uploaded").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Cancel image upload").assertDoesNotExist()
+        ui.onNodeWithText("File uploaded").assertIsDisplayed()
+        ui.onNodeWithContentDescription("Cancel file upload").assertDoesNotExist()
         assertEquals(anchor,right(),.5f);capture("upload-pill-success.png")
         if(InstrumentationRegistry.getArguments().getString("uploadAnimationCapture")=="true") {
             var frame=0

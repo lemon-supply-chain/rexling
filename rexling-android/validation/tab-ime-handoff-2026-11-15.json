@@ -1,0 +1,41 @@
+{
+  "build": 130,
+  "baseline": {
+    "device": "SM-S906E",
+    "keyboard": "Gboard",
+    "uncached_tab_switch": "failed as expected",
+    "keyboard_height_px": [
+      728,
+      807,
+      728
+    ]
+  },
+  "fixed": {
+    "uncached_tab_switch": "passed on phone",
+    "lint_release": "passed",
+    "jvm_tests": "passed",
+    "release_apk_verification": "passed"
+  },
+  "expanded_device_suite": "27 passed on SM-S906E with Gboard",
+  "scope": "View/frame retention only; no additional remote streams or outgoing input ownership",
+  "measurements": {
+    "uncached": {
+      "minimum_ime_height": 728,
+      "maximum_ime_height": 728,
+      "samples": 88,
+      "remaining_terminal_views": 1
+    },
+    "cached": {
+      "minimum_ime_height": 728,
+      "maximum_ime_height": 728,
+      "samples": 85,
+      "remaining_terminal_views": 1
+    },
+    "rapid": {
+      "minimum_ime_height": 728,
+      "maximum_ime_height": 728,
+      "samples": 114,
+      "remaining_terminal_views": 1
+    }
+  }
+}

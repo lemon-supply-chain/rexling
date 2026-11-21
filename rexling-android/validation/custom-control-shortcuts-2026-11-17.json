@@ -1,0 +1,37 @@
+{
+  "build": 159,
+  "semantics": {
+    "L": "Ctrl+L",
+    "Space + L": "Ctrl+Space then plain l",
+    "Space + Ctrl + L": "Ctrl+Space then Ctrl+L"
+  },
+  "settings": "Preferences \u2192 Ctrl shortcut buttons",
+  "defaults_preserved": true,
+  "page_size": 12,
+  "checks": {
+    "unit_tests": 217,
+    "unit_skipped": 1,
+    "unit_failures": 0,
+    "phone_tests_passed": 19,
+    "release_lint": "passed",
+    "phone_notes": "15 existing Ctrl popup checks plus four current recorder/popup checks. Final four rechecked after preserving list position and recording the IME Done action as Enter."
+  },
+  "coverage": [
+    "exact prefix/control byte encoding",
+    "default shortcuts retain legacy bytes",
+    "custom labels and persistence round-trip",
+    "invalid and duplicate entries rejected",
+    "hold/double-tap and trigger-close compatibility",
+    "custom popup dispatch",
+    "paging selects correct entry",
+    "pane changes dismiss popup",
+    "invalid editor draft retains settings",
+    "soft keyboard multi-key recording without losing earlier keys",
+    "key recorder Space prefix and custom name",
+    "Undo/Clear/Cancel preserve the list",
+    "drag ordering and row deletion",
+    "phone keyboard Done action records Enter",
+    "list/recorder screenshots reviewed"
+  ],
+  "editor": "List with key chips and key recorder, optional names, drag reorder, remove, Undo/Clear and cancel"
+}

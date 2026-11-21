@@ -12,6 +12,8 @@ internal sealed interface SettingsRoute {
     /** Third level from [Shortcuts]; an empty [id] starts a new profile draft. */
     data class ShortcutEditor(val id: String): SettingsRoute
     object KeyboardToolbar: SettingsRoute
+    object ControlShortcuts: SettingsRoute
+    object SshKeys: SettingsRoute
     object Network: SettingsRoute
 }
 

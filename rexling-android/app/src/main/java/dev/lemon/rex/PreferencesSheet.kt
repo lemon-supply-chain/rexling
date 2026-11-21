@@ -17,18 +17,21 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun PreferencesSheet(onAppearance: ()->Unit,onFont: ()->Unit,onAlerts: ()->Unit,onAbout: ()->Unit,onClose: ()->Unit,
     shortcutGesture: ControlShortcutGesture=ControlShortcutGesture.HOLD,onShortcutGesture: (ControlShortcutGesture)->Unit={},onNeovim: ()->Unit={},
-    arrowJoystickEnabled: Boolean=true,onArrowJoystick: (Boolean)->Unit={},codexTitleAttention: Boolean=false,onCodexTitleAttention: (Boolean)->Unit={},
+    arrowJoystickEnabled: Boolean=true,onArrowJoystick: (Boolean)->Unit={},enterSubmits: Boolean=false,onEnterSubmits: (Boolean)->Unit={},toolbarWithKeyboardOnly: Boolean=false,onToolbarWithKeyboardOnly: (Boolean)->Unit={},codexTitleAttention: Boolean=false,onCodexTitleAttention: (Boolean)->Unit={},
     minimizeFloatingPanes: Boolean=false,onMinimizeFloatingPanes: (Boolean)->Unit={},onNetwork: ()->Unit={},
-    keepScreenAwake: KeepScreenAwake=KeepScreenAwake.SYSTEM,onKeepScreenAwake: (KeepScreenAwake)->Unit={},onToolbar: ()->Unit={},
+    keepScreenAwake: KeepScreenAwake=KeepScreenAwake.SYSTEM,onKeepScreenAwake: (KeepScreenAwake)->Unit={},onToolbar: ()->Unit={},onControlItems: ()->Unit={},onSshKeys: ()->Unit={},
     keyboardSuggestionsEnabled: Boolean=false,onKeyboardSuggestions: (Boolean)->Unit={},
     language: String="system",onLanguage: ()->Unit={},
     terminalPadding: TerminalPadding=TerminalPadding.NORMAL,onTerminalPadding: (TerminalPadding)->Unit={},extendPadding: Boolean=true,onExtendPadding: (Boolean)->Unit={},
     predictiveEcho: PredictiveEcho=PredictiveEcho.SLOW,onPredictiveEcho: (PredictiveEcho)->Unit={},
     hazeState: dev.chrisbanes.haze.HazeState?=null) {
+    // Built outside the sheet on purpose: the frost redraws when its host window draws, and inside the
+    // sheet that host is the sheet's own window, which then redraws itself every frame while open.
+    val frost=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
         containerColor=androidx.compose.ui.graphics.Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-            Column(Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+            Column(frost.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
                 DrawerHandle()
                 Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(stringResource(R.string.preferences),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
@@ -93,6 +96,15 @@ import androidx.compose.ui.unit.dp
             SettingsSection(stringResource(R.string.section_keyboard),compact=true) {
                 SettingsRow(stringResource(R.string.keyboard_toolbar),stringResource(R.string.keyboard_toolbar_detail),SettingsGlyph.COMMAND,onToolbar)
                 SettingsDivider()
+                Row(Modifier.fillMaxWidth().toggleable(toolbarWithKeyboardOnly,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onToolbarWithKeyboardOnly)
+                    .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                        Text(stringResource(R.string.show_toolbar_only_with_keyboard),style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
+                        Text(stringResource(R.string.show_toolbar_only_with_keyboard_desc),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked=toolbarWithKeyboardOnly,onCheckedChange=null)
+                }
+                SettingsDivider()
                 Row(Modifier.fillMaxWidth().toggleable(keyboardSuggestionsEnabled,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onKeyboardSuggestions)
                     .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(R.string.keyboard_suggestions),Modifier.weight(1f),style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
@@ -108,6 +120,15 @@ import androidx.compose.ui.unit.dp
                     Switch(checked=arrowJoystickEnabled,onCheckedChange=null)
                 }
                 SettingsDivider()
+                Row(Modifier.fillMaxWidth().toggleable(enterSubmits,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onEnterSubmits)
+                    .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                        Text(stringResource(R.string.keyboard_enter_sends),style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
+                        Text(stringResource(if(enterSubmits) R.string.keyboard_enter_sends_detail_on else R.string.keyboard_enter_sends_detail_off),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked=enterSubmits,onCheckedChange=null)
+                }
+                SettingsDivider()
                 Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     Text(stringResource(R.string.ctrl_shortcuts),style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
                     Text(stringResource(R.string.ctrl_shortcuts_detail),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -119,10 +140,14 @@ import androidx.compose.ui.unit.dp
                     }
                 }
                 SettingsDivider()
+                SettingsRow(stringResource(R.string.ctrl_shortcut_buttons),stringResource(R.string.ctrl_shortcut_buttons_detail),SettingsGlyph.COMMAND,onControlItems)
+                SettingsDivider()
                 SettingsRow(stringResource(R.string.neovim_shortcuts),stringResource(R.string.neovim_shortcuts_detail),SettingsGlyph.COMMAND,onNeovim)
             }
             SettingsSection(stringResource(R.string.section_connections),compact=true) {
                 SettingsRow(stringResource(R.string.network),stringResource(R.string.network_detail),SettingsGlyph.NETWORK,onNetwork)
+                SettingsDivider()
+                SettingsRow(stringResource(R.string.ssh_keys),stringResource(R.string.ssh_keys_detail),SettingsGlyph.KEY,onSshKeys)
                 SettingsDivider()
                 SettingsRow(stringResource(R.string.background_alerts),stringResource(R.string.background_alerts_detail),SettingsGlyph.ALERTS,onAlerts)
             }

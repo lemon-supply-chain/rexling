@@ -38,7 +38,10 @@ impl Endpoint {
     pub fn new(server: &str, timeout: Duration) -> Result<Self> {
         let url = Url::parse(server).context("use an explicit unix://, https://, http://, wss://, or ws:// URL (host labels are CLI-only)")?;
         ensure!(
-            matches!(url.scheme(), "unix" | "https" | "http" | "wss" | "ws" | "ssh"),
+            matches!(
+                url.scheme(),
+                "unix" | "https" | "http" | "wss" | "ws" | "ssh"
+            ),
             "unsupported server scheme"
         );
         ensure!(
@@ -55,7 +58,10 @@ impl Endpoint {
                 "use unix:///absolute/socket/path"
             );
         } else if url.scheme() == "ssh" {
-            ensure!(url.host_str().is_some() && !url.username().is_empty(), "SSH requires a host and username");
+            ensure!(
+                url.host_str().is_some() && !url.username().is_empty(),
+                "SSH requires a host and username"
+            );
         } else {
             ensure!(
                 url.host_str().is_some() && matches!(url.path(), "" | "/"),
@@ -114,9 +120,23 @@ impl Endpoint {
             } else {
                 #[cfg(target_os = "android")]
                 if ssh || crate::network::enabled() {
-                    let stream = crate::network::connect(self.url.to_string(), self.timeout).await?;
-                    let (ws, response) = tokio_tungstenite::client_async_tls_with_config(request, stream, Some(config), None).await?;
-                    ensure!(response.headers().get("Sec-WebSocket-Protocol").and_then(|h|h.to_str().ok()) == Some(protocol), "server did not negotiate {protocol}");
+                    let stream =
+                        crate::network::connect(self.url.to_string(), self.timeout).await?;
+                    let (ws, response) = tokio_tungstenite::client_async_tls_with_config(
+                        request,
+                        stream,
+                        Some(config),
+                        None,
+                    )
+                    .await?;
+                    ensure!(
+                        response
+                            .headers()
+                            .get("Sec-WebSocket-Protocol")
+                            .and_then(|h| h.to_str().ok())
+                            == Some(protocol),
+                        "server did not negotiate {protocol}"
+                    );
                     return Ok(Box::new(ws) as Ws);
                 }
                 ensure!(!ssh, "SSH transport is available in the Android app");

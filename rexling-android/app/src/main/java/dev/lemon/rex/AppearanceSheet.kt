@@ -56,7 +56,7 @@ import kotlin.math.roundToInt
                     items(options,key={it.id}) {theme->
                         val active=theme.id==selected.id
                         val themeDescription=stringResource(R.string.a11y_theme_format,theme.name)
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f))  // alpha-ok translucent theme card
                             .then(if(active) Modifier.border(1.dp,MaterialTheme.colorScheme.primary,RoundedCornerShape(12.dp)) else Modifier)
                             .semantics(mergeDescendants=true) {contentDescription=themeDescription;this.selected=active;role=Role.RadioButton}
                             .clickable {onTheme(theme.id);editing=null}.padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {

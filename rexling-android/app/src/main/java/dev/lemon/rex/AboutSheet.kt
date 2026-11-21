@@ -59,7 +59,7 @@ internal data class AppBuildInfo(val version: String,val number: Int,val type: S
                 Text(stringResource(R.string.app_subtitle),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {  // alpha-ok build info card
             BuildInfoRow(stringResource(R.string.version),info.version)
             BuildInfoRow(stringResource(R.string.build),"${info.number} · ${info.type}")
             BuildInfoRow(stringResource(R.string.commit),info.commit)

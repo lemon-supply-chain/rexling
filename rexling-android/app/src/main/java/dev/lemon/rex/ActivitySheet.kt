@@ -31,8 +31,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun ActivitySheet(sources: List<ActivitySource>,onRefresh: ()->Unit,onSelect: (ActivityTarget)->Unit,onClose: ()->Unit,onSeen: (ActivityTarget)->Unit={},onMarkAll: ()->Unit={},hazeState: dev.chrisbanes.haze.HazeState?=null) {
-    var filter by remember {mutableStateOf(ActivityFilter.ALL)}
+@Composable internal fun ActivitySheet(sources: List<ActivitySource>,onRefresh: ()->Unit,onSelect: (ActivityTarget)->Unit,onClose: ()->Unit,onSeen: (ActivityTarget)->Unit={},onMarkAll: ()->Unit={},initialFilter: ActivityFilter=ActivityFilter.ATTENTION,hazeState: dev.chrisbanes.haze.HazeState?=null) {
+    var filter by remember {mutableStateOf(initialFilter)}
     val filtered=remember(sources,filter) {sources.map {it to ActivityCatalog.records(it,filter)}}
     val panelHeight=remember(sources) {
         val count=sources.sumOf {it.items.distinctBy {record->record.key}.size}

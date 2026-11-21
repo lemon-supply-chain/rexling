@@ -70,7 +70,7 @@ time.sleep(3600)
         let mut data = Data::open(&endpoint, &mut control, id, block, Trace::default()).await?;
         let mut restored = Replica::new(data.nonce);
         tokio::time::timeout(Duration::from_secs(12), async {
-            while !restored.ready() {
+            while !restored.snapshot_complete() {
                 restored.feed(&data.read().await?)?;
             }
             Ok::<_, anyhow::Error>(())

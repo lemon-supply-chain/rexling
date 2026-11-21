@@ -1,0 +1,157 @@
+{
+  "date": "2026-11-20",
+  "baseline_revision": "5415b908870b674a741254339c4e45226d0371cf",
+  "scope": "Program tile bitmap caching and active-only marquee animation",
+  "environment": {
+    "device": "Xiaomi/Redmi 21091116AC (evergo)",
+    "android": "13 / API 33",
+    "build_fingerprint": "Redmi/evergo/evergo:13/TP1A.220624.014/V816.0.1.0.TGBCNXM:user/release-keys",
+    "abi": "arm64-v8a",
+    "display": "1080x2400, 60 Hz",
+    "thermal_status": 0,
+    "physical_device": true
+  },
+  "method": {
+    "ui_workload": "Actual Choreographer clock; working SessionHeader plus four TerminalTabs, including a three-pane stack",
+    "ui_build_type": "debug instrumentation against the production composables",
+    "ui_trace": "Light system Perfetto: gfx, view, sched/sched_switch; no Android CLI profiler preparation",
+    "ui_duration_seconds": 8,
+    "startup_build_type": "optimized with speed-profile compilation",
+    "startup_metric": "am start -W TotalTime after force-stop, nine runs with 2s between launches",
+    "instrument_command": "adb shell am instrument -w -e class dev.lemon.rex.UiAnimationPerformanceTest#workingChrome dev.lemon.rex.test/androidx.test.runner.AndroidJUnitRunner",
+    "trace_command": "adb shell perfetto --background-wait --time 15s --buffer 32mb --app dev.lemon.rex gfx view sched/sched_switch --out /data/misc/perfetto-traces/rexlet-ui.pftrace",
+    "raw_artifacts": "Ignored rexling-android/.build/ui-performance-20261120/",
+    "note": "Only disposable offline fixtures were used. No Rex server or user terminal was driven."
+  },
+  "single_tile": {
+    "workload": "34x27dp neovim vector tile, software Canvas; 100 measured draws after warmup",
+    "baseline": {
+      "median_ms": 0.738154,
+      "p95_ms": 0.869846,
+      "allocated_bytes_per_draw": 276.9714285714286,
+      "allocated_objects_per_draw": 11.764285714285714
+    },
+    "after": {
+      "median_ms": 0.020308,
+      "p95_ms": 0.023154,
+      "allocated_bytes_per_draw": 36.97142857142857,
+      "allocated_objects_per_draw": 1.7642857142857142
+    },
+    "reduction_percent": {
+      "median": 97.25,
+      "p95": 97.34,
+      "allocated_bytes": 86.65,
+      "allocated_objects": 85.0
+    }
+  },
+  "working_chrome": {
+    "main_thread": {
+      "baseline": {
+        "allocated_bytes": 4690152,
+        "allocated_objects": 136051,
+        "frame_interval_p95_ms": 16.601643
+      },
+      "after": {
+        "allocated_bytes": 3001888,
+        "allocated_objects": 78164,
+        "frame_interval_p95_ms": 16.604234
+      },
+      "reduction_percent": {
+        "allocated_bytes": 36.0,
+        "allocated_objects": 42.55
+      }
+    },
+    "perfetto": {
+      "ui_draw": {
+        "baseline": {"samples": 518, "mean_ms": 4.052025, "p50_ms": 3.009539, "p95_ms": 9.562847, "p99_ms": 11.506231},
+        "after": {"samples": 531, "mean_ms": 3.064257, "p50_ms": 2.889846, "p95_ms": 4.881923, "p99_ms": 6.415693},
+        "mean_reduction_percent": 24.38,
+        "p95_reduction_percent": 48.95
+      },
+      "render_drawing": {
+        "baseline": {"samples": 518, "mean_ms": 12.792706, "p50_ms": 10.429615, "p95_ms": 13.569616, "p99_ms": 16.05723},
+        "after": {"samples": 531, "mean_ms": 9.548914, "p50_ms": 8.573769, "p95_ms": 10.885308, "p99_ms": 12.02577},
+        "mean_reduction_percent": 25.36,
+        "p95_reduction_percent": 19.78
+      },
+      "render_flush": {
+        "baseline": {"samples": 518, "mean_ms": 8.841558, "p50_ms": 6.415615, "p95_ms": 9.226462, "p99_ms": 12.098462},
+        "after": {"samples": 531, "mean_ms": 4.889145, "p50_ms": 3.635462, "p95_ms": 5.621231, "p99_ms": 6.358231},
+        "mean_reduction_percent": 44.7,
+        "p95_reduction_percent": 39.07
+      },
+      "render_frame_impl": {
+        "baseline": {"samples": 1036, "mean_ms": 1.916585, "p50_ms": 1.835077, "p95_ms": 2.819385, "p99_ms": 3.594538},
+        "after": {"samples": 1062, "mean_ms": 1.188577, "p50_ms": 1.081231, "p95_ms": 1.851769, "p99_ms": 2.053769},
+        "mean_reduction_percent": 37.98,
+        "p95_reduction_percent": 34.32
+      },
+      "dequeue_buffer": {
+        "baseline": {"samples": 1036, "mean_ms": 2.508049, "p50_ms": 1.431616, "p95_ms": 7.82023, "p99_ms": 9.012},
+        "after": {"samples": 1062, "mean_ms": 4.094193, "p50_ms": 2.508385, "p95_ms": 8.680308, "p99_ms": 11.246461},
+        "interpretation": "Buffer wait/backpressure increased; this is not reported as an improvement."
+      }
+    },
+    "gfxinfo": {
+      "baseline": {"frames": 232, "janky_frames": 229, "jank_percent": 98.71, "p50_ms": 40, "p95_ms": 48},
+      "after": {"frames": 274, "janky_frames": 274, "jank_percent": 100.0, "p50_ms": 40, "p95_ms": 46},
+      "interpretation": "No reliable whole-frame jank improvement is established on this MIUI device. CPU/render-section gains must not be represented as a 60 FPS result."
+    }
+  },
+  "terminal_renderer_regression_check": {
+    "workload": "100x50 terminal, one changed row, software Canvas",
+    "baseline": {"median_ms": 7.737153, "p95_ms": 8.287077},
+    "after": {"median_ms": 7.708923, "p95_ms": 8.077846},
+    "interpretation": "Unchanged within run variation; TerminalView was not modified."
+  },
+  "cold_start": {
+    "current_baseline": {
+      "samples": 9,
+      "runs_ms": [555, 527, 534, 538, 527, 529, 525, 525, 535],
+      "median_ms": 529,
+      "p95_ms": 538,
+      "range_ms": [525, 555]
+    },
+    "after": {
+      "samples": 9,
+      "runs_ms": [540, 542, 521, 528, 530, 545, 537, 544, 534],
+      "median_ms": 537,
+      "p95_ms": 544,
+      "range_ms": [521, 545]
+    },
+    "median_change_percent": 1.51,
+    "interpretation": "Overlapping distributions; no material startup regression is established. An earlier baseline measured 410 ms in a different device/ART state and is not used for the final claim."
+  },
+  "visual_verification": {
+    "tile_fixtures": 8,
+    "different_pixels": 0,
+    "sizes": ["34x27dp", "22x18dp"],
+    "programs": ["neovim", "codex", "claude_code", "shell"],
+    "note": "A rotating-bitmap marquee experiment was rejected because it rotated the rounded rectangle geometry rather than only its colors."
+  },
+  "checks": {
+    "jvm": {"test_classes": 59, "tests": 311, "failures": 0, "errors": 0, "skipped": 1},
+    "targeted_android": {"tests": 30, "passed": 26, "failed": 4},
+    "unrelated_android_failures": [
+      "ProgramTileRenderingTest.expandedCatalogRendersEveryTileAtPhoneSizes: existing catalog JSON missing offset",
+      "ProgramTileRenderingTest.catalogResolvesTilesGlyphsVariantsAndAliases: fish/terminal alias expectation",
+      "TerminalBackgroundTest.paddingExtendsEachAdjacentCellInsteadOfUsingOneGlobalBackground: device-dependent dimensions",
+      "TerminalBackgroundTest.scrollingReusesRecordingsAndMatchesFreshDrawingIncludingLinks: row-count expectation"
+    ],
+    "relevant_android_passes": [
+      "sizeCachedTileReplayIsDeterministic",
+      "9 AdaptiveTabsTest checks",
+      "6 SessionHeaderLoopTest checks",
+      "UiAnimationPerformanceTest workloads"
+    ],
+    "release_lint": "passed",
+    "optimized_build": "passed",
+    "apk_signature": "V2 development signature verified with apksigner",
+    "verify_apk_script": "Not run: SDK cmdline-tools/latest/bin/apkanalyzer is absent"
+  },
+  "final_artifact": {
+    "path": "rexling-android/app/build/outputs/apk/optimized/app-optimized.apk",
+    "sha256": "19598ab7742178a46fd1285224caaf1fd4eaaedf22ffb354b082fd0f20d8c441",
+    "installed": true
+  }
+}

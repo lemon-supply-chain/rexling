@@ -26,6 +26,16 @@ internal fun imageExtension(header: ByteArray): String? = when {
     else->null
 }
 
+/**
+ * The name Rex creates the uploaded file under. Rex accepts any file; it keeps only the last path
+ * component and strips control characters itself, but a readable fallback beats an empty name.
+ */
+internal fun uploadName(displayName: String?,header: ByteArray): String {
+    val name=displayName.orEmpty().substringAfterLast('/').filter {it>=' ' && it!='\u007f'}.trim()
+    if(name.isNotEmpty() && name!="." && name!="..") return name
+    return imageExtension(header)?.let {"image.$it"} ?: "file"
+}
+
 internal class ImageUploads(private val context: Context,private val scope: CoroutineScope,
     private val native: RexUploadBackend=RexImageUpload()) {
     var state by mutableStateOf<ImageUploadStatus?>(null);private set
@@ -38,8 +48,8 @@ internal class ImageUploads(private val context: Context,private val scope: Coro
     private var preparing: File?=null
     fun start(uri: Uri,target: ImageTarget,onCopied: ()->Unit={}): Boolean {
         if(state?.phase==ImagePhase.SUCCESS) clear()
-        if(state!=null) {onCopied();notice="Finish or cancel the current image first.";return false}
-        if(uri.scheme!="content") {onCopied();notice="Choose an image from your clipboard or photo picker";return false}
+        if(state!=null) {onCopied();notice="Finish or cancel the current upload first.";return false}
+        if(uri.scheme!="content") {onCopied();notice="Choose a file from your clipboard or file picker";return false}
         val released=java.util.concurrent.atomic.AtomicBoolean(false)
         val release={if(released.compareAndSet(false,true)) onCopied()}
         val file=File(directory,UUID.randomUUID().toString());preparing=file
@@ -51,7 +61,7 @@ internal class ImageUploads(private val context: Context,private val scope: Coro
                 preparing=null
                 if(id==operation) upload(id)
             } catch(error: CancellationException) {throw error}
-            catch(error: Exception) {if(id==operation) state=state?.copy(phase=ImagePhase.FAILED,error=error.message ?: "Could not prepare this image")}
+            catch(error: Exception) {if(id==operation) state=state?.copy(phase=ImagePhase.FAILED,error=error.message ?: "Could not prepare this file")}
         }
         job?.invokeOnCompletion {release()}
         return true
@@ -60,22 +70,25 @@ internal class ImageUploads(private val context: Context,private val scope: Coro
         try {
             directory.mkdirs()
             directory.listFiles()?.filter {it.lastModified()<System.currentTimeMillis()-24*60*60*1000L}?.forEach {it.delete()}
-            require(uri.scheme=="content") {"Choose an image from your clipboard or photo picker"}
-            val input=context.contentResolver.openInputStream(uri) ?: error("This image is no longer available")
+            require(uri.scheme=="content") {"Choose a file from your clipboard or file picker"}
+            val input=context.contentResolver.openInputStream(uri) ?: error("This file is no longer available")
             input.use {source->file.outputStream().use {sink->
                 val buffer=ByteArray(65536);var total=0L
                 while(true) {currentCoroutineContext().ensureActive();val n=source.read(buffer);if(n<0) break;total+=n
-                    require(total<=MAX_IMAGE_BYTES) {"Choose an image smaller than 100 MiB"};sink.write(buffer,0,n)}
+                    require(total<=MAX_IMAGE_BYTES) {"Choose a file smaller than 100 MiB"};sink.write(buffer,0,n)}
             }}
             val header=file.inputStream().use {inputStream->val bytes=ByteArray(12);var n=0;while(n<12) {val count=inputStream.read(bytes,n,12-n);if(count<0) break;n+=count};bytes.copyOf(n)}
-            val extension=imageExtension(header) ?: error("Choose a PNG, JPEG, GIF or WebP image")
-            return StagedImage(file,"image.$extension")
+            val displayName=runCatching {
+                context.contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use {
+                    if(it.moveToFirst()) it.getString(0) else null}
+            }.getOrNull()
+            return StagedImage(file,uploadName(displayName,header))
         } catch(error: Throwable) {file.delete();throw error}
         finally {onCopied()}
     }
     private suspend fun upload(id: Long) {
         val current=state ?: return
-        val image=staged ?: error("Choose the image again to retry")
+        val image=staged ?: error("Choose the file again to retry")
         state=current.copy(phase=ImagePhase.PREPARING,error="",progress=0f)
         val result=native.upload(current.target,image) {phase,progress->
             if(id==operation) state=state?.copy(phase=when(phase) {"preparing"->ImagePhase.PREPARING;"finishing"->ImagePhase.FINISHING;else->ImagePhase.UPLOADING},progress=progress)
@@ -91,13 +104,13 @@ internal class ImageUploads(private val context: Context,private val scope: Coro
             "uncertain"->{state=state?.copy(phase=ImagePhase.FAILED,error=result.error,retrySafe=false);return}
             "failed"->{state=state?.copy(phase=ImagePhase.FAILED,error=result.error);return}
             "canceled"->return
-            "unsupported"->{state=state?.copy(phase=ImagePhase.FAILED,error="Update the Rex server to enable image uploads (API revision 11 or newer).");return}
+            "unsupported"->{state=state?.copy(phase=ImagePhase.FAILED,error="Update the Rex server to enable file uploads (API revision 11 or newer).");return}
             else->error("Unexpected upload state")
         }
     }
     fun retry() {
         if(state?.phase!=ImagePhase.FAILED || !retryable) return
-        if(staged==null) {notice="This image could not be prepared. Cancel and choose it again.";return}
+        if(staged==null) {notice="This file could not be prepared. Cancel and choose it again.";return}
         val id=++operation
         job=scope.launch {try {upload(id)} catch(error: CancellationException) {throw error} catch(error: Exception) {if(id==operation) state=state?.copy(phase=ImagePhase.FAILED,error=error.message ?: "Upload failed")}}
     }
@@ -119,6 +132,9 @@ internal fun pasteTerminalClipboard(context: Context,onImage: (Uri)->Boolean,onT
     val clip=(context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip ?: return false
     if(clip.itemCount==0) return false
     val item=clip.getItemAt(0);val uri=item.uri
-    return if(uri!=null && (clip.description.hasMimeType("image/*") || context.contentResolver.getType(uri)?.startsWith("image/")==true)) onImage(uri)
+    // A copied file (image or not) uploads; copied text, including text exposed as a URI, pastes.
+    val type=uri?.let {runCatching {context.contentResolver.getType(it)}.getOrNull()}
+    val file=uri!=null && uri.scheme=="content" && (clip.description.hasMimeType("image/*") || (type!=null && !type.startsWith("text/")))
+    return if(file) onImage(uri!!)
         else {val text=item.coerceToText(context)?.toString().orEmpty();if(text.isEmpty()) false else {onText(text);true}}
 }

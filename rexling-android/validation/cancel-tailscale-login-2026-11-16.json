@@ -1,0 +1,17 @@
+{
+  "build": 143,
+  "go_tests": "passed",
+  "lint_release": "passed",
+  "jvm": "204 passed, 1 skipped",
+  "phone_tests": "2 passed on SM-S906E: isolated Tailscale node cancellation and pending browser UI",
+  "assertions": [
+    "Embedded node stops after cancellation",
+    "Saved routes unchanged",
+    "Network revision unchanged: no unrelated server retry",
+    "Pending browser link removed and Not set up shown",
+    "Suspended state prevents saved routes from restarting pending login",
+    "Explicit setup can clear suspension"
+  ],
+  "connected_guard": "Native cancellation refuses Running nodes",
+  "apk_verification": "passed"
+}

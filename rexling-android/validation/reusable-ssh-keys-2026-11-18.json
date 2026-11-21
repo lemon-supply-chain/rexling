@@ -1,0 +1,31 @@
+{
+  "build": 165,
+  "feature": "Reusable SSH key library in Preferences and saved-key selection during server setup.",
+  "migration": "Existing per-endpoint encrypted keys migrate atomically before network configuration, retaining their original Android Keystore ciphertext.",
+  "behavior": [
+    "named keys and public SHA-256 fingerprints",
+    "saved key selection, no-key mode, paste and file import",
+    "optional passphrase handling",
+    "fingerprint deduplication",
+    "server selection remains a draft until Save & connect",
+    "forgetting a server retains the shared key",
+    "deleting a key confirms removal and clears only its bindings",
+    "unassigned key import and rename do not restart connections"
+  ],
+  "checks": {
+    "unit_tests": 229,
+    "unit_skipped": 1,
+    "unit_failures": 0,
+    "native_network_go_tests": "passed",
+    "targeted_android_checks": 9,
+    "targeted_android_failures": 0,
+    "visual_library_rename_delete_recheck": "passed",
+    "release_and_debug_build": "passed",
+    "lint": "passed",
+    "apk_signature_and_16k_alignment": "passed",
+    "screenshots_reviewed": true,
+    "installed_device": "RFCT21390SD",
+    "installed_hash_matches": true,
+    "installed_sha256": "917d52612b53307e7dc56cf765c805b187a8b8b39731a25e40f5659dce373761"
+  }
+}

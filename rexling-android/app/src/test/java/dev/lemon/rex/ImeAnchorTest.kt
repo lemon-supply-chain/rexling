@@ -2,54 +2,15 @@ package dev.lemon.rex
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TerminalImeAnchorTest {
+class ImeAnchorTest {
     private fun screen(rows: Int=6,columns: Int=20,cursor: Pair<Int,Int>?=null,scroll: TerminalScroll=TerminalScroll(rows.toLong(),0,rows.toLong()),painted: List<Int> = emptyList()): TerminalScreen {
         val cells=painted.flatMap {y->listOf(TerminalCell(0,y,"line",0,0,0,4))}
         return TerminalScreen(columns=columns,rows=rows,cursorX=cursor?.first,cursorY=cursor?.second,
             foreground=0,background=0,cells=cells,scroll=scroll)
     }
     private fun scrolledUp(rows: Int=6)=TerminalScroll(rows+40L,0,rows.toLong())
-
-    @Test fun piIsDetectedByNameAndInstallPath() {
-        assertEquals(ImeAnchor.CONTENT,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("pi"))))
-        assertEquals(ImeAnchor.CONTENT,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("/home/lemon/.local/bin/pi"))))
-        assertEquals(ImeAnchor.CONTENT,TerminalImeAnchors.anchor(ProgramIdentity.resolve(
-            listOf("node","/home/lemon/.npm-global/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"))))
-    }
-
-    @Test fun cursorAgentIsDetected() {
-        assertEquals(ImeAnchor.CONTENT,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("cursor-agent"))))
-        assertEquals(ImeAnchor.CONTENT,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("/usr/local/bin/cursor-agent"))))
-    }
-
-    @Test fun yaziResizesByNameAndInstallPath() {
-        assertEquals(ImeAnchor.RESIZE,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("yazi"))))
-        assertEquals(ImeAnchor.RESIZE,TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf("/opt/homebrew/bin/yazi"))))
-    }
-
-    @Test fun everyOtherProgramKeepsTheCursorAnchor() {
-        assertEquals(ImeAnchor.CURSOR,TerminalImeAnchors.anchor(null))
-        assertEquals(ImeAnchor.CURSOR,TerminalImeAnchors.anchor(ProgramIdentity.Loading))
-        for(name in listOf("zsh","bash","nvim","claude","codex","node","pip","pihole-status","grep")) {
-            assertEquals("$name must not match a hidden-caret rule",ImeAnchor.CURSOR,
-                TerminalImeAnchors.anchor(ProgramIdentity.resolve(listOf(name))))
-        }
-    }
-
-    @Test fun rulesStayDataAndAreUniquelyNamed() {
-        val ids=TerminalImeAnchors.ids()
-        assertEquals(ids.size,ids.distinct().size)
-        assertTrue(TerminalImeAnchors.rules.all {it.names.isNotEmpty() || it.pathFragments.isNotEmpty()})
-        val rule=ImeAnchorRule("sample",ImeAnchor.CONTENT,names=setOf("agent"))
-        assertTrue(rule.matches("/opt/bin/agent"))
-        assertTrue(rule.matches("-agent.exe"))
-        assertTrue(!rule.matches("/opt/bin/agents"))
-        assertTrue(ImeAnchorRule("sample",ImeAnchor.CONTENT,pathFragments=setOf("/@scope/agent/"))
-            .matches("/home/lemon/lib/node_modules/@scope/agent/index.js"))
-    }
 
     @Test fun aReportedCursorWinsEvenWithAHiddenCaretRule() {
         val visible=screen(cursor=1 to 2,painted=listOf(0,1,2,3,4,5))

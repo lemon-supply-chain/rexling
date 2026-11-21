@@ -67,4 +67,36 @@ class ModelsTest {
         assertEquals(expected,controlShortcuts.map {TerminalInput.modified(it,true,false).single().code})
     }
 
+    @Test fun keyboardEnterSubmitsOnlyWhenEnabledAndPastedNewlinesStayLineFeeds() {
+        assertEquals("\n",TerminalInput.imeKeys("\n",false))
+        assertEquals("\r",TerminalInput.imeKeys("\n",true))
+        assertEquals("a\nb",TerminalInput.imeKeys("a\nb",true))
+        assertEquals("\n\n",TerminalInput.imeKeys("\n\n",true))
+        assertEquals("x",TerminalInput.imeKeys("x",true))
+        // Toolbar Shift with the keyboard's Enter is a real Shift+Enter.
+        assertEquals(TerminalInput.SHIFT_ENTER,TerminalInput.modified(TerminalInput.imeKeys("\n",true),false,false,true))
+    }
+
+    @Test fun uploadsKeepTheFileNameAndFallBackWhenItIsMissing() {
+        val png=byteArrayOf(0x89.toByte(),80,78,71,13,10,26,10,0,0,0,0)
+        assertEquals("report.pdf",uploadName("report.pdf",ByteArray(0)))
+        assertEquals("notes.txt",uploadName("dir/sub/notes.txt",ByteArray(0)))
+        assertEquals("ab.zip",uploadName("a\u0000b\n.zip",ByteArray(0)))
+        assertEquals("image.png",uploadName(null,png))
+        assertEquals("image.png",uploadName("  ",png))
+        assertEquals("file",uploadName("..",ByteArray(0)))
+        assertEquals("file",uploadName(null,byteArrayOf(1,2,3)))
+    }
+
+    @Test fun tailscaleDeviceNamesAreOneLowercaseDnsLabel() {
+        assertEquals("",TailscaleHostname.normalize("  "))
+        assertEquals("shulhi-s22",TailscaleHostname.normalize(" Shulhi-S22 "))
+        assertEquals("a",TailscaleHostname.normalize("a"))
+        assertEquals("a".repeat(63),TailscaleHostname.normalize("a".repeat(63)))
+        assertEquals(null,TailscaleHostname.normalize("a".repeat(64)))
+        assertEquals(null,TailscaleHostname.normalize("-phone"))
+        assertEquals(null,TailscaleHostname.normalize("phone-"))
+        assertEquals(null,TailscaleHostname.normalize("my phone"))
+        assertEquals(null,TailscaleHostname.normalize("phone.local"))
+    }
 }

@@ -138,9 +138,10 @@ IME-animation flush then send SIGWINCH, so the program redraws into the space ab
 with a fixed composer; its own layout must reflow instead of having the whole grid pushed up and
 clipped at the top.
 
-- `ImeAnchorRule` matches executable base names and install-path fragments against
-  `ProgramIdentity.matchNames`. Adding a program is one entry in `TerminalImeAnchors.rules`;
-  unknown or pending programs keep `CURSOR`, which never moves a viewport on its own.
+- Each program profile (see `profiles/ProgramProfile.kt` and its per-program files) matches
+  executable base names and install-path fragments against `ProgramIdentity.matchNames`.
+  Adding a program is one new profile object appended to `ProgramProfile.specific`; unknown or
+  pending programs keep `CURSOR`, which never moves a viewport on its own.
 - Scrollback (`scroll.below > 0`) and the last-painted-row cap apply only to panning policies.
   `RESIZE` programs always reflow; they never call `terminalImePan`.
 
@@ -158,7 +159,8 @@ Terminal padding (`insetTop`, `insetBottom`, `insetHorizontal`) provides comfort
 - **`TerminalEdgePolicy.NON_EDITOR` (Default)**: Strictly constrains drawing within the content box `clipRect(0f, insetTop, width, height - insetBottom)`. Tools with multi-colored status badges (e.g. `yazi`, `tmux`) never leak color stripes or icons into bottom insets or pager dots.
 - **`TerminalEdgePolicy.EDITOR`**: Enabled for full-screen editors (`vim`, `neovim`, `helix`, `nano`, `micro`, `emacs`). When `extendPadding` is true, the top row background seamlessly extends upward to `0f` and the last row background extends downward to `height`, eliminating letterbox blank borders while keeping text safely within the content padding.
 
-`TerminalEdgePolicies.policy(identity)` resolves the policy from `ProgramIdentity`, strictly defaulting to `NON_EDITOR` for shells, CLI utilities, and unclassified programs.
+`ProgramProfile.resolve(identity)` resolves the edge policy from `ProgramIdentity`, strictly
+defaulting to `NON_EDITOR` for shells, CLI utilities, and unclassified programs.
 
 ### 3.10 Keyboard Suggestions and Auto-Correction Policy
 
@@ -167,7 +169,7 @@ Soft keyboards (like Gboard) naturally attempt dictionary lookups, predictive wo
 - **Configurable Preference**: A "Keyboard suggestions" (`keyboard_suggestions`) toggle in Preferences (Keyboard section) controls this behavior. It defaults to `false` (disabled) so terminal commands are passed verbatim without dictionary intervention.
 - **IME Connection Flags**:
   - When suggestions are **disabled** (`keyboardSuggestions = false`): Modern IMEs (such as Gboard and Samsung Keyboard) ignore `TYPE_TEXT_FLAG_NO_SUGGESTIONS` on standard `TYPE_CLASS_TEXT` fields. `TerminalView.onCreateInputConnection` configures `InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS` alongside `EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING`. This forces the keyboard to treat the stream as raw literal characters without predictive spell-checking or dictionary replacement, while omitting `setInitialSurroundingText` and clearing context in `commitPending()`.
-  - When suggestions are **enabled** (`keyboardSuggestions = true`): Non-Neovim programs request `InputType.TYPE_TEXT_FLAG_AUTO_CORRECT` with `TYPE_TEXT_FLAG_MULTI_LINE` and retain surrounding text for multi-word completions. Neovim always retains `TYPE_TEXT_FLAG_NO_SUGGESTIONS` regardless of preference to prevent command-mode key sequence corruption.
+  - When suggestions are **enabled** (`keyboardSuggestions = true`): Programs whose profile allows them (see `profiles/ProgramProfile.kt`; modal editors like vim/neovim never do) request `InputType.TYPE_TEXT_FLAG_AUTO_CORRECT` with `TYPE_TEXT_FLAG_MULTI_LINE` and retain surrounding text for multi-word completions. Editor-family profiles always keep `TYPE_TEXT_FLAG_NO_SUGGESTIONS` regardless of preference to prevent command-mode key sequence corruption.
 - **Dynamic Reconfiguration**: Toggling the preference marks active editors and invokes `InputMethodManager.restartInput()` immediately or upon regaining window focus (`onWindowFocusChanged`), cleanly updating the soft keyboard's state without requiring manual keyboard dismissals.
 
 ---

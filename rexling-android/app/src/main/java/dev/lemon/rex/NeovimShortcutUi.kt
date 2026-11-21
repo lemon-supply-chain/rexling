@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -162,11 +163,50 @@ import kotlin.math.roundToInt
                     Text(stringResource(R.string.customize_shortcuts),Modifier.padding(horizontal=8.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.primary)
                 }
                 if(pages>1) Text("${pager.currentPage%pages+1}/$pages",Modifier.padding(horizontal=8.dp),fontFamily=MonoUi,fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                ChromeButton(ChromeIcon.CLOSE,"Close $name shortcuts",modifier=Modifier.size(28.dp),onClick=onDismiss)
+                ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_shortcuts),modifier=Modifier.size(28.dp),onClick=onDismiss)
             }
         }
         }
         }
     }
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable internal fun NeovimMenuOptions(layout: NeovimShortcutLayout,onLayout: (NeovimShortcutLayout)->Unit,
+    effect: NeovimShortcutEffect,onEffect: (NeovimShortcutEffect)->Unit,hapticsEnabled: Boolean,onHaptics: (Boolean)->Unit) {
+    Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.menu_layout),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                NeovimShortcutLayout.entries.forEach {choice->
+                    FilterChip(selected=layout==choice,onClick={onLayout(choice)},
+                        label={Text(if(choice==NeovimShortcutLayout.GRID) stringResource(R.string.layout_grid) else stringResource(R.string.layout_circular),style=SettingsType.row)})
+                }
+            }
+            if(layout==NeovimShortcutLayout.CIRCULAR) {
+                Text(stringResource(R.string.opening_effect),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
+                FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    NeovimShortcutEffect.entries.forEach {choice->
+                        FilterChip(selected=effect==choice,onClick={onEffect(choice)},label={Text(stringResource(when(choice) {
+                            NeovimShortcutEffect.FAN_OUT->R.string.effect_fan_out
+                            NeovimShortcutEffect.SPIN->R.string.effect_spin
+                            NeovimShortcutEffect.EXPAND->R.string.effect_expand
+                            NeovimShortcutEffect.NONE->R.string.effect_none
+                        }),style=SettingsType.row)})
+                    }
+                }
+                Text(stringResource(when(effect) {
+                    NeovimShortcutEffect.FAN_OUT->R.string.effect_fan_out_detail
+                    NeovimShortcutEffect.SPIN->R.string.effect_spin_detail
+                    NeovimShortcutEffect.EXPAND->R.string.effect_expand_detail
+                    NeovimShortcutEffect.NONE->R.string.effect_none_detail
+                }),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth().toggleable(hapticsEnabled,role=Role.Switch,onValueChange=onHaptics).padding(vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text(stringResource(R.string.selection_haptics),Modifier.weight(1f),style=SettingsType.row)
+                    Switch(checked=hapticsEnabled,onCheckedChange=null)
+                }
+                Text(stringResource(R.string.circular_wheel_hint),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+    }
+}
+
 

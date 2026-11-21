@@ -40,6 +40,7 @@ type configuration struct {
 	Routes     map[string]string        `json:"routes"`
 	BuiltIn    bool                     `json:"built_in"`
 	ControlURL string                   `json:"control_url"`
+	Hostname   string                   `json:"hostname"`
 	Directory  string                   `json:"directory"`
 	SSH        map[string]sshCredential `json:"ssh"`
 	Trusted    map[string]string        `json:"trusted"`
@@ -159,7 +160,7 @@ func configure(next configuration) error {
 	for _, client := range clients {
 		client.Close()
 	}
-	if previous.tailscaleEnabled() != next.tailscaleEnabled() || previous.ControlURL != next.ControlURL || previous.Directory != next.Directory {
+	if previous.tailscaleEnabled() != next.tailscaleEnabled() || previous.ControlURL != next.ControlURL || previous.Hostname != next.Hostname || previous.Directory != next.Directory {
 		tail.Lock()
 		old := tail.server
 		tail.server = nil
@@ -172,6 +173,14 @@ func configure(next configuration) error {
 		go func() { _, _ = tailServer() }()
 	}
 	return nil
+}
+
+// tailHostname is the device name the built-in Tailscale node presents, defaulting to rexling-android.
+func tailHostname(config configuration) string {
+	if name := strings.TrimSpace(config.Hostname); name != "" {
+		return name
+	}
+	return "rexling-android"
 }
 func tailServer() (*tsnet.Server, error) {
 	tail.Lock()
@@ -190,7 +199,9 @@ func tailServer() (*tsnet.Server, error) {
 		control = "https://controlplane.tailscale.com"
 	}
 	sum := sha256.Sum256([]byte(control))
-	server := &tsnet.Server{Dir: filepath.Join(config.Directory, hex.EncodeToString(sum[:16])), Hostname: "rexling-android", ControlURL: config.ControlURL,
+	// The state directory depends only on the control server, so renaming keeps the node's identity
+	// and sign-in; tsnet re-sends the hostname to control on every start.
+	server := &tsnet.Server{Dir: filepath.Join(config.Directory, hex.EncodeToString(sum[:16])), Hostname: tailHostname(config), ControlURL: config.ControlURL,
 		Logf: func(string, ...any) {}, UserLogf: func(string, ...any) {}}
 	if err := server.Start(); err != nil {
 		server.Close()
@@ -467,6 +478,28 @@ func status() map[string]any {
 	return value
 }
 
+func importSSHKey(text, passphrase string) (map[string]any, error) {
+	var key any
+	var err error
+	if passphrase == "" {
+		key, err = ssh.ParseRawPrivateKey([]byte(text))
+	} else {
+		key, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(text), []byte(passphrase))
+	}
+	if err != nil {
+		return nil, err
+	}
+	block, err := ssh.MarshalPrivateKey(key, "")
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.NewSignerFromKey(key)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"key": string(pem.EncodeToMemory(block)), "fingerprint": ssh.FingerprintSHA256(signer.PublicKey()), "kind": signer.PublicKey().Type()}, nil
+}
+
 //export rexnet_command
 func rexnet_command(raw *C.char) *C.char {
 	var request struct {
@@ -505,19 +538,7 @@ func rexnet_command(raw *C.char) *C.char {
 		case "logout":
 			err = logout()
 		case "import_key":
-			var key any
-			if request.Passphrase == "" {
-				key, err = ssh.ParseRawPrivateKey([]byte(request.Key))
-			} else {
-				key, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(request.Key), []byte(request.Passphrase))
-			}
-			if err == nil {
-				var block *pem.Block
-				block, err = ssh.MarshalPrivateKey(key, "")
-				if err == nil {
-					result = map[string]any{"key": string(pem.EncodeToMemory(block))}
-				}
-			}
+			result, err = importSSHKey(request.Key, request.Passphrase)
 		default:
 			err = errors.New("unknown network command")
 		}

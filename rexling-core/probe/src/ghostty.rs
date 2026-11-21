@@ -345,7 +345,7 @@ impl Terminal {
     }
 }
 fn color(s: &str) -> Result<[u8; 3]> {
-    let s = s.strip_prefix('#').unwrap_or(s);
+    let s = s.trim_prefix('#');
     ensure!(s.len() == 6 && s.is_ascii(), "invalid RGB color");
     Ok([
         u8::from_str_radix(&s[0..2], 16)?,

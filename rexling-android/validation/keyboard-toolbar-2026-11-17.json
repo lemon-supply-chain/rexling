@@ -1,0 +1,40 @@
+{
+  "build": 157,
+  "maximum_configurable_buttons": 7,
+  "keyboard_button": "pinned",
+  "empty_layout_supported": true,
+  "legacy_default_preserved": true,
+  "checks": {
+    "unit": {
+      "tests": 212,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "release_lint": "passed",
+    "phone_unique_tests_passed": 25,
+    "phone_notes": "Five current toolbar checks and one Preferences check pass. Includes flings at both edges, drawer position, inside taps, Back/outside/Close dismissal, drag editing, cancellation and key dispatch. Existing 19 keyboard-bar checks passed in build154.",
+    "visual_review": "editor screenshot reviewed"
+  },
+  "coverage": [
+    "remove/add at maximum",
+    "reorder and save",
+    "swap existing button",
+    "stable preference round-trip",
+    "unknown and duplicate IDs",
+    "empty layout keyboard and extra keys",
+    "Paste, Enter and Ctrl shortcut dispatch",
+    "existing Shift, joystick, hidden chevron and keyboard-toggle behavior",
+    "drag across palette and toolbar",
+    "replace at capacity by dropping onto a slot",
+    "cancel drag without mutating draft",
+    "accessibility reorder",
+    "palette overscroll and flings cannot move/dismiss drawer",
+    "palette still reaches F12 and scrolls back to Paste",
+    "explicit Close still dismisses editor",
+    "fixed editor inside taps retain panel",
+    "Back and outside taps dismiss",
+    "ordinary Preferences drawer still renders in both themes"
+  ],
+  "editor": "Fixed bottom dialog using shared drawer chrome; no swipe-dismiss gesture or scroll-boundary workaround; no continuous popup backdrop invalidator."
+}

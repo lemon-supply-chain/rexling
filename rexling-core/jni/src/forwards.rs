@@ -74,10 +74,21 @@ pub fn create(value: Value) -> Result<u64> {
             let error: Option<String> = match result {
                 Ok(Ok(())) => None,
                 Ok(Err(e)) => {
-                        let busy=e.chain().any(|cause|cause.downcast_ref::<std::io::Error>().is_some_and(|io|matches!(io.kind(),std::io::ErrorKind::AddrInUse|std::io::ErrorKind::PermissionDenied)));
-                        if let Ok(mut state)=shared.lock() {*state=json!({"phase":"failed","error":e.to_string(),"port_unavailable":busy});}
-                        return;
-                    },
+                    let busy = e.chain().any(|cause| {
+                        cause.downcast_ref::<std::io::Error>().is_some_and(|io| {
+                            matches!(
+                                io.kind(),
+                                std::io::ErrorKind::AddrInUse
+                                    | std::io::ErrorKind::PermissionDenied
+                            )
+                        })
+                    });
+                    if let Ok(mut state) = shared.lock() {
+                        *state =
+                            json!({"phase":"failed","error":e.to_string(),"port_unavailable":busy});
+                    }
+                    return;
+                }
                 Err(_) => Some("Forward worker failed".into()),
             };
             if let Some(error) = error {

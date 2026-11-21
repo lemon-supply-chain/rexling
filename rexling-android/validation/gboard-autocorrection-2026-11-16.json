@@ -1,0 +1,23 @@
+{
+  "build": 131,
+  "baseline": "Real Gboard space correction failed to send within 2 seconds; sent helo while local editor contained hello and a space",
+  "cause": "Android 14+ BaseInputConnection.replaceText bypasses commitText",
+  "device": "SM-S906E / Gboard",
+  "device_tests": "14 passed",
+  "coverage": [
+    "Real Gboard space autocorrection without touching terminal",
+    "Real Gboard suggestion tap",
+    "Immediate replacement delivery",
+    "Nested batch and duplicate-commit handling",
+    "Stale target rejection",
+    "Tab keyboard handoff"
+  ],
+  "jvm": {
+    "tests": 195,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "lint_release": "passed",
+  "apk_verification": "passed"
+}

@@ -12,7 +12,7 @@ typedef struct {
   uint64_t scroll_total, scroll_offset, scroll_visible;
   uint8_t input_flags;
   uint16_t overscan_above, overscan_below;
-  uint8_t cursor_style, cursor_blinking;
+  uint8_t cursor_style, cursor_blinking, cursor_has_position;
 } RpFrame;
 /* Overscan rows keep a distinct y above any real grid row:
    RP_ABOVE|k is k rows over the viewport (k>=1), RP_BELOW|k is k rows
@@ -20,9 +20,12 @@ typedef struct {
 #define RP_ABOVE 0xFF00
 #define RP_BELOW 0xFE00
 /* Spare rows above and below the viewport for smooth sub-line scrolling. */
-#define RP_OVERSCAN 4
+#define RP_OVERSCAN 16
 typedef struct {
   GhosttyTerminal terminal;
+  GhosttySnapshotDecoder snapshot;
+  const uint8_t *snapshot_bytes;
+  size_t snapshot_len, snapshot_offset;
   GhosttyRenderState render;
   GhosttyRenderStateRowIterator rows;
   GhosttyRenderStateRowCells cells;
@@ -37,6 +40,7 @@ void rp_free(RpTerminal *t) {
   ghostty_render_state_row_cells_free(t->cells);
   ghostty_render_state_row_iterator_free(t->rows);
   ghostty_render_state_free(t->render);
+  ghostty_snapshot_decoder_free(t->snapshot);
   ghostty_terminal_free(t->terminal);
   free(t);
 }
@@ -170,6 +174,49 @@ int rp_decode(const uint8_t *bytes, size_t len, RpTerminal **out, size_t *offset
   if (r != 0) { rp_free(t); return r; }
   *out = t;
   return 0;
+}
+/* Each call receives a complete framed decoder operation. The reader never
+ * retains a Rust slice between calls and must not encounter network starvation. */
+static bool snapshot_read(void *userdata,uint8_t *buffer,size_t capacity,size_t *read) {
+  RpTerminal *t=userdata;
+  size_t remaining=t->snapshot_len-t->snapshot_offset;
+  if(!remaining) return false;
+  *read=remaining<capacity?remaining:capacity;
+  memcpy(buffer,t->snapshot_bytes+t->snapshot_offset,*read);
+  t->snapshot_offset+=*read;
+  return true;
+}
+static void snapshot_input(RpTerminal *t,const uint8_t *bytes,size_t len) {
+  t->snapshot_bytes=bytes;t->snapshot_len=len;t->snapshot_offset=0;
+}
+static void snapshot_input_end(RpTerminal *t,size_t *consumed) {
+  *consumed=t->snapshot_offset;
+  t->snapshot_bytes=NULL;t->snapshot_len=0;t->snapshot_offset=0;
+}
+int rp_decode_ready(const uint8_t *bytes,size_t len,RpTerminal **out,size_t *consumed) {
+  *out=NULL;*consumed=0;
+  RpTerminal *t=calloc(1,sizeof(*t));
+  if(!t)return GHOSTTY_OUT_OF_MEMORY;
+  snapshot_input(t,bytes,len);
+  GhosttyReader reader={.read=snapshot_read,.userdata=t};
+  int r=ghostty_snapshot_decoder_new(NULL,&t->snapshot,reader);
+  uint64_t image_limit=RP_IMAGE_LIMIT;
+  if(r==0)r=ghostty_snapshot_decoder_set(t->snapshot,GHOSTTY_SNAPSHOT_DECODER_OPT_KITTY_IMAGE_STORAGE_LIMIT,&image_limit);
+  if(r==0)r=ghostty_snapshot_decoder_ready(t->snapshot,&t->terminal);
+  snapshot_input_end(t,consumed);
+  if(r==0)r=configure(t);
+  if(r!=0){rp_free(t);return r;}
+  *out=t;return 0;
+}
+int rp_decode_next(RpTerminal *t,const uint8_t *bytes,size_t len,size_t *consumed,uint8_t *finished) {
+  *consumed=0;*finished=0;
+  if(!t->snapshot)return GHOSTTY_INVALID_VALUE;
+  snapshot_input(t,bytes,len);
+  int r=ghostty_snapshot_decoder_next(t->snapshot);
+  snapshot_input_end(t,consumed);
+  if(r==GHOSTTY_NO_VALUE){*finished=1;r=0;}
+  if(r!=0 || *finished){ghostty_snapshot_decoder_free(t->snapshot);t->snapshot=NULL;}
+  return r;
 }
 int rp_write(RpTerminal *t, const uint8_t *bytes, size_t len, size_t *consumed,
              ApcFn callback, void *userdata) {
@@ -395,9 +442,9 @@ int rp_frame(RpTerminal *t, RpFrame *frame, CellFn callback, void *userdata) {
   GhosttyRenderStateOverscan captured={0};
   GET(GHOSTTY_RENDER_STATE_DATA_OVERSCAN,&captured);
   frame->overscan_above=captured.above;frame->overscan_below=captured.below;
-  frame->cursor_x=cursor.viewport_x; frame->cursor_y=cursor.viewport_y;
-  // Bit 0: drawn cursor. Bit 1: position known even when hidden, as TUIs park it for IMEs.
-  frame->cursor_visible=(cursor.visible && cursor.viewport_has_value) | (cursor.viewport_has_value<<1);
+  frame->cursor_has_position=cursor.viewport_has_value;
+  frame->cursor_x=cursor.viewport_has_value?cursor.viewport_x:0; frame->cursor_y=cursor.viewport_has_value?cursor.viewport_y:0;
+  frame->cursor_visible=cursor.visible && cursor.viewport_has_value;
   frame->cursor_style=(uint8_t)cursor.visual_style;frame->cursor_blinking=cursor.blinking;
   // A restored terminal can have command boundaries while its cursor is in output.
   if(!(frame->input_flags&2) && !t->semantic_scanned && !t->semantic_seen) {

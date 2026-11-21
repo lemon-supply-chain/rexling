@@ -81,7 +81,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         return ImageTarget(activeServerId,activeServer.endpoint,state.selectedSession,state.selectedBlock,client.selectionVersion,serverSwitchSerial,program.kind,"${program.title} · ${activeServer.label}")
     }
     internal fun attachImage(uri: android.net.Uri,target: ImageTarget?,onCopied: ()->Unit={}): Boolean {
-        if(target==null) {onCopied();images.notice="Take control of a pane before attaching an image.";return false}
+        if(target==null) {onCopied();images.notice="Take control of a pane before attaching a file.";return false}
         val profile=servers.firstOrNull {it.id==target.server && it.endpoint==target.endpoint}
         if(profile==null) {onCopied();images.notice="The original Rex server is no longer available.";return false}
         return images.start(uri,target,onCopied)
@@ -179,9 +179,21 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         minimizeFloatingPanes=value
         preferences.edit {putBoolean("minimize_floating_panes",value)}
     }
+    internal var controlItems by mutableStateOf(ControlShortcutConfig.restore(preferences.getString("control_shortcut_items",null)))
+        private set
+    internal fun saveControlShortcuts(text: String): String? = runCatching {
+        val items=ControlShortcutConfig.parse(text)
+        controlItems=items;preferences.edit {putString("control_shortcut_items",ControlShortcutConfig.editorText(items))}
+    }.exceptionOrNull()?.message
+    internal var toolbarWithKeyboardOnly by mutableStateOf(preferences.getBoolean("keyboard_toolbar_auto_hide",false))
+        private set
+    internal fun changeToolbarWithKeyboardOnly(value: Boolean) {toolbarWithKeyboardOnly=value;preferences.edit {putBoolean("keyboard_toolbar_auto_hide",value)}}
     internal var arrowJoystickEnabled by mutableStateOf(preferences.getBoolean("arrow_joystick_enabled",true))
         private set
     internal fun changeArrowJoystick(value: Boolean) {arrowJoystickEnabled=value;preferences.edit {putBoolean("arrow_joystick_enabled",value)}}
+    internal var enterSubmits by mutableStateOf(preferences.getBoolean("keyboard_enter_submits",false))
+        private set
+    internal fun changeEnterSubmits(value: Boolean) {enterSubmits=value;preferences.edit {putBoolean("keyboard_enter_submits",value)}}
     internal var terminalPadding by mutableStateOf(runCatching {TerminalPadding.valueOf(preferences.getString("terminal_padding","NORMAL")!!)}.getOrDefault(TerminalPadding.NORMAL))
         private set
     internal fun changeTerminalPadding(value: TerminalPadding) {terminalPadding=value;preferences.edit {putString("terminal_padding",value.name)}}
