@@ -18,7 +18,7 @@ fn view(ids: &[String]) -> Value {
     ]}]})
 }
 
-async fn exercise(reject_second: bool, stale: bool) {
+async fn exercise(reject_second: bool, stale: bool, direct_swap: bool) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = Endpoint::new(
         &format!("http://{}", listener.local_addr().unwrap()),
@@ -101,7 +101,14 @@ async fn exercise(reject_second: bool, stale: bool) {
     actor.set_view(&view(&["a".into(), "b".into(), "c".into()]));
     actor.programs = json!({"a":["codex"],"b":["nvim"],"c":["fish"]});
     actor.titles = json!({"a":"Task"});
-    actor.execute_command(json!({"type":"move_pane","session":"s","window":"w","id":"a","before":"","blocks":if stale {json!(["b","a","c"])} else {json!(["a","b","c"])},"requestId":7})).await;
+    let command = if direct_swap {
+        json!({"type":"move_pane","session":"s","window":"w","id":"a","swapWith":"b",
+            "tiled":if stale {json!(["b","a"])} else {json!(["a","b"])},"requestId":7})
+    } else {
+        json!({"type":"move_pane","session":"s","window":"w","id":"a","before":"",
+            "blocks":if stale {json!(["b","a","c"])} else {json!(["a","b","c"])},"requestId":7})
+    };
+    actor.execute_command(command).await;
     let ids: Vec<_> = actor.windows[0]["blocks"]
         .as_array()
         .unwrap()
@@ -112,7 +119,7 @@ async fn exercise(reject_second: bool, stale: bool) {
         ids,
         if stale {
             vec!["a", "b", "c"]
-        } else if reject_second {
+        } else if reject_second || direct_swap {
             vec!["b", "a", "c"]
         } else {
             vec!["b", "c", "a"]
@@ -130,14 +137,20 @@ async fn exercise(reject_second: bool, stale: bool) {
             .iter()
             .filter(|r| r["method"] == "session.swap_blocks")
             .count(),
-        if stale { 0 } else { 2 }
+        if stale {
+            0
+        } else if direct_swap {
+            1
+        } else {
+            2
+        }
     );
     if !reject_second && !stale {
         assert!(actor.error.is_empty());
         let layout = &actor.windows[0]["layout"];
         assert_eq!(layout[0]["rect"], json!([0, 0, 0.4, 1]));
         assert_eq!(layout[2]["rect"], json!([0.2, 0.2, 0.6, 0.6]));
-        assert_eq!(layout[2]["id"], "a");
+        assert_eq!(layout[2]["id"], if direct_swap { "c" } else { "a" });
         assert_eq!(layout[2]["floating"], true);
     } else {
         assert!(!actor.error.is_empty());
@@ -155,7 +168,7 @@ fn swaps_sync_order_preserve_geometry_control_selection_and_programs() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(exercise(false, false));
+        .block_on(exercise(false, false, false));
 }
 #[test]
 fn partial_failure_refreshes_actual_order_acknowledges_and_never_replays() {
@@ -163,7 +176,7 @@ fn partial_failure_refreshes_actual_order_acknowledges_and_never_replays() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(exercise(true, false));
+        .block_on(exercise(true, false, false));
 }
 #[test]
 fn stale_layout_is_rejected_before_any_swap() {
@@ -171,5 +184,17 @@ fn stale_layout_is_rejected_before_any_swap() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(exercise(false, true));
+        .block_on(exercise(false, true, false));
+}
+
+#[test]
+fn dragging_between_tiled_slots_sends_one_swap_and_rejects_a_stale_layout() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        exercise(false, false, true).await;
+        exercise(false, true, true).await;
+    });
 }

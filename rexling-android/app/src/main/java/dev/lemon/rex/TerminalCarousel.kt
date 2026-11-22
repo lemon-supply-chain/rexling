@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -30,17 +31,19 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import dev.chrisbanes.haze.HazeState
 
 internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
 
 @Composable internal fun TerminalCarousel(blocks: List<BlockItem>,selectedBlock: String,liveBlock: String,
-    liveScreen: TerminalScreen?,frames: Map<String,TerminalScreen>,programs: Map<String,ProgramIdentity>,controlled: Boolean,fontSize: Float,
+    liveScreen: TerminalScreen?,previewFrame: (String)->TerminalScreen?,programs: Map<String,ProgramIdentity>,controlled: Boolean,fontSize: Float,
     onInput: (String)->Unit,onScroll: (Int)->Unit,onWheel: (Int,Int,Int,Int,Int)->Unit,onActivate: ()->Unit,onBottom: ()->Unit,onDimensions: (Int,Int)->Unit,onSelect: (String)->Unit,onPanes: ()->Unit,
     onView: (TerminalView)->Unit,modifier: Modifier=Modifier,bindLiveView: ((String,TerminalView)->Boolean)?=null,
     onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,
     padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true,
-    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,imeEnterSubmits: Boolean=false,tapOpensKeyboard: Boolean=false,keyboardChrome: ()->Int={0}) {
+    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,imeEnterSubmits: Boolean=false,tapOpensKeyboard: Boolean=false,keyboardChrome: ()->Int={0},
+    squareCorners: Boolean=false,extendsUnderNavigation: Boolean=false,navigationClearance: Dp=0.dp,bottomOverlayInset: Dp=0.dp) {
     val context=androidx.compose.ui.platform.LocalContext.current
     val switchLayout=remember(paneLayout,blocks) {paneLayout.filter {p->blocks.any {it.id==p.id}}.sortedBy {it.layer}}
     val hasMinimap=blocks.all {b->switchLayout.any {it.id==b.id}}
@@ -53,7 +56,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
     val scope=rememberCoroutineScope()
     val keepAwake=LocalKeepScreenAwake.current
     val keyboardSuggestions=LocalKeyboardSuggestions.current
-    val imeHandoff=remember {TerminalImeHandoff()}
+    val imeHandoff=remember {TerminalImeHandoff(BlockItem::id)}
     var visualId by remember(blocks.map {it.id}) {mutableStateOf(selectedBlock)}
     var drag by remember {mutableFloatStateOf(0f)}
     var dragging by remember {mutableStateOf(false)}
@@ -112,13 +115,12 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
         val showSwitch=(dragging || settling || toast) && blocks.size>1 && blocks.getOrNull(candidate)!=null
         val pages=offsets.map {offset->blocks[Math.floorMod(index+offset,blocks.size)] to offset}
         val retained=imeHandoff.retainFor(pages.map {it.first})
-        val mountedPages=pages+listOfNotNull(retained?.let {it.block to 4})
+        val mountedPages=pages+listOfNotNull(retained?.let {it.pane to 4})
         Box(Modifier.fillMaxSize().frostSource(haze,showSwitch || captureBackdrop)) {
         for((block,offset) in mountedPages) {
-            val retiring=retained?.block?.id==block.id
+            val retiring=retained?.pane?.id==block.id
             val center=offset==0 && !retiring
-            val frame=if(retiring) retained!!.frame else
-                (if(block.id==liveBlock && liveScreen!=null) liveScreen else frames[block.id]) ?: imeHandoff.frame(block.id)
+            val preferredFrame=if(retiring) retained!!.frame else liveScreen.takeIf {block.id==liveBlock}
             val pageOffset=offset*stride
             key(block.id) {
                 DisposableEffect(block.id) {onDispose {imeHandoff.remove(block.id)}}
@@ -127,13 +129,14 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                     val position=pageOffset+drag
                     translationX=kotlin.math.round(leftPx+position)
                     alpha=if(retiring) 0f else 1f
-                }.clip(RoundedCornerShape(21.dp)).background(Color(palette.background))
+                }.clip(if(squareCorners) RoundedCornerShape(0.dp) else RoundedCornerShape(21.dp)).background(Color(palette.background))
                     .paneScrim(backdrop) {(abs(pageOffset+drag)/stride).coerceIn(0f,1f)*.48f}
                     .then(if(center || retiring) Modifier else Modifier.clickable(role=Role.Button){latestSelect(block.id)})) {
+                    CarouselPageFrame(block.id,preferredFrame,previewFrame,imeHandoff) {frame->
                     Box(Modifier.fillMaxSize()) {
                         val profile=ProgramProfile.resolve(programs[block.id])
                         if(frame!=null) AndroidView(
-                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets,profile.imeAnchor,keyboardChrome) {keyboardFocus}.clipToBounds(),
+                            factory={TerminalView(it)},modifier=Modifier.fillMaxSize().terminalImeViewport(imeInsets,navigationInsets,profile.imeAnchor,extendsUnderNavigation=extendsUnderNavigation,keyboardChrome=keyboardChrome) {keyboardFocus}.clipToBounds(),
                             update={view ->
                                 view.keepAwakeMode=if(center) keepAwake else KeepScreenAwake.SYSTEM
                                 imeHandoff.mount(block,view)
@@ -141,7 +144,8 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                                 view.onKeyboardFocus={keyboardFocus=it}
                                 keyboardFocus=view.keyboardFocus
                                 view.onDimensions=if(center && block.id==liveBlock) onDimensions else {_,_->}
-                                view.setTerminalPaddingDp(padding.horizontal,padding.top,if(bottomControlsInset>0.dp) 36 else if(blocks.size>1) padding.pagedBottom else padding.bottom)
+                                val bottomPadding=if(bottomControlsInset>0.dp) 36 else if(blocks.size>1) padding.pagedBottom else padding.bottom
+                                view.setTerminalPaddingDp(padding.horizontal,padding.top,bottomPadding+navigationClearance.value.roundToInt())
                                 view.extendPadding=extendPadding
                                 view.palette=palette;view.textSp=fontSize
                                 if(retiring || block.id!=liveBlock || bindLiveView?.invoke(block.id,view)!=true) view.screen=frame
@@ -177,12 +181,12 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                         }
                     }
                     if(center && (frame?.scroll?.below ?: 0)>0) {
-                        Text(stringResource(R.string.label_latest),Modifier.align(Alignment.BottomEnd).padding(end=12.dp,bottom=(if(blocks.size>1) if(hasMinimap) 128.dp else 88.dp else 10.dp)+bottomControlsInset)
+                        Text(stringResource(R.string.label_latest),Modifier.align(Alignment.BottomEnd).padding(end=12.dp,bottom=(if(blocks.size>1) if(hasMinimap) 128.dp else 88.dp else 10.dp)+bottomControlsInset+bottomOverlayInset)
                             .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
                             .clickable(role=Role.Button,onClick=onBottom).padding(horizontal=12.dp,vertical=7.dp),
                             fontSize=11.sp,color=MaterialTheme.colorScheme.primary)
                     }
-
+                    }
                 }
             }
         }
@@ -216,4 +220,15 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
             }
         }
     }
+}
+
+@Composable private fun CarouselPageFrame(
+    block: String,preferred: TerminalScreen?,previewFrame: (String)->TerminalScreen?,handoff: TerminalImeHandoff<BlockItem>,
+    content: @Composable (TerminalScreen?)->Unit,
+) {
+    // Observe this pane from its own recompose scope, independently of the other mounted pages.
+    val frame=preferred ?: remember(block,previewFrame) {
+        derivedStateOf(referentialEqualityPolicy()) {previewFrame(block)}
+    }.value ?: handoff.frame(block)
+    content(frame)
 }

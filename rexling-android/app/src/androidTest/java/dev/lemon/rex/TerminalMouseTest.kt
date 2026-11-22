@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import android.graphics.Paint
+import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -47,6 +48,40 @@ class TerminalMouseTest {
             event(view,MotionEvent.ACTION_UP,x,y,30);assertEquals(listOf(4 to 3),calls);assertEquals(0,activated)
             event(view,MotionEvent.ACTION_DOWN,1f,1f,100);event(view,MotionEvent.ACTION_UP,1f,1f,130)
             assertEquals(1,calls.size)
+        }
+    }
+    @Test fun pointerClickIsDeliveredOnceAndKeepsTheSoftKeyboardClosed() {
+        instrumentation.runOnMainSync {
+            var clicks=0
+            var target="a"
+            val view=view().apply {
+                mouseTarget={target}
+                onMouseClick={_,_,_,_->clicks++}
+                tapOpensKeyboard=true
+            }
+            view.primaryPointerButton(true,5f,5f)
+            assertEquals(0,clicks)
+            view.primaryPointerButton(false,5f,5f)
+            assertEquals(1,clicks)
+            assertFalse(view.hasFocus())
+            view.primaryPointerButton(true,5f,5f)
+            target="b"
+            view.primaryPointerButton(false,5f,5f)
+            assertEquals(1,clicks)
+            view.primaryPointerButton(true,5f,5f)
+            view.primaryPointerButton(false,100f,5f)
+            assertEquals(1,clicks)
+            fun mouseTouch(action: Int,time: Long) {
+                val event=MotionEvent.obtain(100,time,action,5f,5f,0)
+                event.source=InputDevice.SOURCE_MOUSE
+                try {view.onTouchEvent(event)} finally {event.recycle()}
+            }
+            mouseTouch(MotionEvent.ACTION_DOWN,100)
+            view.primaryPointerButton(true,5f,5f)
+            view.primaryPointerButton(false,5f,5f)
+            mouseTouch(MotionEvent.ACTION_UP,130)
+            assertEquals(2,clicks)
+            assertFalse(view.hasFocus())
         }
     }
     @Test fun swipesCancelAndLongPressSelectsWithoutSendingMouseClicks() {

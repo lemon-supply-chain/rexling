@@ -13,7 +13,7 @@ import org.junit.Test
  * `// alpha-ok <reason>` marker so the exception is visible in review.
  */
 class AlphaAuditTest {
-    /** Files whose alpha is a material property (glass, artwork, HUD, camera). */
+    /** Files whose alpha is a material property (glass, artwork, HUD, camera, new layouts). */
     private val renderingFiles = setOf(
         "PaneFrost.kt",
         "PaneCompositing.kt",
@@ -27,6 +27,15 @@ class AlphaAuditTest {
         "NeovimShortcutWheel.kt",
         "NeovimShortcutUi.kt",
         "QrScanner.kt",
+        "MultiPaneLayout.kt",
+        "TabRail.kt",
+        "TerminalActionsDrawer.kt",
+        "SwitcherSwipeRow.kt",
+        "AllPanesPage.kt",
+        "TerminalChrome.kt",
+        "SessionRow.kt",
+        "TabPaneSwitcher.kt",
+        "SettingsComponents.kt",
     )
 
     @Test

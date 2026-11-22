@@ -90,6 +90,16 @@ class WorkspaceNavigationTest {
         assertEquals(WorkspaceTarget("s","a"),history.target(state,"deleted-session"))
         assertNull(history.target(state.copy(sessions=emptyList()),"s"))
     }
+    @Test fun aClosedPaneRecoversAfterAnUnrelatedErrorUnlessTheEngineIsWaitingForSelection() {
+        val history = WorkspaceNavigation()
+        history.remember("s", listOf(first), "b")
+        val state = AppState.parse("""{
+            "phase":"connected","error":"Resize rejected","selectedSession":"s",
+            "sessions":[{"session_id":"s"}],"windows":[{"id":"one","blocks":[{"id":"a"}]}]
+        }""")
+        assertEquals(WorkspaceTarget("s", "a"), history.target(state, "s"))
+        assertNull(history.target(state.copy(awaitingPaneSelection = true), "s"))
+    }
     @Test fun repeatedSnapshotsDoNotProduceNewHistoryWrites() {
         val history=WorkspaceNavigation()
         assertTrue(history.remember("s",listOf(first,second),"b"))

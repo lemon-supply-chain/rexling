@@ -31,15 +31,17 @@ class DrawerFrostTest {
     @get:Rule val ui=createComposeRule()
     @Test fun drawersAndMenuBlurTheBackdropAndFollowLiveChangesInBothThemes() {
         val choice=mutableIntStateOf(-1);val dark=mutableStateOf(false);val green=mutableStateOf(false)
+        val captureBackdrop=mutableStateOf(true)
         val server=ServerProfile.create("Test Mac","https://fixture.example","mac")
         val target=SessionTarget(server,SessionItem("s","Development"),SessionDetail("this device",1,1))
         val window=WindowItem("w","Project",listOf(BlockItem("b","shell")))
+        val dockWindow=window.copy(layout=listOf(PanePlacement("b",0f,0f,1f,1f)))
         val record=ActivityRecord.parse(JSONObject().put("session","s").put("sessionLabel","Development").put("windowLabel","Project")
             .put("block","b").put("state","blocked").put("kind","permission").put("title","Review changes").put("app","codex"))!!
         ui.setContent {RexTheme(dark.value,ThemeCatalog.defaults[if(dark.value) 0 else 1]) {
             val haze=remember {HazeState()}
             Box(Modifier.fillMaxSize()) {
-                Canvas(Modifier.fillMaxSize().hazeSource(haze)) {
+                Canvas(Modifier.fillMaxSize().then(if(captureBackdrop.value) Modifier.hazeSource(haze) else Modifier)) {
                     if(green.value) drawRect(Color.Green) else {
                         val stripe=2.dp.toPx()
                         repeat((size.width/stripe).toInt()+1) {x->drawRect(if(x%2==0) Color.Red else Color.Blue,
@@ -49,20 +51,22 @@ class DrawerFrostTest {
                 when(choice.intValue) {
                     0->ActivitySheet(listOf(ActivitySource(server,true,false,"",false,listOf(record))),{},{},{},hazeState=haze)
                     1->TabPaneSwitcher(emptyList(),"","",emptyMap(),emptyMap(),emptyMap(),{0},true,true,true,{},{},{},{_,_->},{},{},{},hazeState=haze,
-                        sessions=SwitcherSessions(1,"",sessionsPageHeight(listOf(target))) {SessionsPage(listOf(target),target.key,"",true,"","",{},{_,_->true},{},{})},openSessions=true)
+                        sessions=SwitcherSessions(1,"") {SessionsPage(listOf(target),target.key,"",true,"","",{},{_,_->true},{},{})},openSessions=true)
                     2->TabPaneSwitcher(listOf(window),"w","b",mapOf("b" to ProgramIdentity.resolve(listOf("codex"))),mapOf("b" to "Review changes"),mapOf("b" to "~/Dev/project"),{0},true,true,true,{},{},{},{_,_->},{},{},{},hazeState=haze)
                     3->Box(Modifier.align(Alignment.TopEnd).padding(top=60.dp,end=12.dp)) {
                         DropdownMenu(true,{},modifier=Modifier.drawerFrost(haze,RoundedCornerShape(16.dp)),shape=RoundedCornerShape(16.dp),containerColor=Color.Transparent,tonalElevation=0.dp) {
                             TerminalMenuItem("Preferences",ChromeIcon.SETTINGS,onClick={})
-                            TerminalMenuItem("Attach file",ChromeIcon.FILE,onClick={})
+                            TerminalMenuItem("Attach image",ChromeIcon.IMAGE,onClick={})
                         }
                     }
+                    4->DockPaneSheet(dockWindow,mapOf("b" to ProgramIdentity.resolve(listOf("fish"))),emptyMap(),true,haze,
+                        onDock={_,_->true},onClose={})
                 }
             }
         }}
-        for(isDark in listOf(false,true)) for(kind in 0..3) {
+        for(isDark in listOf(false,true)) for(kind in 0..4) {
             ui.runOnIdle {choice.intValue=-1};ui.waitForIdle()
-            ui.runOnIdle {dark.value=isDark;green.value=false;choice.intValue=kind};ui.waitForIdle()
+            ui.runOnIdle {dark.value=isDark;green.value=false;captureBackdrop.value=true;choice.intValue=kind};ui.waitForIdle()
             val overlay=ui.onNodeWithTag("Frosted overlay")
             overlay.assertIsDisplayed()
             // The content must move with the sheet, outside any pre-offset clip.
@@ -71,6 +75,7 @@ class DrawerFrostTest {
                 1->ui.onNodeWithText("Development").assertIsDisplayed()
                 2->ui.onNodeWithContentDescription("Tab Project").assertIsDisplayed()
                 3->ui.onNodeWithText("Preferences").assertIsDisplayed()
+                4->ui.onNodeWithText("Dock pane").assertIsDisplayed()
             }
             if(isDark && kind in 0..1) {
                 var text: androidx.compose.ui.text.TextLayoutResult?=null
@@ -90,6 +95,16 @@ class DrawerFrostTest {
             ui.runOnIdle {green.value=true};ui.waitForIdle();Thread.sleep(80)
             val updated=sample()
             assertTrue("Overlay $kind must update with its host: $updated",updated.green>maxOf(updated.red,updated.blue)+.08f)
+            if(kind==4) {
+                ui.runOnIdle {captureBackdrop.value=false}
+                val fallback=sample()
+                assertTrue("Dock pane must keep its surface when the backdrop is unavailable: $fallback",
+                    fallback.green<maxOf(fallback.red,fallback.blue)+.04f)
+                val instrumentation=InstrumentationRegistry.getInstrumentation()
+                val screenshot=instrumentation.uiAutomation.takeScreenshot()
+                File(instrumentation.targetContext.cacheDir,"dock-pane-sheet-${if(isDark) "dark" else "light"}.png")
+                    .outputStream().use {screenshot.compress(Bitmap.CompressFormat.PNG,100,it)}
+            }
         }
         ui.runOnIdle {choice.intValue=-1}
     }

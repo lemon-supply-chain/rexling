@@ -32,7 +32,8 @@ class SettingsScreensTest {
         for(isDark in listOf(false,true)) {
             ui.runOnIdle {dark=isDark}
             var layout: androidx.compose.ui.text.TextLayoutResult?=null
-            ui.onNodeWithText("Preferences").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) {action->
+            ui.onNodeWithContentDescription("Close preferences").assertIsDisplayed()
+            ui.onNodeWithText("Preferences").assertIsDisplayed().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) {action->
                 val results=mutableListOf<androidx.compose.ui.text.TextLayoutResult>();action(results);layout=results.first()
             }
             val luminance=layout!!.layoutInput.style.color.luminance()

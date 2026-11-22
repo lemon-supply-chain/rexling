@@ -46,8 +46,8 @@ to the brand colour, and the rim is the only material cue.
 3. Keel: a soft dark gradient in the bottom quarter.
 4. Rim: one device-pixel inner edge, brightest at the top.
 5. Sheen: a low white wash over the top 40%.
-6. Symbol: brand colours stay; the logo gains a tight dark shadow below and a
-   one-pixel bright offset above.
+6. Symbol: brand colours stay; the logo keeps a one-pixel bright rim offset above
+   without downward hard shadow replays.
 7. Grain: reserved for a later pass; not implemented.
 
 Legibility rule: the compact tier is the default. The detailed tier is only
@@ -84,7 +84,7 @@ tiles look like a different product from the catalog tiles.
 | Sheen | Detailed | `scripts/build_program_vectors.py` | Top-40% white wash. |
 | Rim | Both | `ProgramVectorPicture.drawRim` | A 2px stroke clipped to the inner half, so one device pixel remains visible at every density. |
 | Contact shadow | Both | `TileShadow` | Cached bitmap per tile and pixel size; blur and offset are tiered. |
-| Symbol shadow | Detailed | `ProgramVectorPicture` | Color-filtered replays, clipped to the plate. |
+| Symbol shadow | Detailed | — | Removed; previously unblurred downward replays produced a 2010s hard bevel / reflection. |
 | Symbol rim | Detailed | `ProgramVectorPicture` | One device-pixel white offset above the logo. |
 | Grain | Detailed | — | Not implemented. |
 

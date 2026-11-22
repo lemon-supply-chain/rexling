@@ -23,4 +23,31 @@ class AppearanceTest {
             assertEquals(0xff123456.toInt(),theme.foreground(cell(512 or (200 shl 11))))
         }
     }
+    @Test fun aPinnedLightPromptRemainsReadableAfterSwitchingToAnAmberTheme() {
+        val textColors = TerminalTextColors()
+        val prompt = cell(128, 0xff202328.toInt(), 0xfff4f4f4.toInt())
+        val amber = TerminalPalette.Dark.copy(foreground = 0xfff5c67c.toInt())
+        assertEquals(TerminalPalette.Light.foreground, textColors.foreground(TerminalPalette.Light, prompt))
+        val resolved = textColors.foreground(amber, prompt)
+        val red = (resolved ushr 16) and 255
+        val green = (resolved ushr 8) and 255
+        val blue = resolved and 255
+        assertTrue("The text stays amber while darkening against the pale prompt",
+            red in 100..135 && red > green && green > blue)
+        assertEquals(prompt.background, amber.background(prompt))
+        assertEquals(TerminalPalette.Light.foreground, textColors.foreground(TerminalPalette.Light, prompt))
+    }
+
+    @Test fun pinnedTextOnThemedBackgroundAdjustsInNormalAndInvertedCells() {
+        val textColors = TerminalTextColors()
+        val dark = TerminalPalette.Dark
+        val foreground = 0xff202328.toInt()
+        val pinnedText = cell(256, foreground, 0xff151a20.toInt())
+        val adjusted = textColors.foreground(dark, pinnedText)
+        assertTrue((adjusted and 255) > 110)
+        assertEquals(foreground, textColors.foreground(dark, pinnedText.copy(attributes = 0)))
+        assertEquals(adjusted, textColors.foreground(dark.copy(foreground = dark.background),
+            pinnedText.copy(attributes = 8 or 128, background = foreground)))
+        assertEquals(dark.foreground, textColors.foreground(dark, pinnedText.copy(attributes = 128 or 256)))
+    }
 }

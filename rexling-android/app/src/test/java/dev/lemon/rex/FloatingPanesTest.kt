@@ -26,6 +26,17 @@ class FloatingPanesTest {
         assertEquals("a",navigation.returnPane("one",window.copy(id="other")))
         assertEquals("a",navigation.returnPane("one",window.copy(blocks=window.blocks.filterNot {it.id=="b"})))
     }
+    @Test fun serverMinimizedLayerStaysInDockButIsSkippedBySwipesAndWorkspaceRestore() {
+        val minimized = window.copy(layout = window.layout.map { it.copy(minimized = true) })
+        assertEquals(listOf("f"), minimized.floatingPanes().map { it.id })
+        assertEquals(listOf("a", "b"), minimized.carouselPanes(false, "a").map { it.id })
+        assertEquals(listOf("a", "b"), minimized.carouselPanes(true, "f").map { it.id })
+        val navigation = WorkspaceNavigation().apply { remember("one", listOf(window), "f") }
+        val state = AppState(phase = "connected", selectedSession = "one",
+            sessions = listOf(SessionItem("one", "One")), windows = listOf(minimized))
+        assertEquals(WorkspaceTarget("one", "a"), navigation.target(state, "one"))
+        assertFalse(NavigationRequest(block = "f", id = 1).acknowledge(state.copy(navigationId = 1)).pending)
+    }
     @Test fun unknownGeometryStaysSwipeableAndFloatingOnlyTabsCanMinimizeToEmpty() {
         assertEquals(window.blocks,window.copy(layout=emptyList()).tiledPanes())
         val only=window.copy(blocks=window.blocks.filter {it.id=="f"})

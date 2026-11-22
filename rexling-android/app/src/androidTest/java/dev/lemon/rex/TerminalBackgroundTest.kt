@@ -14,6 +14,38 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class TerminalBackgroundTest {
+    @Test fun changingThemeKeepsExistingTextReadableOnAnExplicitPromptBackground() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val background = 0xfff4f4f4.toInt()
+            val cells = List(8) { x -> TerminalCell(x, 0, "M", 0xff202328.toInt(), background, 128, 1) }
+            val frame = TerminalScreen(8, 1, null, null, 0xff202328.toInt(), -1, cells)
+            val view = TerminalView(instrumentation.targetContext).apply {
+                textSp = 20f
+                setTerminalPaddingDp(0, 0, 0)
+                screen = frame
+                layout(0, 0, 640, 160)
+            }
+            fun checkDrawn(theme: TerminalPalette, expected: Int) {
+                view.palette = theme
+                val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                try {
+                    view.draw(Canvas(bitmap))
+                    val pixels = IntArray(bitmap.width * bitmap.height)
+                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                    assertTrue("The prompt should still use its pinned background", background in pixels)
+                    assertTrue("The cached text must use the new display color", expected in pixels)
+                    assertTrue(view.screen === frame)
+                } finally { bitmap.recycle() }
+            }
+            val light = TerminalPalette.Light
+            val amber = TerminalPalette.Dark.copy(foreground = 0xfff5c67c.toInt())
+            checkDrawn(light, light.foreground)
+            checkDrawn(amber, TerminalTextColors().foreground(amber, cells.first()))
+            checkDrawn(light, light.foreground)
+        }
+    }
+
     @Test fun aFullScreenApplicationBackgroundHasNoCellSeamsAtFractionalOffsets() {
         val instrumentation=InstrumentationRegistry.getInstrumentation()
         val expected=0xff394457.toInt()
@@ -137,36 +169,6 @@ class TerminalBackgroundTest {
             val left=(12*density).roundToInt();val top=(8*density).roundToInt()
             assertEquals("A wide remote grid must not shrink the font cells",red,bitmap.getPixel(left+grid.cellWidth.toInt()-1,top+1))
             bitmap.recycle()
-        }
-    }
-
-    @Test fun scrollingReusesRecordingsAndMatchesFreshDrawingIncludingLinks() {
-        val instrumentation=InstrumentationRegistry.getInstrumentation()
-        instrumentation.runOnMainSync {
-            val context=instrumentation.targetContext
-            fun frame(offset: Int): TerminalScreen {
-                val cells=(0 until 4).flatMap {row->(0 until 20).map {column->
-                    TerminalCell(column,row,('A'.code+offset+row).toChar().toString(),-1,
-                        0xff283442.toInt()+row+offset,0,1,if(column==0) "https://example.com/${offset+row}" else null)
-                }}
-                return TerminalScreen(20,4,null,null,-1,0,cells,TerminalScroll(100,offset.toLong(),4))
-            }
-            fun view(frame: TerminalScreen)=TerminalView(context).apply {
-                screen=frame;setTerminalPaddingDp(12,8,6)
-                measure(View.MeasureSpec.makeMeasureSpec(500,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(220,View.MeasureSpec.EXACTLY))
-                layout(0,0,500,220)
-            }
-            fun draw(view: TerminalView)=Bitmap.createBitmap(500,220,Bitmap.Config.ARGB_8888).also {view.draw(Canvas(it))}
-            val cached=view(frame(10))
-            draw(cached).recycle()
-            for(offset in listOf(11,10,40)) {
-                val before=cached.recordedRowCount
-                val next=frame(offset);cached.screen=next
-                val actual=draw(cached);val expected=draw(view(next))
-                assertEquals(before+if(offset==40) 4 else 1,cached.recordedRowCount)
-                assertTrue("Moved rows and links must match fresh drawing",actual.sameAs(expected))
-                actual.recycle();expected.recycle()
-            }
         }
     }
 

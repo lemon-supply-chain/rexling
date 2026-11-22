@@ -1,6 +1,8 @@
 package dev.lemon.rex
 
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -95,7 +97,7 @@ class TerminalUpdatesTest {
         n(0,2);return out.toByteArray()
     }
     @Test fun imageDeltasReusePixelsAndMetadataOnlyUpdatesKeepTheImage() {
-        val decoder=TerminalUpdates();val first=decoder.decode(graphicsPacket(1)).screen!!
+        val decoder=TerminalUpdates {_,_,_->null};val first=decoder.decode(graphicsPacket(1)).screen!!
         assertEquals(1,first.images.size)
         assertEquals(8,first.imageCellWidth);assertEquals(16,first.imageCellHeight)
         val next=decoder.decode(graphicsPacket(2,2,asset=false)).screen!!
@@ -105,7 +107,7 @@ class TerminalUpdatesTest {
     }
     @Test fun malformedImagesCannotCommitADecoderRevisionOrReuseAnUnknownBase() {
         for(bytes in listOf(graphicsPacket(1,badLength=true),graphicsPacket(1,badCrop=true),graphicsPacket(1,asset=false))) {
-            val decoder=TerminalUpdates();assertTrue(runCatching {decoder.decode(bytes)}.isFailure);assertEquals(0L,decoder.revision)
+            val decoder=TerminalUpdates {_,_,_->null};assertTrue(runCatching {decoder.decode(bytes)}.isFailure);assertEquals(0L,decoder.revision)
             assertEquals(1,decoder.decode(graphicsPacket(1)).screen!!.images.size)
         }
     }
@@ -181,4 +183,36 @@ class TerminalUpdatesTest {
         assertTrue(runCatching {decoder.decode(packet(3,2,1))}.isFailure)
         assertEquals(2L,decoder.revision)
     }
+
+    @Test fun rxt8KeepsEachPanesDeltaBaseBetweenUnrelatedUpdates() {
+        fun update(revision: Long,id: String,flag: Int,rows: Map<Int,String>,metadata: String="",mainFlag: Int=0): ByteArray {
+            val out=ByteArrayOutputStream()
+            fun n(value: Long,size: Int) {repeat(size) {out.write((value ushr (8*it)).toInt() and 255)}}
+            fun text(value: String) {val bytes=value.toByteArray();n(bytes.size.toLong(),4);out.write(bytes)}
+            out.write("RXT8".toByteArray());n(revision,8);text(metadata);n(mainFlag.toLong(),1);n(1,2);text(id)
+            n(flag.toLong(),1);n(2,2);n(2,2);n(-1,4);n(-1,4);n(-1,4);n(0,4)
+            n(2,8);n(0,8);n(2,8);n(0,1);n(1,1);n(0,2);n(rows.size.toLong(),2)
+            for((row,value) in rows) {
+                n(row.toLong(),2);n(1,2);n(0,2);n(1,1);n(0,4);n(-1,4);n(0,4);text(value);n(0,2)
+            }
+            n(0,1);n(0,1);n(8,4);n(16,4);n(0,2);n(0,2);n(-1,4);n(-1,4)
+            return out.toByteArray()
+        }
+        val decoder=TerminalUpdates()
+        val initial=decoder.decode(packet(1,3,mapOf(0 to "Foreground",1 to "output")))
+        val first=decoder.decodeUpdate(update(2,"a",3,mapOf(0 to "A",1 to "old"))) as TerminalUpdate.PaneFrames
+        val a=first.frames.getValue("a")
+        val withState=decoder.decodeUpdate(update(3,"b",3,mapOf(0 to "B",1 to "old"),"""{"navigationId":9}""")) as TerminalUpdate.Full
+        assertEquals(9L,withState.state.navigationId)
+        assertSame(initial.screen,withState.state.screen)
+        assertTrue(runCatching {decoder.decodeUpdate(update(4,"missing",2,mapOf(1 to "new")))}.isFailure)
+        assertEquals(3L,decoder.revision)
+        val cleared=decoder.decodeUpdate(update(5,"a",2,mapOf(1 to "new"),mainFlag=1)) as TerminalUpdate.Full
+        val next=cleared.state.previewFrames.getValue("a")
+        assertNull(cleared.state.screen)
+        assertEquals(5L,decoder.revision)
+        assertSame(a.lines[0],next.lines[0])
+        assertEquals("new",next.lines[1].single().text)
+    }
+
 }

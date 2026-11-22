@@ -35,12 +35,6 @@ private constructor(
     private val outline: Path?,
 ) {
     private val dark = neutral(darken(accent))
-    private val symbolShadow =
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            colorFilter = PorterDuffColorFilter(dark, PorterDuff.Mode.SRC_IN)
-            alpha = 100
-        }
-    private val symbolShadowSoft = Paint(symbolShadow).apply { alpha = 44 }
     private val symbolRim =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
@@ -140,8 +134,6 @@ private constructor(
             val clipped = canvas.save()
             if (outline != null) canvas.clipPath(outline)
             if (detailed) {
-                offsetSymbol(canvas, symbol, SHADOW_DY, symbolShadow)
-                offsetSymbol(canvas, symbol, SHADOW_DY * 1.6f, symbolShadowSoft)
                 offsetSymbol(canvas, symbol, -RIM_DY / unitsToPx, symbolRim)
             }
             canvas.drawPicture(symbol)
@@ -203,7 +195,6 @@ private constructor(
     }
 
     companion object {
-        private const val SHADOW_DY = 1.2f
         private const val RIM_DY = 1f
         private const val DETAILED_WIDTH_DP = 30f
         private const val DEFAULT_ACCENT = 0xFF3B78F0.toInt()

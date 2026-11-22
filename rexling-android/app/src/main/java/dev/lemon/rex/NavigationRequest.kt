@@ -9,7 +9,10 @@ data class NavigationRequest(val session: String? = null, val block: String? = n
         if (next.error.isNotBlank()) return NavigationRequest()
         return copy(
             session = session?.takeUnless { next.selectedSession == it },
-            block = block?.takeUnless { next.selectedBlock == it && next.screen != null },
+            block = block?.takeUnless { requested ->
+                (next.selectedBlock == requested && next.screen != null) ||
+                    next.windows.any {window->window.layout.any {it.id==requested && it.minimized}}
+            },
         )
     }
 }

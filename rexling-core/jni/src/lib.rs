@@ -1,6 +1,7 @@
 mod activity;
 mod engine;
 mod forwards;
+mod mirror;
 mod progress;
 mod updates;
 mod uploads;

@@ -1,5 +1,6 @@
 package dev.lemon.rex
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -12,11 +13,14 @@ import org.junit.runner.RunWith
 class SessionRenameTest {
     @get:Rule val ui=createComposeRule()
     private val target=SessionTarget(ServerProfile.create("Mac","https://example.test","mac"),SessionItem("s","old name"))
-    @Test fun renameMenuDoesNotSelectOrCloseTheSession() {
+    @Test fun swipeToRenameDoesNotSelectOrCloseTheSession() {
         var selected=0;var closed=0;var renamed=0
-        ui.setContent {MaterialTheme {SessionRow(target,false,false,false,{selected++},{closed++},{renamed++})}}
-        ui.onNodeWithContentDescription("Session actions for old name on Mac").performClick()
-        ui.onNodeWithText("Rename session").performClick()
+        val revealed=mutableStateOf(false)
+        ui.setContent {MaterialTheme {
+            SessionRow(target,false,false,false,{selected++},{closed++},{renamed++},revealed.value,{revealed.value=it})
+        }}
+        ui.onNodeWithText("old name").swipeForSwitcherActions()
+        ui.onNodeWithContentDescription("Rename session").performTouchInput {click()}
         ui.runOnIdle {assertEquals(1,renamed);assertEquals(0,selected);assertEquals(0,closed)}
     }
     @Test fun dialogPrefillsValidatesAndSubmitsATrimmedName() {

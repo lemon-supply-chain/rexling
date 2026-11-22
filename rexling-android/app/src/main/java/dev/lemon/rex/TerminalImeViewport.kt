@@ -48,24 +48,59 @@ private fun androidx.compose.ui.unit.Density.keyboardCover(ime: WindowInsets,nav
  * counting the same amount as covered keeps one terminal height, and one PTY size, on every frame.
  */
 @Composable
-internal fun Modifier.terminalImeViewport(ime: WindowInsets,navigation: WindowInsets,anchor: ImeAnchor=ImeAnchor.CURSOR,keyboardChrome: ()->Int={0},focus: ()->TerminalKeyboardFocus?): Modifier {
-    val pan=remember {TerminalImePanState()}
-    return layout {measurable,constraints->
-        if(anchor==ImeAnchor.RESIZE) {
-            // Full-screen TUIs repaint on SIGWINCH; shrinking the view is their resize signal.
-            val child=measurable.measure(constraints)
-            layout(child.width,child.height) {child.placeRelative(0,0)}
-        } else if(!constraints.hasBoundedHeight) {
-            val child=measurable.measure(constraints)
-            layout(child.width,child.height) {child.placeRelative(0,0)}
+internal fun Modifier.terminalImeViewport(
+    ime: WindowInsets,
+    navigation: WindowInsets,
+    anchor: ImeAnchor = ImeAnchor.CURSOR,
+    keyboardChrome: () -> Int = { 0 },
+    extendsUnderNavigation: Boolean = false,
+    focus: () -> TerminalKeyboardFocus?
+): Modifier {
+    if (anchor == ImeAnchor.RESIZE) {
+        return layout { measurable, constraints ->
+            val child = measurable.measure(constraints)
+            layout(child.width, child.height) { child.placeRelative(0, 0) }
+        }
+    }
+    return stableTerminalViewport(
+        coverage = { keyboardCoverage(ime, navigation, keyboardChrome, extendsUnderNavigation) },
+        focus = focus
+    )
+}
+
+internal fun androidx.compose.ui.unit.Density.keyboardCoverage(
+    ime: WindowInsets,
+    navigation: WindowInsets,
+    keyboardChrome: () -> Int,
+    extendsUnderNavigation: Boolean = false
+): Int {
+    val keyboard = keyboardCover(ime, navigation)
+    val covered = if (extendsUnderNavigation) ime.getBottom(this) else keyboard
+    return covered + minOf(keyboardChrome().coerceAtLeast(0), keyboard)
+}
+
+@Composable
+internal fun Modifier.stableTerminalViewport(
+    panToCursor: Boolean = true,
+    coverage: androidx.compose.ui.unit.Density.() -> Int,
+    focus: () -> TerminalKeyboardFocus?
+): Modifier {
+    val pan = remember(panToCursor) { TerminalImePanState() }
+    return layout { measurable, constraints ->
+        if (!constraints.hasBoundedHeight) {
+            val child = measurable.measure(constraints)
+            layout(child.width, child.height) { child.placeRelative(0, 0) }
         } else {
-            val keyboard=keyboardCover(ime,navigation)
-            val covered=keyboard+minOf(keyboardChrome().coerceAtLeast(0),keyboard)
-            val fullHeight=constraints.maxHeight+covered
-            val child=measurable.measure(constraints.copy(minHeight=fullHeight,maxHeight=fullHeight))
-            layout(child.width,constraints.maxHeight) {
+            val covered = coverage().coerceAtLeast(0)
+            val fullHeight = constraints.maxHeight + covered
+            val child =
+                measurable.measure(constraints.copy(minHeight = fullHeight, maxHeight = fullHeight))
+            layout(child.width, constraints.maxHeight) {
                 // Read cursor state during placement, not composition or measurement.
-                child.placeRelative(0,-pan.position(focus(),constraints.maxHeight,covered))
+                child.placeRelative(
+                    0,
+                    if (panToCursor) -pan.position(focus(), constraints.maxHeight, covered) else 0
+                )
             }
         }
     }

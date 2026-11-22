@@ -1,7 +1,10 @@
 //! Local JNI format, not Rex wire protocol. One decoder per native handle.
 use crate::engine::Shared;
 use rex_core::ghostty::{Cell, Frame};
-use std::sync::{Arc, Condvar, Mutex};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Condvar, Mutex},
+};
 
 #[derive(Default)]
 pub struct Updates {
@@ -43,6 +46,7 @@ pub struct WireBase {
     activity: Arc<serde_json::Value>,
     key: String,
     frame: Option<Arc<Frame>>,
+    pane_frames: VecDeque<(String, Arc<Frame>)>,
 }
 fn u16le(out: &mut Vec<u8>, v: u16) {
     out.extend(v.to_le_bytes());
@@ -248,14 +252,14 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
     }
     let base = &state.wire;
     let reset = after != base.revision || base.key != state.key;
-    let mut out = b"RXT7".to_vec();
+    let mut out = b"RXT8".to_vec();
     u64le(&mut out, state.revision);
     let previews: Vec<_> = std::mem::take(&mut state.pending_previews)
         .into_iter()
         .take(32)
         .collect();
     let activity_changed = reset || !Arc::ptr_eq(&base.activity, &state.activity);
-    if reset || base.metadata != state.json || activity_changed || !previews.is_empty() {
+    if reset || base.metadata != state.json || activity_changed {
         let mut metadata: serde_json::Value =
             serde_json::from_str(&state.json).expect("internal metadata JSON");
         if activity_changed {
@@ -285,9 +289,28 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
         }
     }
     u16le(&mut out, previews.len() as u16);
+    // Retain the last transmitted frame for each pane. JNI can coalesce any number of
+    // native updates, so deltas must use the receiver's frame, not the last rendered one.
+    let mut pane_frames = if after == base.revision {
+        std::mem::take(&mut state.wire.pane_frames)
+    } else {
+        VecDeque::new()
+    };
     for (id, frame) in previews {
         text(&mut out, &id);
-        encode_frame(&mut out, &frame, None);
+        let previous = pane_frames
+            .iter()
+            .position(|(key, _)| *key == id)
+            .and_then(|index| pane_frames.remove(index))
+            .map(|(_, frame)| frame);
+        let previous = previous
+            .as_deref()
+            .filter(|old| old.columns == frame.columns && old.rows == frame.rows);
+        encode_frame(&mut out, &frame, previous);
+        pane_frames.push_back((id, frame));
+        if pane_frames.len() > 16 {
+            pane_frames.pop_front();
+        }
     }
     state.wire = WireBase {
         revision: state.revision,
@@ -295,6 +318,7 @@ pub fn encode(state: &mut Shared, after: u64) -> Vec<u8> {
         activity: state.activity.clone(),
         key: state.key.clone(),
         frame: state.frame.clone(),
+        pane_frames,
     };
     out
 }
@@ -422,6 +446,63 @@ mod wire_tests {
         );
     }
     #[test]
+    fn pane_only_updates_use_their_own_wire_baseline_without_metadata() {
+        let original = Arc::new(frame());
+        let mut state = Shared {
+            revision: 1,
+            json: r#"{"selectedBlock":"focused","phase":"connected"}"#.into(),
+            pending_previews: BTreeMap::from([
+                ("left".into(), original.clone()),
+                ("right".into(), original.clone()),
+            ]),
+            frame: Some(original.clone()),
+            key: "focused".into(),
+            wire: WireBase::default(),
+            activity: Arc::default(),
+        };
+        encode(&mut state, 0);
+
+        let mut changed = frame();
+        changed.cells[100].text = "z".into();
+        let changed = Arc::new(changed);
+        state.revision = 3; // A native update coalesced before Android read it.
+        state
+            .pending_previews
+            .insert("right".into(), changed.clone());
+        let delta = encode(&mut state, 1);
+        assert_eq!(&delta[12..19], &[0, 0, 0, 0, 0, 1, 0]); // Metadata omitted and main frame unchanged.
+        let flag = 19 + 4 + "right".len();
+        assert_eq!(delta[flag], 2);
+        let mut old_frame = Vec::new();
+        encode_frame(&mut old_frame, &changed, None);
+        assert!(delta.len() < old_frame.len() / 20);
+
+        state.revision = 4;
+        state
+            .pending_previews
+            .insert("left".into(), changed.clone());
+        let second_pane = encode(&mut state, 3);
+        assert_eq!(second_pane[19 + 4 + "left".len()], 2);
+        assert_eq!(second_pane.len() + 1, delta.len());
+
+        state.revision = 5;
+        state.pending_previews.insert("right".into(), changed);
+        let reset = encode(&mut state, 3);
+        let metadata = u32::from_le_bytes(reset[12..16].try_into().unwrap()) as usize;
+        let mut main_full = Vec::new();
+        encode_frame(&mut main_full, &original, None);
+        assert_eq!(
+            reset[16 + metadata + main_full.len() + 2 + 4 + "right".len()],
+            3
+        );
+        println!(
+            "one-row mirror update: {} bytes (full frame), {} bytes (JNI packet)",
+            old_frame.len(),
+            delta.len()
+        );
+    }
+
+    #[test]
     fn a_closed_notifier_wakes_a_blocked_reader() {
         let updates = Arc::new(Updates::default());
         let reader = updates.clone();
@@ -445,7 +526,7 @@ mod wire_tests {
             activity: Arc::default(),
         };
         let full = encode(&mut state, 0);
-        assert_eq!(&full[..4], b"RXT7");
+        assert_eq!(&full[..4], b"RXT8");
         assert_eq!(
             full.windows(b"https://example.com/one".len())
                 .filter(|w| *w == b"https://example.com/one")

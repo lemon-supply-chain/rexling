@@ -10,7 +10,7 @@ import org.junit.Test
 /** Contrast and hierarchy checks for the floating wheel, run separately for every light and dark preset. */
 class WheelColorsTest {
     private val themes=ThemeCatalog.parse(sequenceOf(File("src/main/assets/themes/rex-builtins.json"),File("app/src/main/assets/themes/rex-builtins.json")).first {it.exists()}.readText())
-    private fun colorsFor(theme: AppTheme)=WheelColors.from(rexColorScheme(theme.terminal.dark,theme))
+    private fun colorsFor(theme: AppTheme)=WheelColors.from(rexColorScheme(theme.terminal.dark,theme.ui))
     private fun contrast(a: Color,b: Color)=WheelColors.contrast(a,b)
 
     @Test fun sectorLabelsKeepTextContrastInEveryState() {
@@ -99,7 +99,7 @@ class WheelColorsTest {
 
     @Test fun gridCategoryCellsKeepContrastOnTheOpaqueBubble() {
         for(theme in themes) {
-            val scheme=rexColorScheme(theme.terminal.dark,theme);val colors=WheelColors.from(scheme)
+            val scheme=rexColorScheme(theme.terminal.dark,theme.ui);val colors=WheelColors.from(scheme)
             for(category in WheelCategory.entries) {
                 val cell=colors.categoryFill(category)!!.compositeOver(scheme.surfaceContainerHigh)
                 val label=contrast(scheme.onSurface,cell)

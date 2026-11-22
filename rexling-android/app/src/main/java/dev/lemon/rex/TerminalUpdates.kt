@@ -3,19 +3,32 @@ package dev.lemon.rex
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+internal sealed interface TerminalUpdate {
+    data class Full(val state: AppState): TerminalUpdate
+    data class PaneFrames(val frames: Map<String,TerminalScreen>): TerminalUpdate
+}
+
 /** State is decoder-local: row deltas never cross a connection or an unknown base. */
-internal class TerminalUpdates {
+internal class TerminalUpdates(
+    private val prepareImage: (Int,Int,ByteBuffer)->android.graphics.Bitmap? = ::prepareTerminalBitmap,
+) {
     var revision: Long=0;private set
     private var state=AppState()
-    fun decode(bytes: ByteArray): AppState {
+    private val paneFrames=LinkedHashMap<String,TerminalScreen>()
+    /** Materialize the full snapshot for consumers that inspect individual packets. */
+    fun decode(bytes: ByteArray): AppState = when(val update=decodeUpdate(bytes)) {
+        is TerminalUpdate.Full -> update.state
+        is TerminalUpdate.PaneFrames -> state.copy(revision=revision,previewFrames=update.frames)
+    }
+
+    fun decodeUpdate(bytes: ByteArray): TerminalUpdate {
         require(bytes.size in 17..134217728) {"Invalid terminal packet size"}
         val data=ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val version=data.int
-        require(version in 0x31545852..0x37545852) {"Unsupported terminal packet"}
+        require(version==0x31545852 || version==0x32545852 || version==0x33545852 || version==0x34545852 || version==0x35545852 || version==0x36545852 || version==0x37545852 || version==0x38545852) {"Unsupported terminal packet"}
         val nextRevision=data.long;require(nextRevision>revision)
         fun text(): String {val n=data.int;require(n>=0 && n<=data.remaining());val raw=ByteArray(n);data.get(raw);return raw.toString(Charsets.UTF_8)}
         val metadata=text()
-        var next=if(metadata.isNotEmpty()) AppState.parse(metadata,state.activity) else state.copy(previewFrames=emptyMap())
         fun readFrame(previous: TerminalScreen?): TerminalScreen? = when(val flag=data.get().toInt()) {
             0->previous
             1->null
@@ -92,7 +105,9 @@ internal class TerminalUpdates {
                         require(w in 1..8192 && h in 1..8192 && n.toLong()==w.toLong()*h*4 && n<=data.remaining())
                         total+=n;require(total<=64*1024*1024)
                         val key=Pair(id,generation);require(newKeys.add(key))
-                        val bytes=ByteArray(n);data.get(bytes);images[key]=TerminalImage(id,generation,w,h,bytes)
+                        val start=data.position()
+                        images[key]=TerminalImage(id,generation,w,h,prepareImage(w,h,data))
+                        data.position(start+n)
                     }
                     val count=data.short.toInt() and 0xffff;require(count<=4096)
                     placements=List(count) {
@@ -116,17 +131,32 @@ internal class TerminalUpdates {
             }
             else->error("Invalid terminal frame flag $flag")
         }
+        val mainFrameUnchanged=data.get(data.position())==0.toByte()
         val frame=readFrame(state.screen)
-        if(version>=0x34545852) {
+        val previews=if(version>=0x34545852) {
             val count=data.short.toInt() and 0xffff;require(count<=32)
-            val previews=mutableMapOf<String,TerminalScreen>()
-            repeat(count) {val id=text();require(id.isNotEmpty() && !previews.containsKey(id));previews[id]=readFrame(null) ?: error("Missing preview frame")}
-            next=next.copy(previewFrames=previews)
-        }
+            buildMap(count) {
+                repeat(count) {
+                    val id=text()
+                    require(id.isNotEmpty() && !containsKey(id))
+                    val previous=if(version>=0x38545852) paneFrames[id] else null
+                    put(id,readFrame(previous) ?: error("Missing preview frame"))
+                }
+            }
+        } else emptyMap()
         require(!data.hasRemaining()) {"Trailing terminal packet data"}
-        next=next.copy(revision=nextRevision,screen=frame)
-        state=next;revision=nextRevision
-        return next
+        val paneFramesOnly=metadata.isEmpty() && mainFrameUnchanged && previews.isNotEmpty()
+        if(!paneFramesOnly) {
+            val next=if(metadata.isNotEmpty()) AppState.parse(metadata,state.activity) else state
+            state=next.copy(revision=nextRevision,screen=frame,previewFrames=previews)
+        }
+        if(version>=0x38545852) for((id,screen) in previews) {
+            paneFrames.remove(id)
+            paneFrames[id]=screen
+            if(paneFrames.size>16) paneFrames.remove(paneFrames.keys.first())
+        }
+        revision=nextRevision
+        return if(paneFramesOnly) TerminalUpdate.PaneFrames(previews) else TerminalUpdate.Full(state)
     }
     /** Move rows by [shift] (positive: content moved up), re-tagging each cell's row. */
     private fun shifted(lines: List<List<TerminalCell>>,shift: Int): MutableList<List<TerminalCell>> {

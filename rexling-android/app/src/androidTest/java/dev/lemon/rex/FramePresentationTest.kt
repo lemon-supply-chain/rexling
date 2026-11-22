@@ -24,7 +24,7 @@ class FramePresentationTest {
         val direct=AtomicReference(preview);val controlled=mutableStateOf(false)
         lateinit var view: TerminalView
         ui.setContent {MaterialTheme {
-            TerminalCarousel(listOf(BlockItem("a","shell")),"a","a",preview,emptyMap(),emptyMap(),controlled.value,10f,
+            TerminalCarousel(listOf(BlockItem("a","shell")),"a","a",preview,{null},emptyMap(),controlled.value,10f,
                 {},{},{_,_,_,_,_->},{},{},{_,_->},{},{},{view=it},Modifier.size(320.dp,220.dp),
                 bindLiveView={_,terminal->terminal.presentFrame(direct.get());true})
         }}
@@ -35,11 +35,33 @@ class FramePresentationTest {
         val preview=screen(0xff30445d.toInt());val latest=screen(0xff4d6858.toInt())
         val ready=mutableStateOf(false);lateinit var view: TerminalView
         ui.setContent {MaterialTheme {
-            TerminalCarousel(listOf(BlockItem("a","shell")),"a","a",preview,emptyMap(),emptyMap(),ready.value,10f,
+            TerminalCarousel(listOf(BlockItem("a","shell")),"a","a",preview,{null},emptyMap(),ready.value,10f,
                 {},{},{_,_,_,_,_->},{},{},{_,_->},{},{},{view=it},Modifier.size(320.dp,220.dp),
                 bindLiveView={_,terminal->if(ready.value){terminal.presentFrame(latest);true}else false})
         }}
         ui.runOnIdle {assertSame(preview,view.screen);ready.value=true}
         ui.runOnIdle {assertSame(latest,view.screen)}
+    }
+
+    @Test fun aNeighborPreviewDoesNotRebindTheActiveTerminal() {
+        val live=screen(0xff30445d.toInt())
+        val updated=screen(0xff4d6858.toInt())
+        val blocks=listOf(BlockItem("a","shell"),BlockItem("b","shell"))
+        val previews=mutableStateOf<Map<String,TerminalScreen>>(emptyMap())
+        val selected=mutableStateOf("a")
+        lateinit var view: TerminalView
+        var binds=0
+        ui.setContent {MaterialTheme {
+            TerminalCarousel(blocks,selected.value,"a",live,{previews.value[it]},emptyMap(),false,10f,
+                {},{},{_,_,_,_,_->},{},{},{_,_->},{},{},{view=it;binds++},Modifier.size(320.dp,220.dp))
+        }}
+        val initialBinds=ui.runOnIdle {binds}
+        ui.runOnIdle {previews.value=mapOf("b" to updated)}
+        ui.runOnIdle {
+            assertSame(live,view.screen)
+            assertEquals(initialBinds,binds)
+            selected.value="b"
+        }
+        ui.runOnIdle {assertSame(updated,view.screen)}
     }
 }

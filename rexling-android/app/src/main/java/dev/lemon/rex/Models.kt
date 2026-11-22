@@ -6,13 +6,14 @@ import org.json.JSONObject
 data class SessionItem(val id: String, val label: String)
 data class SessionDetail(val attachment: String, val tabs: Int, val panes: Int)
 data class BlockItem(val id: String, val label: String)
-data class WindowItem(val id: String, val label: String, val blocks: List<BlockItem>,val layout: List<PanePlacement> = emptyList())
+data class WindowItem(val id: String, val label: String, val blocks: List<BlockItem>,val layout: List<PanePlacement> = emptyList(),val splits: List<PaneSplitLine> = emptyList(),
+    /** The pane Rex shows over the whole window, or blank. */ val zoomed: String="")
 data class TerminalScroll(val total: Long=0,val offset: Long=0,val visible: Long=0) {
     val available: Long get()=(total-visible).coerceAtLeast(0)
     val below: Long get()=(available-offset).coerceAtLeast(0)
 }
 data class TerminalCell(val x: Int, val y: Int, val text: String, val foreground: Int, val background: Int, val attributes: Int, val width: Int, val hyperlink: String?=null)
-class TerminalImage(val id: Long,val generation: Long,val width: Int,val height: Int,val rgba: ByteArray)
+class TerminalImage(val id: Long,val generation: Long,val width: Int,val height: Int,internal val bitmap: android.graphics.Bitmap?)
 data class TerminalImagePlacement(val image: TerminalImage,val layer: Int,val z: Int,val col: Int,val row: Int,
     val offsetX: Int,val offsetY: Int,val width: Int,val height: Int,val sourceX: Int,val sourceY: Int,val sourceWidth: Int,val sourceHeight: Int)
 data class TerminalScreen(val columns: Int, val rows: Int, val cursorX: Int?, val cursorY: Int?, val foreground: Int, val background: Int, val cells: List<TerminalCell>, val scroll: TerminalScroll = TerminalScroll(), val lines: List<List<TerminalCell>> = cells.groupBy {it.y}.let {groups->List(rows){groups[it].orEmpty()}}, val inputFlags: Int=0,val images: List<TerminalImagePlacement> = emptyList(),val imageCellWidth: Int=8,val imageCellHeight: Int=16,val above: List<List<TerminalCell>> = emptyList(),val below: List<List<TerminalCell>> = emptyList(),val cursorStyle: Int=1,val cursorBlinking: Boolean=false,val cursorAnchorX: Int?=null,val cursorAnchorY: Int?=null) {
@@ -50,14 +51,18 @@ data class AppState(
     val activityLoading: Boolean=false,val activityError: String="",val activityPartial: Boolean=false,
     val titles: Map<String, String> = emptyMap(),
     val directories: Map<String, String> = emptyMap(),
+    val mirrorWaiting: Set<String> = emptySet(),
     val previewFrames: Map<String, TerminalScreen> = emptyMap(), val sessionDetails: Map<String, SessionDetail> = emptyMap(),
+    internal val paneCatalog: PaneCatalogSnapshot? = null, internal val paneCatalogLoading: Boolean = false,
     val revision: Long = 0, val phase: String = "disconnected", val endpoint: String = "",
     internal val clipboardWrite: TerminalClipboardWrite?=null,
     val identity: String = "", val error: String = "", val notice: String = "",
     val sessions: List<SessionItem> = emptyList(), val windows: List<WindowItem> = emptyList(),
     val selectedSession: String = "", val selectedBlock: String = "", val controlled: Boolean = false,
     val screen: TerminalScreen? = null, val creating: Boolean = false, val navigationId: Long = 0,val tabMoveId: Long=0,val paneMoveId: Long=0,val connectionEpoch: Long=0,val otherOwner: Boolean=false,val attentionCount: Int=0,
+    internal val staleSession: String = "",
     internal val cachedPrograms: Set<String> = emptySet(),
+    internal val awaitingPaneSelection: Boolean = false,
 ) {
     val connected: Boolean get() = phase == "connected"
     companion object {
@@ -77,9 +82,12 @@ data class AppState(
                 programs = root.optJSONObject("programs")?.let { programs -> programs.keys().asSequence().associateWith { id ->
                     ProgramIdentity.resolve(programs.optJSONArray(id).objects { it as String })
                 } } ?: emptyMap(),
+                staleSession=root.optString("staleSession"), awaitingPaneSelection=root.optBoolean("awaitingPaneSelection"),
+                mirrorWaiting=root.optJSONArray("mirrorWaiting").objects {it as String}.toSet(),
                 previewFrames = root.optJSONObject("previews")?.let { frames -> frames.keys().asSequence().associateWith { TerminalScreen.parse(frames.getJSONObject(it)) } } ?: emptyMap(),
                 sessionDetails = root.optJSONObject("sessionDetails")?.let { details -> details.keys().asSequence().associateWith { key ->
                     val d=details.getJSONObject(key);SessionDetail(d.optString("attachment"),d.optInt("tabs"),d.optInt("panes")) } } ?: emptyMap(),
+                paneCatalog=root.optJSONObject("paneCatalog")?.let(PaneCatalogSnapshot::parse),paneCatalogLoading=root.optBoolean("paneCatalogLoading"),
                 revision = root.optLong("revision"), navigationId = root.optLong("navigationId"),tabMoveId=root.optLong("tabMoveId"),paneMoveId=root.optLong("paneMoveId"),connectionEpoch=root.optLong("connectionEpoch"),otherOwner=root.optBoolean("otherOwner"),attentionCount=root.optInt("attentionCount").coerceIn(0,1024), phase = root.optString("phase", "disconnected"),
                 clipboardWrite=root.optJSONObject("clipboard")?.let {TerminalClipboardWrite(it.optLong("serial"),it.optString("text"),it.optString("block"),it.optLong("connection"),it.optLong("navigation"),it.optBoolean("local"))},
                 endpoint = root.optString("endpoint"), identity = root.optString("identity"),
@@ -95,7 +103,8 @@ data class AppState(
                     val ids=blocks.mapTo(hashSetOf()) {it.id}
                     val layout=w.optJSONArray("layout").objects {PanePlacement.parse(it as? JSONObject)}.filterNotNull()
                         .filter {it.id in ids}.sortedBy {it.layer}.asReversed().distinctBy {it.id}.asReversed()
-                    WindowItem(w.optString("id"), w.optString("label", "Window"),blocks,layout)
+                    val splits=w.optJSONArray("splits").objects {PaneSplitLine.parse(it as? JSONObject)}.filterNotNull()
+                    WindowItem(w.optString("id"), w.optString("label", "Window"),blocks,layout,splits,w.optString("zoomed"))
                 },
                 selectedSession = root.optString("selectedSession"), selectedBlock = root.optString("selectedBlock"),
                 controlled = root.optBoolean("controlled"), creating = root.optBoolean("creating"), screen = root.optJSONObject("screen")?.let(TerminalScreen::parse),
@@ -104,7 +113,7 @@ data class AppState(
     }
 }
 private fun argb(rgb: Int): Int = rgb or (0xff shl 24)
-private fun <T> JSONArray?.objects(map: (Any) -> T): List<T> = if (this == null) emptyList() else (0 until length()).map { map(get(it)) }
+internal fun <T> JSONArray?.objects(map: (Any) -> T): List<T> = if (this == null) emptyList() else (0 until length()).map { map(get(it)) }
 
 object TerminalInput {
     // Shift+Enter has no legacy encoding (it would be a plain \r). The engine

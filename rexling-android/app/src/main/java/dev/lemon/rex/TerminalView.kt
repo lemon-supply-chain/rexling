@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.text.InputType
 import android.view.ActionMode
+import android.view.InputDevice
 import android.view.Menu
 import android.view.MenuItem
 import android.view.KeyEvent
@@ -62,7 +63,7 @@ class TerminalView(context: Context) : View(context) {
     override fun onWindowVisibilityChanged(visibility: Int) {super.onWindowVisibilityChanged(visibility);awake.update();refreshCursorBlink()}
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {if(event.actionMasked==MotionEvent.ACTION_DOWN) awake.activity();return super.dispatchTouchEvent(event)}
     var interactive = true
-        set(value) {if(field!=value) {field=value;if(!value) clearSelection();refreshCursorBlink()}}
+        set(value) {if(field!=value) {field=value;if(!value) {pointerPress=null;mouseTouch=false;clearSelection()};refreshCursorBlink()}}
     private var selection: TerminalSelection?=null
     private var selectionMode: ActionMode?=null
     private var selectionLink: TerminalLink?=null
@@ -114,7 +115,7 @@ class TerminalView(context: Context) : View(context) {
     var screen: TerminalScreen?
         get()=currentScreen
         set(value) {setScreen(value,false)}
-    internal var onKeyboardFocus: (TerminalKeyboardFocus?)->Unit={}
+    internal var onKeyboardFocus: ((TerminalKeyboardFocus?)->Unit)?=null
     internal var allowHiddenCursorInput: Boolean=false
         set(value) {if(field!=value) {field=value;reportCursorViewport()}}
     internal fun inputCursorRow(frame: TerminalScreen)=frame.cursorY ?: frame.cursorAnchorY.takeIf {allowHiddenCursorInput && frame.cursorAnchorX!=null}
@@ -132,7 +133,7 @@ class TerminalView(context: Context) : View(context) {
         return TerminalKeyboardFocus(insetTop+row*cellHeight,bottom,
             max(bottom,insetTop+(lastText+1)*cellHeight+insetBottom))
     }
-    private fun reportCursorViewport() {onKeyboardFocus(keyboardFocus)}
+    private fun reportCursorViewport() {onKeyboardFocus?.invoke(keyboardFocus)}
     private var frameTraceToken: String?=null
     internal fun presentFrame(value: TerminalScreen?,token: String?=null) {setScreen(value,true);frameTraceToken=token}
     private fun setScreen(value: TerminalScreen?,onDisplayFrame: Boolean) {
@@ -184,6 +185,7 @@ class TerminalView(context: Context) : View(context) {
         set(value) { if (field != value) { field = value; metrics(); invalidate() } }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val backgroundPaint = Paint() // Cell fills must meet without antialiased seams.
+    private val textColors = TerminalTextColors()
     private val fonts = TerminalFonts(context)
     private val terminalImages=TerminalImages()
     private data class RecordedRow(val cells: List<TerminalCell>,val recording: TerminalRowRecording,val links: List<TerminalLink>)
@@ -446,7 +448,7 @@ class TerminalView(context: Context) : View(context) {
             if(cell.x>=columns || cell.width==0 || cell.text.isEmpty() || cell.text.codePointAt(0)==0x10eeee || cell.attributes and 16!=0) continue
             val style=cell.attributes and 3
             paint.typeface=fonts.typefaceFor(style,cell.text)
-            paint.color=if(cell.attributes and 8!=0) palette.background(cell) else palette.foreground(cell)
+            paint.color=textColors.foreground(palette,cell)
             paint.alpha=if(cell.attributes and 4!=0) 150 else 255
             var text=cell.text;var width=cell.width
             val ascii=cell.width==1 && cell.text.length==1 && cell.text[0] in ' '..'~'
@@ -508,8 +510,53 @@ class TerminalView(context: Context) : View(context) {
     private fun settleScroll() {
         if(scrollMotion.remainder!=0f || scrollPixels!=0f) {scrollPixels=0f;scrollMotion.settle();invalidate()}
     }
-    override fun onDetachedFromWindow() {removeCallbacks(cursorTick);awake.detach();terminalImages.clear();clearRows();clearSelection();scrollFling.abortAnimation();touchVelocity?.recycle();touchVelocity=null;super.onDetachedFromWindow()}
+    override fun onDetachedFromWindow() {pointerPress=null;mouseTouch=false;removeCallbacks(cursorTick);awake.detach();clearRows();clearSelection();scrollFling.abortAnimation();touchVelocity?.recycle();touchVelocity=null;super.onDetachedFromWindow()}
+    private data class PointerPress(val x: Float,val y: Float)
+    private var pointerPress: PointerPress?=null
+    private var mouseTouch=false
+
+    private fun rememberPress(x: Float,y: Float) {
+        pressedMouseTarget=mouseTarget()
+        pressedMouseGrid=screen?.let {it.columns to it.rows}
+        pressedMouse=screen?.mouseTracking==true
+        pressedControlled=controlled
+        pressedLink=linkAt(x,y)
+    }
+
+    private fun finishTap(x: Float,y: Float,showKeyboard: Boolean) {
+        if(pressedMouseTarget!=mouseTarget()) return
+        val link=pressedLink
+        if(link==null) terminalTap(x,y,showKeyboard)
+        else if(link==linkAt(x,y)) onOpenLink(link.url)
+    }
+
+    internal fun primaryPointerButton(pressed: Boolean,x: Float,y: Float) {
+        if(pressed) {
+            // Some devices also dispatch DOWN/UP. Let the touch gesture handle that click.
+            if(!mouseTouch && selection==null) {
+                awake.activity()
+                rememberPress(x,y)
+                pointerPress=PointerPress(x,y)
+            }
+        } else {
+            val press=pointerPress
+            pointerPress=null
+            val slop=ViewConfiguration.get(context).scaledTouchSlop
+            if(press!=null && selection==null &&
+                kotlin.math.abs(x-press.x)<=slop && kotlin.math.abs(y-press.y)<=slop) {
+                finishTap(x,y,showKeyboard=false)
+            }
+            if(!mouseTouch) pressedLink=null
+        }
+    }
+
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if(interactive && event.isFromSource(InputDevice.SOURCE_MOUSE) &&
+            event.actionButton==MotionEvent.BUTTON_PRIMARY &&
+            event.actionMasked in MotionEvent.ACTION_BUTTON_PRESS..MotionEvent.ACTION_BUTTON_RELEASE) {
+            primaryPointerButton(event.actionMasked==MotionEvent.ACTION_BUTTON_PRESS,event.x,event.y)
+            return true
+        }
         if(selection!=null && event.actionMasked==MotionEvent.ACTION_SCROLL) return true
         if(interactive && event.actionMasked==MotionEvent.ACTION_SCROLL) {
             val lines=(-event.getAxisValue(MotionEvent.AXIS_VSCROLL)*3).roundToInt()
@@ -567,13 +614,19 @@ class TerminalView(context: Context) : View(context) {
     }
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if(!interactive) return false
+        val fromMouse=event.isFromSource(InputDevice.SOURCE_MOUSE)
+        if(event.actionMasked==MotionEvent.ACTION_DOWN) {
+            pointerPress=null
+            mouseTouch=fromMouse
+        }
+        if(event.actionMasked==MotionEvent.ACTION_UP || event.actionMasked==MotionEvent.ACTION_CANCEL) mouseTouch=false
         if(selectionTouch || selection!=null) return selectionEvent(event)
         if(event.actionMasked==MotionEvent.ACTION_DOWN) {touchVelocity?.recycle();touchVelocity=VelocityTracker.obtain()}
         val sample=MotionEvent.obtain(event)
         sample.offsetLocation(event.rawX-event.x,event.rawY-event.y)
         touchVelocity?.addMovement(sample);sample.recycle()
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {suppressScrollTap=!scrollFling.isFinished || scrollTranslation!=0f;scrollFling.abortAnimation();scrollMotion.reset();invalidate();pressedMouseTarget=mouseTarget();pressedMouseGrid=screen?.let {it.columns to it.rows};pressedMouse=screen?.mouseTracking==true;pressedControlled=controlled;pressedLink=linkAt(event.x,event.y);pressX=event.x;pressY=event.y;removeCallbacks(longPress);postDelayed(longPress,ViewConfiguration.getLongPressTimeout().toLong());wheelCol=((event.x-insetHorizontal)/desiredCellWidth).toInt();wheelRow=((event.y-insetTop)/desiredCellHeight).toInt();scrollFling.abortAnimation();startX=event.rawX;startY=event.rawY;lastScrollY=event.rawY;scrollPixels=0f;scrollMotion.reset();scrolling=false;dragging=false;paneGesture.begin(event.x, event.y)}
+            MotionEvent.ACTION_DOWN -> {suppressScrollTap=!scrollFling.isFinished || scrollTranslation!=0f;scrollFling.abortAnimation();scrollMotion.reset();invalidate();rememberPress(event.x,event.y);pressX=event.x;pressY=event.y;removeCallbacks(longPress);postDelayed(longPress,ViewConfiguration.getLongPressTimeout().toLong());wheelCol=((event.x-insetHorizontal)/desiredCellWidth).toInt();wheelRow=((event.y-insetTop)/desiredCellHeight).toInt();scrollFling.abortAnimation();startX=event.rawX;startY=event.rawY;lastScrollY=event.rawY;scrollPixels=0f;scrollMotion.reset();scrolling=false;dragging=false;paneGesture.begin(event.x, event.y)}
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount != 1) { removeCallbacks(longPress);paneGesture.cancel();onPaneDrag?.invoke(0f,false);dragging=false;scrolling=false }
                 else {
@@ -591,7 +644,8 @@ class TerminalView(context: Context) : View(context) {
             MotionEvent.ACTION_UP -> if(scrolling) {
                 touchVelocity?.computeCurrentVelocity(1000)
                 val velocity=-(touchVelocity?.yVelocity ?: 0f).toInt()
-                val history=screen?.scroll
+                val frame=screen
+                val history=frame?.scroll?.takeUnless {frame.applicationScroll && it.below==0L}
                 if(history!=null && history.available>0) {
                     val minimum=-(history.offset.toDouble()*cellHeight).coerceAtMost(1000000.0).toInt()
                     val maximum=(history.below.toDouble()*cellHeight).coerceAtMost(1000000.0).toInt()
@@ -602,7 +656,7 @@ class TerminalView(context: Context) : View(context) {
                 touchVelocity?.computeCurrentVelocity(1000)
                 onPaneDragEnd?.invoke(event.rawX-startX,touchVelocity?.xVelocity ?: 0f);dragging=false;paneGesture.cancel()
             } else when (paneGesture.finish(event.x, event.y)) {
-                PaneGesture.Result.TAP -> {val link=pressedLink;if(suppressScrollTap) Unit else if(link==null) terminalTap(event.x,event.y) else if(link==linkAt(event.x,event.y)) onOpenLink(link.url)}
+                PaneGesture.Result.TAP -> if(!suppressScrollTap) finishTap(event.x,event.y,showKeyboard=!fromMouse)
                 PaneGesture.Result.NEXT -> onPaneSwipe(1)
                 PaneGesture.Result.PREVIOUS -> onPaneSwipe(-1)
                 PaneGesture.Result.NONE -> Unit
@@ -611,7 +665,7 @@ class TerminalView(context: Context) : View(context) {
         if(event.actionMasked==MotionEvent.ACTION_UP || event.actionMasked==MotionEvent.ACTION_CANCEL) {pressedLink=null;removeCallbacks(longPress);touchVelocity?.recycle();touchVelocity=null}
         return true
     }
-    private fun terminalTap(x: Float,y: Float) {
+    private fun terminalTap(x: Float,y: Float,showKeyboard: Boolean) {
         val frame=screen
         if(pressedMouse && pressedControlled && !controlled) return
         if(controlled && (pressedMouse || frame?.mouseTracking==true)) {
@@ -625,17 +679,21 @@ class TerminalView(context: Context) : View(context) {
             onMouseClick(col,row,cellWidth.roundToInt().coerceAtLeast(1),cellHeight.roundToInt().coerceAtLeast(1))
             // Mouse-reporting programs (pi's fullscreen mode) still get the click; with no toolbar
             // keyboard button showing, the tap must also be able to open the keyboard.
-            if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
-            else if(row==inputCursorRow(frame)) onCursorTap()
+            if(showKeyboard) {
+                if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
+                else if(row==inputCursorRow(frame)) onCursorTap()
+            }
         } else if(controlled && frame?.hasSemanticPrompt==true) {
             val row=floor((y-insetTop)/cellHeight).toInt()
             if(pressedMouseTarget!=mouseTarget() || pressedMouseGrid!=(frame.columns to frame.rows) ||
                 x<insetHorizontal || x>=width-insetHorizontal || y<insetTop || y>=height-insetBottom) return
             super.performClick()
             // Prompt-marked shells otherwise open it only from the prompt line.
-            if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
-            else if(frame.scroll.below==0L && row==inputCursorRow(frame)) onCursorTap()
-        } else performClick()
+            if(showKeyboard) {
+                if(frame.isSemanticInputRow(row) || tapOpensKeyboard) keyboard()
+                else if(frame.scroll.below==0L && row==inputCursorRow(frame)) onCursorTap()
+            }
+        } else if(showKeyboard || !controlled) performClick() else super.performClick()
     }
     internal fun copySemanticSelection(output: Boolean): Boolean {
         val selected=selection ?: return false

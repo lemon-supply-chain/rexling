@@ -26,6 +26,8 @@ class BaselineProfileGenerator {
         preview()
         check(device.currentPackageName==APP)
         device.findObject(By.desc("Terminal menu")).click()
+        check(device.wait(Until.hasObject(By.desc("Preferences")),3000))
+        device.findObject(By.desc("Preferences")).click()
         device.wait(Until.hasObject(By.text("Appearance")),3000)
         device.findObject(By.text("Appearance")).click()
         device.wait(Until.hasObject(By.text("Light")),3000)

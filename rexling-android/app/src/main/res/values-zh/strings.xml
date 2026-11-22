@@ -18,15 +18,22 @@
 
     <!-- Main & Top Menu -->
     <string name="terminal_menu">终端菜单</string>
+    <string name="close_terminal_menu">关闭终端菜单</string>
+    <string name="close_pane">关闭窗格</string>
     <string name="in_control">已控制</string>
     <string name="viewing_terminal">查看终端</string>
     <string name="take_control">获取控制</string>
     <string name="release_control">释放控制</string>
     <string name="new_session">新建会话</string>
     <string name="preferences">偏好设置</string>
-    <string name="copy_viewport">复制视口内容</string>
+    <string name="copy_viewport">复制视口</string>
     <string name="paste">粘贴</string>
+    <string name="image">图片</string>
     <string name="attach_image">附加图片</string>
+    <string name="terminal_actions">终端操作</string>
+    <string name="single_pane">单窗格</string>
+    <string name="multiple_panes">多窗格</string>
+    <string name="all_panes">全部窗格</string>
     <string name="servers_connected_format">服务器 · %d 台已连接</string>
     <string name="refresh_sessions">刷新会话</string>
     <string name="connect_over_tailscale">通过 Tailscale 连接</string>
@@ -86,11 +93,33 @@
     <string name="font_size">字体大小</string>
     <string name="font_size_detail">终端文本字号</string>
     <string name="language">语言</string>
+    <string name="close_language">关闭语言设置</string>
     <string name="language_system">跟随系统</string>
+    <string name="language_system_detail">使用当前设备系统语言设置</string>
     <string name="language_en">English</string>
+    <string name="language_en_native">English (US)</string>
     <string name="language_zh">简体中文</string>
+    <string name="language_zh_native">中文</string>
     <string name="minimize_floating_panes">最小化浮动窗格</string>
     <string name="minimize_floating_panes_detail">在右下角停靠栏打开浮动窗格，滑动仅在平铺窗格间切换。</string>
+
+    <!-- Tabs & Panes Settings -->
+    <string name="section_tabs">标签栏</string>
+    <string name="section_tabs_desc">根据当前窗口宽度自适应，折叠、旋转和分屏各自独立记忆</string>
+    <string name="tab_width_narrow">窄窗口</string>
+    <string name="tab_width_narrow_detail">440dp 以下：竖屏手机，或折叠屏内屏竖向分屏</string>
+    <string name="tab_width_medium">中等窗口</string>
+    <string name="tab_width_medium_detail">440–760dp：折叠屏外屏、横向分屏及内屏竖屏</string>
+    <string name="tab_width_wide">宽窗口</string>
+    <string name="tab_width_wide_detail">760dp 及以上：折叠屏内屏横向或平板</string>
+    <string name="this_window_format">当前窗口 · %1$ddp</string>
+    <string name="tab_position_bottom">底部</string>
+    <string name="tab_position_left">左侧</string>
+    <string name="tab_position_right">右侧</string>
+    <string name="tab_rail_style_icons">图标</string>
+    <string name="tab_rail_style_titles">图标与标题</string>
+    <string name="panes_unfolded_title">展开全屏</string>
+    <string name="panes_unfolded_desc">在折叠屏内屏或平板上全屏运行，旁边无其他应用</string>
     <string name="use_joystick">方向键摇杆</string>
     <string name="use_joystick_detail_on">长按滑动；双击切换为方向按键</string>
     <string name="use_joystick_detail_off">点击显示方向按键</string>
@@ -109,6 +138,8 @@
     <string name="background_alerts_detail">任务完成与关注提醒</string>
     <string name="codex_title_attention">Codex 标题关注</string>
     <string name="codex_title_attention_detail">当 Codex 状态为 Working 但标题包含 Action Required 时提示关注。依赖 Codex 标题格式。</string>
+    <string name="compact_top_bar">紧凑顶部栏</string>
+    <string name="compact_top_bar_detail">自动隐藏顶部栏，仅保留一行“程序 - 地址”，点击后展开。</string>
     <string name="frosted_effects">磨砂玻璃效果</string>
     <string name="frosted_effects_detail">关闭后使用不透明表面，降低 GPU 渲染开销。</string>
     <string name="about_rexling">关于 Rexling</string>
@@ -386,6 +417,8 @@
     <string name="a11y_next_session">下一个会话</string>
     <string name="a11y_previous_session">上一个会话</string>
     <string name="a11y_session_strip">会话条</string>
+    <string name="a11y_expand_top_bar">展开顶部栏</string>
+    <string name="a11y_collapse_top_bar">收起顶部栏</string>
     <string name="a11y_switch_session">切换会话</string>
     <string name="a11y_session_label">会话 %1$s</string>
     <string name="a11y_release_terminal_control">释放终端控制</string>
@@ -609,7 +642,7 @@
     <string name="device_name">设备名称</string>
     <string name="device_name_hint">此设备在 tailnet 中显示的名称。在 Tailscale 管理后台设置的名称优先。</string>
     <string name="device_name_error">设备名称只能使用字母、数字和连字符（最长 63 个字符，且不能以连字符开头或结尾）。</string>
-    <string name="attach_file">附加文件</string>
+    <string name="attach_file">文件</string>
     <string name="session_label">会话</string>
     <string name="switch_session">切换会话</string>
     <string name="none">无</string>

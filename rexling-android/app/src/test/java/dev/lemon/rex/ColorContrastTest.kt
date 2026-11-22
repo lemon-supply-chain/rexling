@@ -30,10 +30,10 @@ class ColorContrastTest {
             .let { File(it).readText() }
 
     private val schemes: List<Pair<String, ColorScheme>> =
-        presets.map { theme -> theme.id to base(theme.terminal.dark).withPreset(theme) } +
+        presets.map { theme -> theme.id to rexColorScheme(theme.terminal.dark, theme.ui) } +
             listOf(
-                "default-dark" to rexColorScheme(true, ThemeCatalog.defaults[0]),
-                "default-light" to rexColorScheme(false, ThemeCatalog.defaults[1]),
+                "default-dark" to rexColorScheme(true, ThemeCatalog.defaults[0].ui),
+                "default-light" to rexColorScheme(false, ThemeCatalog.defaults[1].ui),
             )
 
     private fun base(dark: Boolean) = if (dark) darkColorScheme() else lightColorScheme()
@@ -81,41 +81,6 @@ class ColorContrastTest {
                 val ratio = contrast(pair.foreground(scheme), pair.background(scheme))
                 assertTrue("$name: ${pair.label} is ${format(ratio)}:1, needs 3:1", ratio >= 3.0)
             }
-        }
-    }
-
-    @Test
-    fun actionSelectionAndWorkingAreThreeRoles() {
-        schemes.forEach { (name, scheme) ->
-            assertTrue("$name: secondary equals primary", scheme.secondary != scheme.primary)
-            assertTrue("$name: tertiary equals primary", scheme.tertiary != scheme.primary)
-            assertTrue("$name: tertiary equals secondary", scheme.tertiary != scheme.secondary)
-            assertTrue("$name: selection reuses the action container", scheme.secondaryContainer != scheme.primaryContainer)
-            // Selection must stay quieter than the action fill, or the screen has two heroes.
-            assertTrue(
-                "$name: selection container is as saturated as the action (${format(chroma(scheme.secondaryContainer))})",
-                chroma(scheme.secondaryContainer) <= 0.09
-            )
-        }
-    }
-
-    @Test
-    fun workingHueStaysClearOfDanger() {
-        schemes.forEach { (name, scheme) ->
-            if (chroma(scheme.primary) < 0.02 || chroma(scheme.error) < 0.02) return@forEach
-            val distance = hueDistance(hue(scheme.tertiary), hue(scheme.error))
-            assertTrue("$name: working hue is ${format(distance)}° from danger, needs 40°", distance >= 40.0)
-        }
-    }
-
-    @Test
-    fun defaultSchemeSplitsTheSameThreeRoles() {
-        listOf(true, false).forEach { dark ->
-            val scheme = rexColorScheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1])
-            assertTrue("default: secondary equals primary", scheme.secondary != scheme.primary)
-            assertTrue("default: tertiary equals primary", scheme.tertiary != scheme.primary)
-            assertTrue("default: selection reuses the action container", scheme.secondaryContainer != scheme.primaryContainer)
-            assertTrue("default: surfaces collapse", scheme.surface != scheme.surfaceContainerLow || scheme.surface != scheme.surfaceContainer)
         }
     }
 

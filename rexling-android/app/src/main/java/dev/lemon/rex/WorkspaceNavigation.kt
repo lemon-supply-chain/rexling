@@ -49,12 +49,19 @@ class WorkspaceNavigation {
     }
 
     fun target(state: AppState,savedSession: String): WorkspaceTarget? {
-        if(!state.connected || state.creating) return null
+        if(!state.connected || state.creating || state.awaitingPaneSelection) return null
         val session=state.sessions.firstOrNull {it.id==savedSession}
             ?: state.sessions.firstOrNull {it.id==state.selectedSession} ?: state.sessions.firstOrNull() ?: return null
         if(session.id!=state.selectedSession) return WorkspaceTarget(session.id)
-        val block=pane(session.id,state.windows) ?: return null
+        val block=pane(session.id,state.windows.map {window->window.copy(blocks=window.visiblePanes())}) ?: return null
         return if(block!=state.selectedBlock) WorkspaceTarget(session.id,block) else null
+    }
+
+    fun forget(session: String): Boolean {
+        val hadWindow=windows.remove(session)!=null
+        val hadBlock=blocks.remove(session)!=null
+        val hadPanes=panes.keys.removeAll {it.first==session}
+        return hadWindow || hadBlock || hadPanes
     }
 
     fun encode(): String = JSONObject().apply {

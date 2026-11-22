@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import androidx.compose.ui.unit.IntSize
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -98,5 +99,77 @@ class ModelsTest {
         assertEquals(null,TailscaleHostname.normalize("phone-"))
         assertEquals(null,TailscaleHostname.normalize("my phone"))
         assertEquals(null,TailscaleHostname.normalize("phone.local"))
+    }
+    @Test fun tabBarLayoutRoundTripsAndFallsBackPerScreen() {
+        val left=TabBarLayout(TabBarPosition.LEFT,TabRailStyle.TITLES)
+        assertEquals(left,TabBarLayout.decode(left.encode(),TabBarLayout()))
+        val unfoldedDefault=TabBarLayout(style=TabRailStyle.TITLES)
+        assertEquals(unfoldedDefault,TabBarLayout.decode(null,unfoldedDefault))
+        assertEquals(TabBarLayout(),TabBarLayout.decode("SIDEWAYS,ICONS",TabBarLayout()))
+        assertEquals(TabBarLayout(TabBarPosition.RIGHT,TabRailStyle.ICONS),TabBarLayout.decode("RIGHT,BOGUS",TabBarLayout()))
+        assertEquals(false,TabBarLayout().side);assertEquals(true,left.side)
+    }
+
+    @Test fun tabWidthClassesFollowTheAppWindow() {
+        // Galaxy Z Fold at 420 dpi, and a phone.
+        assertEquals(TabWidthClass.NARROW,TabWidthClass.of(350))   // upright inner screen, split half
+        assertEquals(TabWidthClass.NARROW,TabWidthClass.of(384))   // phone
+        assertEquals(TabWidthClass.MEDIUM,TabWidthClass.of(475))   // cover screen
+        assertEquals(TabWidthClass.MEDIUM,TabWidthClass.of(465))   // inner screen sideways, split half
+        assertEquals(TabWidthClass.MEDIUM,TabWidthClass.of(704))   // upright inner screen
+        assertEquals(TabWidthClass.WIDE,TabWidthClass.of(933))     // inner screen sideways
+        assertEquals(TabWidthClass.MEDIUM,TabWidthClass.of(440));assertEquals(TabWidthClass.WIDE,TabWidthClass.of(760))
+    }
+
+    @Test fun multiPaneKeepsTheTiledLayoutWhenAFloatingPaneIsFocused() {
+        fun tab(vararg rects: PanePlacement)=WindowItem("w","Tab",rects.map {BlockItem(it.id,it.id)},rects.toList())
+        val left=PanePlacement("a",0f,0f,.5f,1f);val right=PanePlacement("b",.5f,0f,.5f,1f)
+        val floating=PanePlacement("f",.2f,.2f,.3f,.3f,layer=1,floating=true)
+        assertEquals(listOf(left,right),multiPaneTiles(tab(left,right,floating),"a"))
+        assertEquals(listOf(left,right),multiPaneTiles(tab(left,right,floating),"f",allowFloatingOverlay=true))
+        assertEquals(listOf(left),multiPaneTiles(tab(left,floating),"f",allowFloatingOverlay=true))
+        assertEquals(listOf(left),multiPaneTiles(tab(left,floating),"a",allowFloatingOverlay=true))
+        assertEquals(null,multiPaneTiles(tab(left),"a"))                       // one pane: carousel
+        assertEquals(null,multiPaneTiles(tab(left,right,floating),"f"))        // overlay unavailable
+        assertEquals(null,multiPaneTiles(tab(left,right,PanePlacement("c",0f,0f,.2f,.2f),PanePlacement("d",0f,0f,.2f,.2f),PanePlacement("e",0f,0f,.2f,.2f)),"a"))
+        assertEquals(null,multiPaneTiles(null,"a"))
+    }
+
+    @Test fun fullWorkspaceRequiresTheWholeLargeDisplayAndSingleWindowMode() {
+        val inner=IntSize(2448,1848)
+        val cover=IntSize(900,2120)
+        val density=2.5f
+        assertTrue(fullWorkspaceWindow(inner,inner,density,sharedWindow=false))
+        assertFalse(fullWorkspaceWindow(IntSize(1620,1848),inner,density,sharedWindow=false))
+        assertFalse(fullWorkspaceWindow(IntSize(2448,1700),inner,density,sharedWindow=false))
+        assertFalse(fullWorkspaceWindow(IntSize(2440,1840),inner,density,sharedWindow=true))
+        assertFalse(fullWorkspaceWindow(cover,cover,density,sharedWindow=false))
+    }
+
+    @Test fun paneSplitLinesParseOnlyUsableBorders() {
+        fun json(text: String)=org.json.JSONObject(text)
+        assertEquals(PaneSplitLine("s",true,.5f,0f,0f,1f,1f,"a","b"),
+            PaneSplitLine.parse(json("""{"id":"s","direction":"horizontal","ratio":0.5,"rect":[0,0,1,1],"before":"a","after":"b"}""")))
+        assertEquals(false,PaneSplitLine.parse(json("""{"id":"s","direction":"vertical","ratio":0.3,"rect":[0.5,0,0.5,1],"before":"a","after":"b"}"""))!!.horizontal)
+        assertEquals(null,PaneSplitLine.parse(json("""{"direction":"diagonal","ratio":0.5,"rect":[0,0,1,1],"before":"a","after":"b"}""")))
+        assertEquals(null,PaneSplitLine.parse(json("""{"direction":"horizontal","ratio":1.0,"rect":[0,0,1,1],"before":"a","after":"b"}""")))
+        assertEquals(null,PaneSplitLine.parse(json("""{"direction":"horizontal","ratio":0.5,"rect":[0,0,1,1],"before":"a","after":"a"}""")))
+        assertEquals(null,PaneSplitLine.parse(json("""{"direction":"horizontal","ratio":0.5,"rect":[0,0,0,1],"before":"a","after":"b"}""")))
+    }
+
+    @Test fun draggingASplitReflowsEverythingOnEachSideInProportion() {
+        // Left pane | right column split into top and bottom, as in a 3-pane tab.
+        val a=PanePlacement("a",0f,0f,.5f,1f);val b=PanePlacement("b",.5f,0f,.5f,.5f);val c=PanePlacement("c",.5f,.5f,.5f,.5f)
+        val outer=PaneSplitLine("s1",true,.5f,0f,0f,1f,1f,"a","b");val inner=PaneSplitLine("s2",false,.5f,.5f,0f,.5f,1f,"b","c")
+        val (panes,lines)=movedSplit(listOf(a,b,c),listOf(outer,inner),outer,.25f)
+        fun near(expected: Float,actual: Float)=assertEquals(expected,actual,1e-5f)
+        near(0f,panes[0].x);near(.25f,panes[0].width)
+        near(.25f,panes[1].x);near(.75f,panes[1].width);near(0f,panes[1].y);near(.5f,panes[1].height)
+        near(.25f,panes[2].x);near(.75f,panes[2].width)
+        near(.25f,lines[0].ratio)
+        near(.25f,lines[1].x);near(.75f,lines[1].width);near(.5f,lines[1].ratio)
+        // Moving the inner border leaves the left pane alone.
+        val (stacked,_)=movedSplit(listOf(a,b,c),listOf(outer,inner),inner,.8f)
+        assertEquals(a,stacked[0]);near(.8f,stacked[1].height);near(.8f,stacked[2].y);near(.2f,stacked[2].height)
     }
 }

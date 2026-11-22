@@ -11,27 +11,27 @@ import androidx.core.view.WindowInsetsCompat
 /** Keep at most one outgoing editor attached until the next editor is served.
  * This retains a view/frame only, never another remote stream or input ownership.
  */
-internal class TerminalImeHandoff {
-    data class Retained(val block: BlockItem,val frame: TerminalScreen)
-    private data class Mounted(val block: BlockItem,val view: TerminalView)
-    private val mounted=mutableMapOf<String,Mounted>()
+internal class TerminalImeHandoff<Pane>(private val idOf: (Pane)->String) {
+    data class Retained<Pane>(val pane: Pane,val frame: TerminalScreen)
+    private data class Mounted<Pane>(val pane: Pane,val view: TerminalView)
+    private val mounted=mutableMapOf<String,Mounted<Pane>>()
     private var visible=emptySet<String>()
-    private var retained by mutableStateOf<Retained?>(null)
-    fun retainFor(blocks: List<BlockItem>): Retained? {
-        val next=blocks.map {it.id}.toSet()
-        if(next!=visible) {
+    private var retained by mutableStateOf<Retained<Pane>?>(null)
+    fun retainFor(panes: List<Pane>): Retained<Pane>? {
+        if(panes.size!=visible.size || panes.any {idOf(it) !in visible}) {
+            visible=panes.mapTo(hashSetOf(),idOf)
             val focused=mounted.values.firstOrNull {it.view.hasFocus() &&
                 ViewCompat.getRootWindowInsets(it.view)?.isVisible(WindowInsetsCompat.Type.ime())==true}
-            retained=focused?.takeIf {it.block.id !in next}?.let {entry->entry.view.screen?.let {Retained(entry.block,it)}}
-            visible=next
+            retained=focused?.takeIf {idOf(it.pane) !in visible}?.let {entry->entry.view.screen?.let {Retained(entry.pane,it)}}
         }
-        return retained?.takeUnless {it.block.id in next}
+        return retained
     }
     fun frame(id: String)=mounted[id]?.view?.screen
-    fun mount(block: BlockItem,view: TerminalView) {mounted[block.id]=Mounted(block,view)}
+    fun mount(pane: Pane,view: TerminalView) {mounted[idOf(pane)]=Mounted(pane,view)}
     fun remove(id: String) {mounted.remove(id)}
     fun served(id: String,view: TerminalView) {
-        if(retained?.block?.id==id || retained==null) return
+        val outgoing=retained ?: return
+        if(idOf(outgoing.pane)==id) return
         val imm=view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         if(view.hasFocus() && imm.isActive(view)) retained=null
     }

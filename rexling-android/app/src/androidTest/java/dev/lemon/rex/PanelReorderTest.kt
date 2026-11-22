@@ -89,6 +89,7 @@ class PanelReorderTest {
     }
     @Test fun mapLongPressAndDisabledListCannotReorder() {
         show(page=1)
+        ui.onNodeWithText("Show map").performClick()
         val map=row("Pane layout")
         ui.mainClock.autoAdvance=false
         map.performTouchInput {down(center)};ui.mainClock.advanceTimeBy(700);ui.waitForIdle()
@@ -97,7 +98,7 @@ class PanelReorderTest {
         val list=row("Reorder panes")
         begin(list,"Pane Pane A")
         list.performTouchInput {moveBy(Offset(0f,100f))};finish(list)
-        ui.runOnIdle {assertTrue(moves.isEmpty());assertTrue(actions.isEmpty())}
+        ui.runOnIdle {assertTrue("Unexpected moves: $moves",moves.isEmpty());assertTrue("Unexpected navigation: $actions",actions.isEmpty())}
     }
     @Test fun edgeHoldScrollsToOffscreenPanes() {
         val blocks=(0..11).map {BlockItem("p$it","Pane $it")}
@@ -111,7 +112,7 @@ class PanelReorderTest {
     }
     @Test fun accessibleMovesRespectBoundariesAndDoNotNavigate() {
         show(page=1)
-        val first=row("Pane Pane A").fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        val first=row("Pane Pane A").fetchSemanticsNode().config[SemanticsActions.CustomActions].filter {it.label.startsWith("Move ")}
         ui.runOnIdle {assertEquals(listOf("Move down"),first.map {it.label});assertTrue(first.single().action())}
         ui.runOnIdle {assertEquals(listOf("b","a","c"),windows.value.first().blocks.map {it.id});assertTrue(actions.isEmpty())}
     }

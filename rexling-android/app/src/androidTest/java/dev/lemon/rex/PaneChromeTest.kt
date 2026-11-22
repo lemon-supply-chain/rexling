@@ -8,10 +8,15 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -35,7 +40,7 @@ class PaneChromeTest {
         ui.setContent {
             var selected by remember {mutableStateOf(initial)}
             MaterialTheme {
-                TerminalCarousel(blocks,selected,selected,screen,blocks.associate {it.id to screen},
+                TerminalCarousel(blocks,selected,selected,screen,{screen},
                     mapOf("a" to ProgramIdentity(ProgramKind.TERMINAL,"fish"),
                         "b" to ProgramIdentity(ProgramKind.CODEX,"Codex"),"c" to ProgramIdentity(ProgramKind.NEOVIM,"Neovim")),
                     false,10f,{},{},{_,_,_,_,_->},{},{},{_,_->},{selected=it;this@PaneChromeTest.selected.add(it)},{opened++},{terminal=it},Modifier.size(320.dp,480.dp),paneLayout=listOf(PanePlacement("a",0f,0f,.5f,1f),PanePlacement("b",.5f,0f,.5f,.5f),PanePlacement("c",.5f,.5f,.5f,.5f)).filter {p->blocks.any {it.id==p.id}},titles=titles,directories=directories)
@@ -180,4 +185,35 @@ class PaneChromeTest {
         File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"pane-frosted-caption.png").outputStream().use {image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG,100,it)}
     }
 
+    @Test fun slimmerSideTabsKeepTheIconStackAndFooterActionsVisible() {
+        val windows=listOf(WindowItem("tab","PDF preview",listOf(BlockItem("a","shell"),BlockItem("b","shell"))))
+        val programs=listOf(ProgramIdentity.resolve(listOf("codex")),ProgramIdentity.resolve(listOf("fish")))
+        val actions=mutableListOf<String>()
+        ui.setContent {RexTheme(false,ThemeCatalog.defaults[1]) {
+            var style by remember {mutableStateOf(TabRailStyle.TITLES)}
+            Row(Modifier.size(440.dp,380.dp).background(MaterialTheme.colorScheme.background).testTag("Side tabs fixture")) {
+                TerminalTabRail(windows,"tab",true,{actions+=it},{programs},{0},TabBarPosition.LEFT,style,
+                    tabAttention={1},onStyle={style=it},island=true) {
+                    TerminalActions(true,true,{actions+="activity"},{actions+="switcher"},
+                        keyboardLabel="Show keyboard",onKeyboard={actions+="keyboard"},vertical=style==TabRailStyle.ICONS)
+                }
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
+            }
+        }}
+        fun check(width: androidx.compose.ui.unit.Dp,mode: String) {
+            ui.onNodeWithContentDescription("Tabs").assertWidthIsEqualTo(width)
+            ui.onNodeWithContentDescription("Tab PDF preview, Codex",substring=true).assertIsDisplayed().assertIsSelected()
+            ui.onNodeWithTag("Tab unread dot tab",useUnmergedTree=true).assertIsDisplayed()
+            listOf("Show keyboard","Tabs and panes","Activity").forEach {description->
+                ui.onNodeWithContentDescription(description).assertIsDisplayed().assertWidthIsEqualTo(36.dp).performClick()
+            }
+            val bitmap=ui.onNodeWithTag("Side tabs fixture").captureToImage().asAndroidBitmap()
+            File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"side-tabs-$mode.png")
+                .outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        }
+        check(144.dp,"titles")
+        ui.onNodeWithContentDescription("Show icons only").performClick()
+        check(48.dp,"icons")
+        ui.runOnIdle {assertEquals(List(2) {listOf("keyboard","switcher","activity")}.flatten(),actions)}
+    }
 }

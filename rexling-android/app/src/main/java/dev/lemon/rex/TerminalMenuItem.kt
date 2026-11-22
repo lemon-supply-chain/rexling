@@ -25,8 +25,8 @@ internal fun TerminalMenuItem(label: String, icon: ChromeIcon, enabled: Boolean,
 internal fun TerminalMenuItem(
     label: String,
     icon: ChromeIcon,
-    enabled: Boolean,
-    destructive: Boolean,
+    enabled: Boolean = true,
+    destructive: Boolean = false,
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme

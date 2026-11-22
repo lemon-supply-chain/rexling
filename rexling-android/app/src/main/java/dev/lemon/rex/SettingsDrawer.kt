@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -14,28 +15,39 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.chrisbanes.haze.HazeState
 
-/** Shared chrome for secondary settings drawers; scrolling stays in their content. */
+/** Shared drawer chrome; scrolling stays in the content. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun SettingsDrawer(title: String,closeDescription: String,onClose: ()->Unit,
-    hazeState: HazeState?=null,onBack: (() -> Unit)?=null,swipeToDismiss: Boolean=true,backDescription: String=stringResource(R.string.back_to_appearance),content: @Composable ColumnScope.()->Unit) {
+    hazeState: HazeState?=null,onBack: (() -> Unit)?=null,swipeToDismiss: Boolean=true,backDescription: String=stringResource(R.string.back_to_appearance),
+    subtitle: String?=null,surfaceColor: Color=Color.Transparent,headerActions: @Composable RowScope.()->Unit={},content: @Composable ColumnScope.()->Unit) {
     val localHaze=remember {HazeState()}
+    val shape=BottomSheetDefaults.ExpandedShape
     // Built outside the sheet on purpose: drawerFrost redraws when its host window draws, and inside the
     // sheet that host is the sheet's own window, which then redraws itself every frame while open.
-    val frost=if(swipeToDismiss) Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
-        else Modifier.paneFrost(hazeState ?: localHaze,BottomSheetDefaults.ExpandedShape,edge=false,opacity=.72f,blur=24.dp)
+    val frost=if(swipeToDismiss) Modifier.drawerFrost(hazeState,shape)
+        else Modifier.paneFrost(hazeState ?: localHaze,shape,edge=false,opacity=.72f,blur=24.dp)
+    val surface=if(surfaceColor==Color.Transparent) frost else Modifier.background(surfaceColor,shape).then(frost)
     @Composable fun Body(modifier: Modifier=Modifier) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-            Column(modifier.then(frost).fillMaxWidth()
+            Column(modifier.then(surface).fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
                 DrawerHandle()
                 Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
                     onBack?.let {ChromeButton(ChromeIcon.LEFT,backDescription,onClick=it)}
-                    Text(title,Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                    Column(Modifier.weight(1f)) {
+                        if(subtitle==null) Text(title,style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                        else {
+                            Text(title,style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface,maxLines=1,overflow=TextOverflow.Ellipsis)
+                            Text(subtitle,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        }
+                    }
+                    headerActions()
                     ChromeButton(ChromeIcon.CLOSE,closeDescription,onClick=onClose)
                 }
                 content()
@@ -57,6 +69,6 @@ import dev.chrisbanes.haze.HazeState
     } else {
         ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
             containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,
-            dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {Body()}
+            dragHandle=null,contentWindowInsets={WindowInsets.safeDrawing.only(WindowInsetsSides.Top)}) {Body()}
     }
 }

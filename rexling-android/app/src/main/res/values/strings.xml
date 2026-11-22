@@ -18,6 +18,8 @@
 
     <!-- Main & Top Menu -->
     <string name="terminal_menu">Terminal menu</string>
+    <string name="close_terminal_menu">Close terminal menu</string>
+    <string name="close_pane">Close pane</string>
     <string name="in_control">In control</string>
     <string name="viewing_terminal">Viewing terminal</string>
     <string name="take_control">Take control</string>
@@ -26,7 +28,12 @@
     <string name="preferences">Preferences</string>
     <string name="copy_viewport">Copy viewport</string>
     <string name="paste">Paste</string>
+    <string name="image">Image</string>
     <string name="attach_image">Attach image</string>
+    <string name="terminal_actions">Terminal actions</string>
+    <string name="single_pane">Single pane</string>
+    <string name="multiple_panes">Multiple panes</string>
+    <string name="all_panes">All panes</string>
     <string name="servers_connected_format">Servers · %d connected</string>
     <string name="refresh_sessions">Refresh sessions</string>
     <string name="connect_over_tailscale">Connect over Tailscale</string>
@@ -86,11 +93,33 @@
     <string name="font_size">Font size</string>
     <string name="font_size_detail">Terminal text size</string>
     <string name="language">Language</string>
+    <string name="close_language">Close language settings</string>
     <string name="language_system">System default</string>
+    <string name="language_system_detail">Follow the device system language</string>
     <string name="language_en">English</string>
+    <string name="language_en_native">English (US)</string>
     <string name="language_zh">简体中文</string>
+    <string name="language_zh_native">中文</string>
     <string name="minimize_floating_panes">Minimize floating panes</string>
     <string name="minimize_floating_panes_detail">Open floating panes from a corner dock. Swipe between tiled panes only.</string>
+
+    <!-- Tabs & Panes Settings -->
+    <string name="section_tabs">Tabs</string>
+    <string name="section_tabs_desc">By how wide this window is, so folding, rotating and split-screen each pick their own</string>
+    <string name="tab_width_narrow">Narrow</string>
+    <string name="tab_width_narrow_detail">Under 440dp: phones, and a split half of the upright inner screen</string>
+    <string name="tab_width_medium">Medium</string>
+    <string name="tab_width_medium_detail">440–760dp: the cover screen, a split half held sideways, and the upright inner screen</string>
+    <string name="tab_width_wide">Wide</string>
+    <string name="tab_width_wide_detail">760dp and wider: the inner screen held sideways</string>
+    <string name="this_window_format">this window · %1$ddp</string>
+    <string name="tab_position_bottom">Bottom</string>
+    <string name="tab_position_left">Left</string>
+    <string name="tab_position_right">Right</string>
+    <string name="tab_rail_style_icons">Icons</string>
+    <string name="tab_rail_style_titles">Icons and titles</string>
+    <string name="panes_unfolded_title">Unfolded, full screen</string>
+    <string name="panes_unfolded_desc">On a foldable’s inner screen or a tablet, with no other app beside Rexling</string>
     <string name="use_joystick">Use joystick for arrows</string>
     <string name="use_joystick_detail_on">Hold and slide; double-tap for arrow buttons</string>
     <string name="use_joystick_detail_off">Tap for arrow buttons</string>
@@ -109,6 +138,8 @@
     <string name="background_alerts_detail">Task completions and attention alerts</string>
     <string name="codex_title_attention">Codex title attention</string>
     <string name="codex_title_attention_detail">Use Codex’s explicit Action Required title when its status stays Working. Depends on Codex’s title format.</string>
+    <string name="compact_top_bar">Compact Top App Bar</string>
+    <string name="compact_top_bar_detail">Show only program and directory. Tap to expand the full session header.</string>
     <string name="frosted_effects">Frosted glass effects</string>
     <string name="frosted_effects_detail">Turn off for opaque surfaces and lower GPU rendering use.</string>
     <string name="about_rexling">About Rexling</string>
@@ -386,6 +417,8 @@
     <string name="a11y_next_session">Next session</string>
     <string name="a11y_previous_session">Previous session</string>
     <string name="a11y_session_strip">Session strip</string>
+    <string name="a11y_expand_top_bar">Expand top app bar</string>
+    <string name="a11y_collapse_top_bar">Collapse top app bar</string>
     <string name="a11y_switch_session">Switch session</string>
     <string name="a11y_session_label">Session %1$s</string>
     <string name="a11y_release_terminal_control">Release terminal control</string>

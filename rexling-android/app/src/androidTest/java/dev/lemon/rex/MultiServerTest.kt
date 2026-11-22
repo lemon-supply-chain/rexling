@@ -49,7 +49,7 @@ class MultiServerTest {
             main {b.resize(42,31)};waitFor("Mac automatically owns its active pane") {b.state.value.controlled}
             main {b.releaseControl()};waitFor("Explicit viewing mode") {!b.state.value.controlled}
             Thread.sleep(350);assertFalse(main {b.state.value.controlled})
-            main {b.openActivity(b.state.value.selectedSession,b.state.value.selectedBlock)}
+            main {b.openPane(b.state.value.selectedSession,b.state.value.selectedBlock)}
             waitFor("Activity navigation automatically takes its exact pane") {b.state.value.controlled && !b.navigationRequest.pending}
             waitFor("Activity takeover metadata settled") {b.state.value.notice=="You control this terminal" && b.state.value.programs.containsKey(b.state.value.selectedBlock)}
             val chromeBeforeOutput=main {b.chromeState.value}

@@ -19,11 +19,21 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 
-@Composable internal fun PaneLayoutMap(window: WindowItem,selected: String,programs: Map<String,ProgramIdentity>,titles: Map<String,String>,enabled: Boolean,onSelect: (String)->Unit) {
+private val paneMapInset = 3.dp
+private val paneMapTarget = 24.dp
+
+internal fun PanePlacement.isSelectableInPaneMap(mapWidth: Dp, mapHeight: Dp): Boolean =
+    (mapWidth - paneMapInset * 2) * width - paneMapInset >= paneMapTarget &&
+        (mapHeight - paneMapInset * 2) * height - paneMapInset >= paneMapTarget
+
+@Composable internal fun PaneLayoutMap(window: WindowItem,selected: String,programs: Map<String,ProgramIdentity>,titles: Map<String,String>,enabled: Boolean,
+    mapHeight: Dp = 88.dp,onSelect: (String)->Unit) {
     val context=androidx.compose.ui.platform.LocalContext.current
     val scheme=MaterialTheme.colorScheme
     var showFloating by remember(window.id) {mutableStateOf(true)}
@@ -35,18 +45,22 @@ import androidx.compose.ui.res.stringResource
                 Text(if(showFloating) stringResource(R.string.label_hide_floating_format,floatingCount) else stringResource(R.string.label_show_floating_format,floatingCount),style=SettingsType.detail)
             }
         }
-        BoxWithConstraints(Modifier.fillMaxWidth().height(88.dp).clip(RoundedCornerShape(12.dp))
+        BoxWithConstraints(Modifier.fillMaxWidth().height(mapHeight).clip(RoundedCornerShape(12.dp))
             .background(scheme.surfaceContainerHigh).border(1.dp,scheme.outlineVariant,RoundedCornerShape(12.dp))
-            .padding(3.dp).selectableGroup().semantics {contentDescription=context.getString(R.string.a11y_pane_layout)}) {
+            .pointerInput(enabled) {
+                // A held drag in the map must not turn into a pane-opening tap on release.
+                if(enabled) detectTabDrag(start={true},move={},end={},cancel={})
+            }
+            .selectableGroup().semantics {contentDescription=context.getString(R.string.a11y_pane_layout)}.padding(paneMapInset)) {
             window.layout.filter {showFloating || !it.floating}.forEach {placement->
                 val block=window.blocks.firstOrNull {it.id==placement.id}
                 if(block!=null) key(placement.id) {
                 val program=programs[block.id] ?: ProgramIdentity.Loading
                 val title=program.paneTitle(block.label,titles[block.id].orEmpty())
                 val active=placement.id==selected
-                val width=(maxWidth*placement.width-3.dp).coerceAtLeast(.5.dp)
-                val height=(maxHeight*placement.height-3.dp).coerceAtLeast(.5.dp)
-                val usable=width>=24.dp && height>=24.dp
+                val width=(maxWidth*placement.width-paneMapInset).coerceAtLeast(.5.dp)
+                val height=(maxHeight*placement.height-paneMapInset).coerceAtLeast(.5.dp)
+                val usable=width>=paneMapTarget && height>=paneMapTarget
                 val strokeColor=if(active) scheme.secondary else if(placement.floating) scheme.onSurfaceVariant else scheme.outlineVariant
                 val shape=RoundedCornerShape(6.dp)
                 Box(Modifier.offset(maxWidth*placement.x+1.5.dp,maxHeight*placement.y+1.5.dp).size(width,height)

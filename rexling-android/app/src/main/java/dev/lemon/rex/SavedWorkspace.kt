@@ -23,5 +23,14 @@ internal class SavedWorkspace(private val preferences: SharedPreferences,endpoin
         if(navigation.request(session,block)) preferences.edit {putString(key,navigation.encode())}
         selectSession(session)
     }
+    fun forgetSession(id: String) {
+        val removed=navigation.forget(id)
+        val current=session==id
+        if(current) session=""
+        if(removed || current) preferences.edit {
+            if(removed) putString(key,navigation.encode())
+            if(current) remove(sessionKey)
+        }
+    }
     fun target(state: AppState)=navigation.target(state,session)
 }

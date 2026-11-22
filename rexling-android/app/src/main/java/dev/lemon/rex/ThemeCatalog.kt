@@ -5,7 +5,7 @@ import org.json.JSONArray
 
 data class AppTheme(val id: String,val name: String,val terminal: TerminalPalette,val ui: Map<String,Int> = emptyMap())
 internal object ThemeCatalog {
-    val defaults=listOf(AppTheme("rexlink-default-dark","Rexling Default",TerminalPalette.Dark),AppTheme("rexlink-default-light","Rexling Default",TerminalPalette.Light))
+    val defaults=listOf(AppTheme("rexlink-default-dark","Rexling Default",TerminalPalette.Dark,DefaultUiTokens.dark),AppTheme("rexlink-default-light","Rexling Default",TerminalPalette.Light,DefaultUiTokens.light))
     @Volatile private var cached: List<AppTheme>?=null
     fun load(context: Context): List<AppTheme> = cached ?: synchronized(this) {
         cached ?: parse(context.assets.open("themes/rex-builtins.json").bufferedReader().use {it.readText()}).also {cached=it}

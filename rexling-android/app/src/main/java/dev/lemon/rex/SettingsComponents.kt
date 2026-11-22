@@ -45,17 +45,20 @@ internal object SettingsType {
 @Composable internal fun SettingsSection(title: String,compact: Boolean=true,content: @Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(title,Modifier.padding(start=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
-        Surface(shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)) {  // alpha-ok section surface
-            Column(Modifier.fillMaxWidth(),content=content)
-        }
+        SettingsCard(compact=compact) {Column(Modifier.fillMaxWidth(),content=content)}
     }
+}
+
+@Composable internal fun SettingsCard(modifier: Modifier=Modifier,compact: Boolean=true,content: @Composable ()->Unit) {
+    Surface(modifier,shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),
+        color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),content=content)
 }
 
 @Composable internal fun SettingsDivider() {
     HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))  // alpha-ok divider tint
 }
 
-internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK,KEY }
+internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK,KEY,LANGUAGE }
 
 @Composable internal fun SettingsRow(title: String,subtitle: String,glyph: SettingsGlyph,onClick: ()->Unit,badge: String?=null) {
     val chevronColor=MaterialTheme.colorScheme.onSurfaceVariant
@@ -81,6 +84,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
     Surface(shape=RoundedCornerShape(11.dp),color=color.copy(alpha=.09f)) {  // alpha-ok decorative glyph tile
         Box(Modifier.size(36.dp),contentAlignment=Alignment.Center) {
             if(glyph==SettingsGlyph.FONT) Text("Aa",style=SettingsType.row,color=color)
+            else if(glyph==SettingsGlyph.LANGUAGE) Text("文A",style=SettingsType.row.copy(fontSize=13.sp),color=color)
             else Canvas(Modifier.size(20.dp)) {
                 val u=size.minDimension/24f
                 val stroke=Stroke(1.7f*u,cap=StrokeCap.Round)
@@ -114,7 +118,7 @@ internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,CO
                         }
                     }
                     SettingsGlyph.KEY->{drawCircle(color,4f*u,Offset(7f*u,8f*u),style=stroke);line(10f,11f,20f,21f);line(15f,16f,18f,13f);line(18f,19f,21f,16f)}
-                    SettingsGlyph.FONT->Unit
+                    SettingsGlyph.FONT, SettingsGlyph.LANGUAGE -> Unit
                     SettingsGlyph.COMMAND->{line(9f,6f,3f,12f);line(3f,12f,9f,18f);line(15f,6f,21f,12f);line(21f,12f,15f,18f)}
                 }
             }

@@ -1,11 +1,16 @@
 package dev.lemon.rex
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 
 internal data class TerminalRenameTarget(val window: String,val id: String,val tab: Boolean,val label: String)
 internal fun terminalLabelError(value: String): String? = when {
@@ -31,28 +36,65 @@ private fun editableTerminalLabel(label: String)=label.takeUnless {
         dismissButton={TextButton(onClick=onClose) {Text(stringResource(R.string.cancel))}})
 }
 
-@Composable internal fun DockPaneDialog(anchors: List<BlockItem>,programs: Map<String,ProgramIdentity>,titles: Map<String,String>,enabled: Boolean,
+@Composable internal fun DockPaneSheet(window: WindowItem?,programs: Map<String,ProgramIdentity>,titles: Map<String,String>,enabled: Boolean,hazeState: HazeState?,
     onDock: (String,PaneSplit)->Boolean,onClose: ()->Unit) {
+    val anchors=window?.tiledPanes().orEmpty()
+    val ids=anchors.map {it.id}
+    val placements=window?.layout.orEmpty().filter {!it.floating && it.id in ids}
+    val map=window?.takeIf {ids.isNotEmpty() && ids.all {id->placements.any {it.id==id}}}
+        ?.copy(blocks=anchors,layout=placements)
     var anchor by remember {mutableStateOf(anchors.firstOrNull()?.id.orEmpty())}
-    var split by remember {mutableStateOf(PaneSplit.RIGHT)}
     var picker by remember {mutableStateOf(false)}
     var rejected by remember {mutableStateOf(false)}
-    LaunchedEffect(anchors.map {it.id}) {if(anchors.none {it.id==anchor}) anchor=anchors.firstOrNull()?.id.orEmpty()}
+    LaunchedEffect(ids) {if(anchor !in ids) anchor=ids.firstOrNull().orEmpty()}
+    val selected=anchors.firstOrNull {it.id==anchor}
     fun title(block: BlockItem)=(programs[block.id] ?: ProgramIdentity.Loading).paneTitle(block.label,titles[block.id].orEmpty())
-    AlertDialog(onDismissRequest=onClose,title={Text(stringResource(R.string.label_dock_pane))},text={
-        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.label_place_beside),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            Box {
-                OutlinedButton(onClick={picker=true},enabled=enabled && anchors.isNotEmpty()) {Text(anchors.firstOrNull {it.id==anchor}?.let(::title) ?: stringResource(R.string.label_no_docked_pane),style=SettingsType.row)}
-                DropdownMenu(picker,{picker=false}) {
-                    anchors.forEach {block->DropdownMenuItem(text={Text(title(block),style=SettingsType.row)},onClick={anchor=block.id;picker=false})}
+    fun choose(id: String) {anchor=id;picker=false;rejected=false}
+    SettingsDrawer(stringResource(R.string.label_dock_pane),"Close dock pane",onClose,hazeState,surfaceColor=MaterialTheme.colorScheme.surface) {
+        Column(
+            Modifier.weight(1f,fill=false).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal=16.dp).padding(bottom=12.dp),
+            verticalArrangement=Arrangement.spacedBy(6.dp),
+        ) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val mapWidth=minOf(maxWidth,176.dp)
+                val mapHeight=mapWidth*.75f
+                val showPicker=map==null || placements.any {!it.isSelectableInPaneMap(mapWidth,mapHeight)}
+                Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally,
+                    verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    if(map!=null) Box(Modifier.width(mapWidth)) {
+                        PaneLayoutMap(map,anchor,programs,titles,enabled,mapHeight,onSelect=::choose)
+                    }
+                    if(showPicker) Box {
+                        OutlinedButton(onClick={picker=true},enabled=enabled && anchors.isNotEmpty()) {
+                            Text(selected?.let(::title) ?: stringResource(R.string.label_no_docked_pane),style=SettingsType.detail,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        }
+                        DropdownMenu(picker,{picker=false}) {
+                            anchors.forEach {block->DropdownMenuItem(text={Text(title(block),style=SettingsType.detail)},onClick={choose(block.id)})}
+                        }
+                    } else if(selected!=null) {
+                        Text("Dock next to ${title(selected)}",style=SettingsType.detail,maxLines=1,overflow=TextOverflow.Ellipsis,
+                            color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                PaneSplit.entries.forEach {item->FilterChip(selected=split==item,onClick={split=item},label={Text(item.label,style=SettingsType.row)})}
+            Row(Modifier.align(Alignment.CenterHorizontally).widthIn(max=320.dp).fillMaxWidth(),
+                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                PaneSplit.entries.forEach {direction->
+                    val right=direction==PaneSplit.RIGHT
+                    FilledTonalButton(
+                        onClick={if(onDock(anchor,direction)) onClose() else rejected=true},
+                        enabled=enabled && selected!=null,modifier=Modifier.weight(1f),
+                        contentPadding=PaddingValues(horizontal=8.dp,vertical=8.dp),
+                    ) {
+                        ChromeSymbol(if(right) ChromeIcon.SPLIT_RIGHT else ChromeIcon.SPLIT_BELOW,
+                            Modifier.size(16.dp),LocalContentColor.current)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if(right) "Dock right" else "Dock below",style=SettingsType.row)
+                    }
+                }
             }
             if(rejected) Text(stringResource(R.string.label_layout_changed),style=SettingsType.detail,color=MaterialTheme.colorScheme.error)
         }
-    },confirmButton={TextButton(enabled=enabled && anchors.any {it.id==anchor},onClick={if(onDock(anchor,split)) onClose() else rejected=true}) {Text(stringResource(R.string.label_dock))}},
-        dismissButton={TextButton(onClick=onClose) {Text(stringResource(R.string.cancel))}})
+    }
 }

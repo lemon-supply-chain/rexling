@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun PreferencesSheet(onAppearance: ()->Unit,onFont: ()->Unit,onAlerts: ()->Unit,onAbout: ()->Unit,onClose: ()->Unit,
     shortcutGesture: ControlShortcutGesture=ControlShortcutGesture.HOLD,onShortcutGesture: (ControlShortcutGesture)->Unit={},onNeovim: ()->Unit={},
-    arrowJoystickEnabled: Boolean=true,onArrowJoystick: (Boolean)->Unit={},enterSubmits: Boolean=false,onEnterSubmits: (Boolean)->Unit={},toolbarWithKeyboardOnly: Boolean=false,onToolbarWithKeyboardOnly: (Boolean)->Unit={},codexTitleAttention: Boolean=false,onCodexTitleAttention: (Boolean)->Unit={},frostedEffectsEnabled: Boolean=true,onFrostedEffects: (Boolean)->Unit={},
+    arrowJoystickEnabled: Boolean=true,onArrowJoystick: (Boolean)->Unit={},enterSubmits: Boolean=false,onEnterSubmits: (Boolean)->Unit={},toolbarWithKeyboardOnly: Boolean=false,onToolbarWithKeyboardOnly: (Boolean)->Unit={},multiPaneUnfolded: Boolean=false,onMultiPaneUnfolded: (Boolean)->Unit={},tabLayouts: Map<TabWidthClass,TabBarLayout> = emptyMap(),tabWidth: Pair<TabWidthClass,Int> = TabWidthClass.NARROW to 0,onTabLayout: (TabWidthClass,TabBarLayout)->Unit={_,_->},compactTopBar: Boolean=false,onCompactTopBar: (Boolean)->Unit={},codexTitleAttention: Boolean=false,onCodexTitleAttention: (Boolean)->Unit={},frostedEffectsEnabled: Boolean=true,onFrostedEffects: (Boolean)->Unit={},
     minimizeFloatingPanes: Boolean=false,onMinimizeFloatingPanes: (Boolean)->Unit={},onNetwork: ()->Unit={},
     keepScreenAwake: KeepScreenAwake=KeepScreenAwake.SYSTEM,onKeepScreenAwake: (KeepScreenAwake)->Unit={},onToolbar: ()->Unit={},onControlItems: ()->Unit={},onSshKeys: ()->Unit={},
     keyboardSuggestionsEnabled: Boolean=false,onKeyboardSuggestions: (Boolean)->Unit={},
@@ -28,22 +28,24 @@ import androidx.compose.ui.unit.dp
     // Built outside the sheet on purpose: the frost redraws when its host window draws, and inside the
     // sheet that host is the sheet's own window, which then redraws itself every frame while open.
     val frost=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
-        containerColor=androidx.compose.ui.graphics.Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
+    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=false),
+        containerColor=androidx.compose.ui.graphics.Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets.safeDrawing.only(WindowInsetsSides.Top)}) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-            Column(frost.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
-                DrawerHandle()
-                Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text(stringResource(R.string.preferences),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
-                    ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_preferences),onClick=onClose)
-                }
-        Column(Modifier.fillMaxWidth().heightIn(max=600.dp).verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=8.dp,bottom=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val contentMaxHeight = (maxHeight - 64.dp).coerceAtLeast(200.dp)
+                Column(frost.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                    DrawerHandle()
+                    Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Text(stringResource(R.string.preferences),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                        ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_preferences),onClick=onClose)
+                    }
+                    Column(Modifier.fillMaxWidth().heightIn(max=contentMaxHeight).verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=8.dp,bottom=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             SettingsSection(stringResource(R.string.section_display),compact=true) {
                 SettingsRow(stringResource(R.string.appearance),stringResource(R.string.appearance_detail),SettingsGlyph.APPEARANCE,onAppearance)
                 SettingsDivider()
                 SettingsRow(stringResource(R.string.font_size),stringResource(R.string.font_size_detail),SettingsGlyph.FONT,onFont)
                 SettingsDivider()
-                SettingsRow(stringResource(R.string.language),when(language){"zh"->stringResource(R.string.language_zh);"en"->stringResource(R.string.language_en);else->stringResource(R.string.language_system)},SettingsGlyph.APPEARANCE,onLanguage)
+                SettingsRow(stringResource(R.string.language),when(language){"zh"->stringResource(R.string.language_zh);"en"->stringResource(R.string.language_en);else->stringResource(R.string.language_system)},SettingsGlyph.LANGUAGE,onLanguage)
                 SettingsDivider()
                 Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     Text(stringResource(R.string.terminal_padding),style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
@@ -83,7 +85,24 @@ import androidx.compose.ui.unit.dp
                     }
                 }
             }
+            SettingsSection(stringResource(R.string.section_tabs),compact=true) {
+                Text(stringResource(R.string.section_tabs_desc),
+                    Modifier.padding(horizontal=16.dp).padding(top=10.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                TabWidthClass.entries.forEachIndexed {i,each->
+                    if(i>0) SettingsDivider()
+                    TabLayoutChoice(each,tabLayouts[each] ?: TabBarLayout(),current=if(each==tabWidth.first) tabWidth.second else null) {onTabLayout(each,it)}
+                }
+            }
             SettingsSection(stringResource(R.string.section_panes),compact=true) {
+                Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(R.string.panes_unfolded_title),style=SettingsType.row)
+                    Text(stringResource(R.string.panes_unfolded_desc),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected=!multiPaneUnfolded,onClick={onMultiPaneUnfolded(false)},label={Text(stringResource(R.string.single_pane),style=SettingsType.row)})
+                        FilterChip(selected=multiPaneUnfolded,onClick={onMultiPaneUnfolded(true)},label={Text(stringResource(R.string.multiple_panes),style=SettingsType.row)})
+                    }
+                }
+                SettingsDivider()
                 Row(Modifier.fillMaxWidth().toggleable(minimizeFloatingPanes,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onMinimizeFloatingPanes)
                     .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
@@ -173,6 +192,15 @@ import androidx.compose.ui.unit.dp
                     Switch(checked=codexTitleAttention,onCheckedChange=null)
                 }
                 SettingsDivider()
+                Row(Modifier.fillMaxWidth().toggleable(value=compactTopBar,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onCompactTopBar)
+                    .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                        Text(stringResource(R.string.compact_top_bar),style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
+                        Text(stringResource(R.string.compact_top_bar_detail),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked=compactTopBar,onCheckedChange=null)
+                }
+                SettingsDivider()
                 Row(Modifier.fillMaxWidth().toggleable(value=frostedEffectsEnabled,role=androidx.compose.ui.semantics.Role.Switch,onValueChange=onFrostedEffects)
                     .padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
@@ -198,19 +226,73 @@ import androidx.compose.ui.unit.dp
         }
         }
         }
+        }
     }
 }
 
-@Composable internal fun LanguageDialog(language: String,onLanguage: (String)->Unit,onClose: ()->Unit) {
-    AlertDialog(onDismissRequest=onClose,title={Text(stringResource(R.string.language),style=SettingsType.title)},text={
-        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            listOf("system" to R.string.language_system,"zh" to R.string.language_zh,"en" to R.string.language_en).forEach {(key,labelRes)->
-                Row(Modifier.fillMaxWidth().clickable {onLanguage(key);onClose()}.padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-                    RadioButton(selected=language==key,onClick={onLanguage(key);onClose()})
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(labelRes),style=SettingsType.row)
+@Composable internal fun LanguageSheet(language: String,onLanguage: (String)->Unit,hazeState: dev.chrisbanes.haze.HazeState?=null,onClose: ()->Unit) {
+    SettingsDrawer(stringResource(R.string.language),stringResource(R.string.close_language),onClose,hazeState) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=8.dp,bottom=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            SettingsSection(stringResource(R.string.language),compact=true) {
+                val options = listOf(
+                    Triple("system", R.string.language_system, R.string.language_system_detail),
+                    Triple("zh", R.string.language_zh, R.string.language_zh_native),
+                    Triple("en", R.string.language_en, R.string.language_en_native),
+                )
+                options.forEachIndexed {index, (key, labelRes, detailRes)->
+                    if(index > 0) SettingsDivider()
+                    val active = language == key
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .selectable(selected = active, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = { onLanguage(key) })
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(selected = active, onClick = null)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                stringResource(labelRes),
+                                style = SettingsType.row,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                stringResource(detailRes),
+                                style = SettingsType.detail,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (active) {
+                            ChromeSymbol(ChromeIcon.ENTER, Modifier.size(16.dp), MaterialTheme.colorScheme.primary)
+                        }
+                    }
                 }
             }
         }
-    },confirmButton={TextButton(onClick=onClose){Text(stringResource(R.string.done))}})
+    }
+}
+
+@Composable internal fun LanguageDialog(language: String,onLanguage: (String)->Unit,hazeState: dev.chrisbanes.haze.HazeState?=null,onClose: ()->Unit) =
+    LanguageSheet(language, onLanguage, hazeState, onClose)
+
+/** Tab bar position, and the side rail's style, for one screen posture. */
+@Composable private fun TabLayoutChoice(width: TabWidthClass,layout: TabBarLayout,current: Int?,onChange: (TabBarLayout)->Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(width.titleRes),style=SettingsType.row)
+            if(current!=null) Text(stringResource(R.string.this_window_format, current),style=SettingsType.detail,color=MaterialTheme.colorScheme.primary)
+        }
+        Text(stringResource(width.detailRes),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            TabBarPosition.entries.forEach {position->
+                FilterChip(selected=layout.position==position,onClick={onChange(layout.copy(position=position))},label={Text(stringResource(position.labelRes),style=SettingsType.row)})
+            }
+        }
+        if(layout.side) Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            TabRailStyle.entries.forEach {style->
+                FilterChip(selected=layout.style==style,onClick={onChange(layout.copy(style=style))},label={Text(stringResource(style.labelRes),style=SettingsType.row)})
+            }
+        }
+    }
 }

@@ -1,5 +1,14 @@
 package dev.lemon.rex
 
+import android.os.SystemClock
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.stateIn
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
@@ -22,6 +31,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.MaterialTheme
@@ -51,10 +61,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -73,6 +86,8 @@ import kotlinx.coroutines.launch
 
 internal enum class ChromeIcon {
     SPLIT,
+    SPLIT_RIGHT,
+    SPLIT_BELOW,
     SEARCH,
     CHEVRON,
     SESSIONS,
@@ -110,9 +125,14 @@ internal enum class ChromeIcon {
     DELETE,
     QR,
     FLOAT,
+    MINIMIZE,
+    RESIZE,
     CHECK,
     PLAY,
     STOP,
+    MOVE,
+    ZOOM,
+    UNZOOM,
 }
 
 @Composable
@@ -165,9 +185,37 @@ internal fun ChromeSymbol(
                 box(3f, 7f, 14f, 14f)
                 box(10f, 3f, 11f, 10f)
             }
+            ChromeIcon.MINIMIZE -> line(5f, 12f, 19f, 12f)
+            ChromeIcon.RESIZE -> {
+                line(6f, 18f, 18f, 6f)
+                line(12f, 18f, 18f, 12f)
+            }
             ChromeIcon.SPLIT -> {
                 box(3f, 4f, 18f, 16f)
                 line(12f, 4f, 12f, 20f)
+            }
+            ChromeIcon.SPLIT_RIGHT, ChromeIcon.SPLIT_BELOW -> {
+                val right = icon == ChromeIcon.SPLIT_RIGHT
+                val fillOrigin = if (right) Offset(12f * u, 5f * u) else Offset(4f * u, 12f * u)
+                val fillSize = if (right) Size(8f * u, 14f * u) else Size(16f * u, 7f * u)
+                drawRoundRect(color.copy(alpha = color.alpha * .23f), fillOrigin, fillSize, CornerRadius(u))
+                box(3f, 4f, 18f, 16f)
+                if (right) line(12f, 4f, 12f, 20f) else line(3f, 12f, 21f, 12f)
+            }
+            ChromeIcon.MOVE -> {
+                line(4f, 12f, 20f, 12f); line(12f, 4f, 12f, 20f)
+                line(4f, 12f, 7f, 9f); line(4f, 12f, 7f, 15f)
+                line(20f, 12f, 17f, 9f); line(20f, 12f, 17f, 15f)
+                line(12f, 4f, 9f, 7f); line(12f, 4f, 15f, 7f)
+                line(12f, 20f, 9f, 17f); line(12f, 20f, 15f, 17f)
+            }
+            ChromeIcon.ZOOM -> {
+                line(13f, 11f, 20f, 4f); line(15f, 4f, 20f, 4f); line(20f, 4f, 20f, 9f)
+                line(11f, 13f, 4f, 20f); line(4f, 15f, 4f, 20f); line(4f, 20f, 9f, 20f)
+            }
+            ChromeIcon.UNZOOM -> {
+                line(20f, 4f, 13f, 11f); line(13f, 6f, 13f, 11f); line(13f, 11f, 18f, 11f)
+                line(4f, 20f, 11f, 13f); line(6f, 13f, 11f, 13f); line(11f, 13f, 11f, 18f)
             }
             ChromeIcon.SEARCH -> {
                 drawCircle(color, 6f * u, Offset(10f * u, 10f * u), style = Stroke(width))
@@ -519,6 +567,7 @@ internal fun SessionHeader(
     expanded: Boolean = false,
     serverIcons: Map<String, ServerIcon> = emptyMap(),
     progress: TerminalProgress? = null,
+    onCollapse: (() -> Unit)? = null,
     menu: @Composable () -> Unit,
 ) {
     val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
@@ -699,7 +748,17 @@ internal fun SessionHeader(
             }
             Spacer(Modifier.width(7.dp))
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+        Column(
+            Modifier.weight(1f).then(
+                if (onCollapse != null)
+                    Modifier.clickable(
+                        onClickLabel = stringResource(R.string.a11y_collapse_top_bar),
+                        onClick = onCollapse,
+                    )
+                else Modifier
+            ),
+            verticalArrangement = Arrangement.Center,
+        ) {
             if (!expanded) {
                 Text(
                     title.ifBlank { program.title },
@@ -856,8 +915,86 @@ internal fun SessionHeader(
             }
         }
         if (!expanded) {
+            if (onCollapse != null) {
+                ChromeButton(
+                    ChromeIcon.CHEVRON,
+                    stringResource(R.string.a11y_collapse_top_bar),
+                    modifier = Modifier.graphicsLayer { rotationZ = 180f },
+                    onClick = onCollapse,
+                )
+            }
             menu()
         }
+    }
+}
+
+@Composable
+internal fun CompactSessionHeader(
+    title: String,
+    directory: String,
+    programs: List<ProgramIdentity>,
+    paneIndex: Int,
+    working: Boolean = false,
+    isPaneWorking: (Int) -> Boolean = { if (it == paneIndex) working else false },
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
+    val displayTitle = title.ifBlank { program.title }
+    val anyWorking = working || programs.indices.any(isPaneWorking)
+    val marquee = rememberRainbowMarquee(anyWorking)
+    val expandDescription = stringResource(R.string.a11y_expand_top_bar)
+    val fullText = if (directory.isNotBlank()) "$displayTitle - $directory" else displayTitle
+    val annotatedText = buildAnnotatedString {
+        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) {
+            append(displayTitle)
+        }
+        if (directory.isNotBlank()) {
+            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                append(" - ")
+            }
+            withStyle(SpanStyle(fontFamily = MonoUi, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                append(directory)
+            }
+        }
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 34.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClickLabel = expandDescription) { onExpand() }
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .semantics {
+                contentDescription = fullText
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(
+            Modifier.weight(1f, fill = false),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (anyWorking) {
+                Box(
+                    Modifier.size(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .rainbowMarquee(marquee, corner = 3.dp, thickness = 1.dp)
+                )
+            }
+            Text(
+                text = annotatedText,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        ChromeSymbol(
+            ChromeIcon.CHEVRON,
+            Modifier.size(12.dp),
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -1380,15 +1517,29 @@ internal fun TerminalActions(
     attentionCount: Int = 0,
     keyboardLabel: String = "",
     onKeyboard: (() -> Unit)? = null,
+    vertical: Boolean = false,
 ) {
     val activityDescription = stringResource(R.string.activity)
     val activityState =
         if (attentionCount > 0) stringResource(R.string.a11y_activity_new_items, attentionCount)
         else stringResource(R.string.a11y_activity_all_seen)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    @Composable
+    fun Group(content: @Composable () -> Unit) =
+        if (vertical)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                content()
+            }
+        else
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                content()
+            }
+    Group {
         if (onKeyboard != null)
             ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = onKeyboard)
         ChromeButton(
