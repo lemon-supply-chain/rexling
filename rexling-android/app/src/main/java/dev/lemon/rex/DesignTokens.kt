@@ -195,3 +195,6 @@ internal fun tintOver(ink: Color, surface: Color, fraction: Float): Color =
  * and the working pulse read this and snap instead of running.
  */
 internal val LocalMotionEnabled = staticCompositionLocalOf { true }
+
+/** Keep live backdrop capture and translucent frost optional; opaque surfaces need neither. */
+internal val LocalFrostedEffectsEnabled = staticCompositionLocalOf { true }

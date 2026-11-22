@@ -109,6 +109,8 @@
     <string name="background_alerts_detail">Task completions and attention alerts</string>
     <string name="codex_title_attention">Codex title attention</string>
     <string name="codex_title_attention_detail">Use Codex’s explicit Action Required title when its status stays Working. Depends on Codex’s title format.</string>
+    <string name="frosted_effects">Frosted glass effects</string>
+    <string name="frosted_effects_detail">Turn off for opaque surfaces and lower GPU rendering use.</string>
     <string name="about_rexling">About Rexling</string>
     <string name="about_rexling_detail">Version, build and project information</string>
 

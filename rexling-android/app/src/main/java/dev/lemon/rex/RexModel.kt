@@ -98,6 +98,12 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         experimentalCodexAttention=enabled;preferences.edit {putBoolean(CodexAttentionPolicy.ENABLED,enabled)}
         connections.values.forEach {it.refreshActivityPolicy()};updateActivity()
     }
+    internal var frostedEffectsEnabled by mutableStateOf(preferences.getBoolean("experimental_frosted_effects",true))
+        private set
+    internal fun changeFrostedEffects(enabled: Boolean) {
+        frostedEffectsEnabled=enabled
+        preferences.edit {putBoolean("experimental_frosted_effects",enabled)}
+    }
     internal var backgroundAlerts by mutableStateOf(preferences.getBoolean(BackgroundAlerts.ENABLED,false))
         private set
     internal var notificationNotice by mutableStateOf("")

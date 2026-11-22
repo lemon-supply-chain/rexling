@@ -31,7 +31,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 
 internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
 
@@ -114,7 +113,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
         val pages=offsets.map {offset->blocks[Math.floorMod(index+offset,blocks.size)] to offset}
         val retained=imeHandoff.retainFor(pages.map {it.first})
         val mountedPages=pages+listOfNotNull(retained?.let {it.block to 4})
-        Box(Modifier.fillMaxSize().then(if(showSwitch || captureBackdrop) Modifier.hazeSource(haze) else Modifier)) {
+        Box(Modifier.fillMaxSize().frostSource(haze,showSwitch || captureBackdrop)) {
         for((block,offset) in mountedPages) {
             val retiring=retained?.block?.id==block.id
             val center=offset==0 && !retiring

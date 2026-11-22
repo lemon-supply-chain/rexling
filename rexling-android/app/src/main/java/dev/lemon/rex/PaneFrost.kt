@@ -21,18 +21,25 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 
 /** Blur the terminal backdrop, keeping foreground icons and labels crisp. */
 @Composable internal fun Modifier.paneFrost(haze: HazeState,shape: Shape,active: Boolean=false,darkSurface: Boolean=false,edge: Boolean=true,tint: Color?=null,invalidator: PopupFrostInvalidator?=null,opacity: Float?=null,blur: androidx.compose.ui.unit.Dp=20.dp): Modifier {
     val scheme=MaterialTheme.colorScheme
+    val surface=if(darkSurface) Color(0xff171a20) else scheme.surface
+    val resolvedTint=tint ?: if(active) scheme.primaryContainer else surface
+    val outline=if(edge) Modifier.border(.5.dp,scheme.onSurface.copy(alpha=.10f),shape) else Modifier
+    if(!LocalFrostedEffectsEnabled.current) return clip(shape).background(resolvedTint.copy(alpha=1f)).then(outline)
     val style=remember(scheme,active,darkSurface,tint,opacity,blur) {
-        val surface=if(darkSurface) Color(0xff171a20) else scheme.surface
-        val resolvedTint=tint ?: if(active) scheme.primaryContainer else surface
         HazeStyle(backgroundColor=surface,tints=listOf(HazeTint(resolvedTint.copy(alpha=opacity ?: if(darkSurface || tint!=null) .60f else if(active) .46f else .32f))),
             blurRadius=blur,noiseFactor=.02f,fallbackTint=HazeTint(resolvedTint.copy(alpha=.92f)))
     }
-    return clip(shape).then(if(invalidator==null) Modifier.hazeEffect(haze,style=style) else Modifier.then(PopupFrostElement(haze,style,invalidator))).then(if(edge) Modifier.border(.5.dp,scheme.onSurface.copy(alpha=.10f),shape) else Modifier)
+    return clip(shape).then(if(invalidator==null) Modifier.hazeEffect(haze,style=style) else Modifier.then(PopupFrostElement(haze,style,invalidator))).then(outline)
 }
+
+/** Capture a backdrop only while frost can consume it. */
+@Composable internal fun Modifier.frostSource(haze: HazeState,visible: Boolean): Modifier =
+    if(visible && LocalFrostedEffectsEnabled.current) hazeSource(haze) else this
 
 /** A Popup has a separate draw tree: redraw its effects when the terminal host draws. */
 internal class PopupFrostInvalidator(private val host: android.view.View) {
@@ -70,8 +77,9 @@ private class PopupFrostNode(haze: HazeState,style: HazeStyle,var invalidator: P
     val localHaze=remember {HazeState()}
     val host=androidx.compose.ui.platform.LocalView.current
     val invalidator=remember(host) {PopupFrostInvalidator(host)}
-    androidx.compose.runtime.DisposableEffect(invalidator,visible) {
-        if(visible) invalidator.start()
+    val frosted=LocalFrostedEffectsEnabled.current
+    androidx.compose.runtime.DisposableEffect(invalidator,visible,frosted) {
+        if(visible && frosted) invalidator.start()
         onDispose {invalidator.stop()}
     }
     return testTag("Frosted overlay")

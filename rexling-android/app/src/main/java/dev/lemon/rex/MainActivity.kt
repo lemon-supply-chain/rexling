@@ -47,7 +47,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 
 class MainActivity : ComponentActivity() {
     private val model: RexModel by viewModels()
@@ -109,7 +108,7 @@ class MainActivity : ComponentActivity() {
                     isAppearanceLightNavigationBars = !dark
                 }
             }
-            RexTheme(dark, model.theme(dark)) { RexApp(model) }
+            RexTheme(dark, model.theme(dark), frostedEffectsEnabled = model.frostedEffectsEnabled) { RexApp(model) }
         }
     }
 
@@ -165,6 +164,7 @@ internal fun RexTheme(
     dark: Boolean,
     theme: AppTheme,
     motionEnabled: Boolean = android.animation.ValueAnimator.areAnimatorsEnabled(),
+    frostedEffectsEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val scheme = remember(dark, theme) { rexColorScheme(dark, theme) }
@@ -173,6 +173,7 @@ internal fun RexTheme(
             LocalTerminalPalette provides theme.terminal,
             LocalContentColor provides scheme.onSurface,
             LocalMotionEnabled provides motionEnabled,
+            LocalFrostedEffectsEnabled provides frostedEffectsEnabled,
             content = content,
         )
     }
@@ -189,10 +190,7 @@ private fun RexApp(model: RexModel) {
             LocalKeepScreenAwake provides model.keepScreenAwake,
             LocalKeyboardSuggestions provides model.keyboardSuggestions,
         ) {
-            Box(
-                Modifier.fillMaxSize()
-                    .then(if (captureNotice) Modifier.hazeSource(noticeHaze) else Modifier)
-            ) {
+            Box(Modifier.fillMaxSize().frostSource(noticeHaze,captureNotice)) {
                 key(model.activeServerId) { RexWorkspace(model, client) }
             }
         }
@@ -526,8 +524,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 model.activityVisible
         )
     Surface(
-        Modifier.fillMaxSize()
-            .then(if (workspaceBackdrop) Modifier.hazeSource(workspaceHaze) else Modifier),
+        Modifier.fillMaxSize().frostSource(workspaceHaze,workspaceBackdrop),
         color = MaterialTheme.colorScheme.background,
     ) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
@@ -1159,6 +1156,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 onToolbarWithKeyboardOnly = model::changeToolbarWithKeyboardOnly,
                 codexTitleAttention = model.experimentalCodexAttention,
                 onCodexTitleAttention = model::changeCodexAttention,
+                frostedEffectsEnabled = model.frostedEffectsEnabled,
+                onFrostedEffects = model::changeFrostedEffects,
                 minimizeFloatingPanes = model.minimizeFloatingPanes,
                 onMinimizeFloatingPanes = model::changeMinimizeFloatingPanes,
                 onNetwork = { openSettings(SettingsRoute.Network) },
