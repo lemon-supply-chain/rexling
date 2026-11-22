@@ -29,7 +29,7 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class DrawerFrostTest {
     @get:Rule val ui=createComposeRule()
-    @Test fun drawersAndMenuBlurTheBackdropAndFollowLiveChangesInBothThemes() {
+    @Test fun drawersAndMenuBlurTheBackdropOnceAndFreezeAgainstLiveHostChanges() {
         val choice=mutableIntStateOf(-1);val dark=mutableStateOf(false);val green=mutableStateOf(false)
         val captureBackdrop=mutableStateOf(true)
         val server=ServerProfile.create("Test Mac","https://fixture.example","mac")
@@ -87,14 +87,19 @@ class DrawerFrostTest {
             fun sample(): Color {
                 val image=overlay.captureToImage();return image.toPixelMap()[(image.width*.25f).toInt(),6]
             }
-            val striped=sample()
-            assertTrue("Overlay $kind must blur red/blue stripes in dark=$isDark: $striped",minOf(striped.red,striped.blue)>striped.green+.04f)
             val image=overlay.captureToImage()
+            val pixelMap=image.toPixelMap()
+            val x1=(image.width*.25f).toInt()
+            val x2=(x1+4).coerceAtMost(image.width-1)
+            val p1=pixelMap[x1,6]
+            val p2=pixelMap[x2,6]
+            assertTrue("Overlay $kind must mix red and blue stripes in dark=$isDark: $p1",p1.red>.12f && p1.blue>.12f)
+            assertTrue("Overlay $kind must blur stripes with low color variance across period: $p1 vs $p2",kotlin.math.abs(p1.red-p2.red)<.25f)
             File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"drawer-frost-$kind-${if(isDark) "dark" else "light"}.png")
                 .outputStream().use {image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG,100,it)}
             ui.runOnIdle {green.value=true};ui.waitForIdle();Thread.sleep(80)
             val updated=sample()
-            assertTrue("Overlay $kind must update with its host: $updated",updated.green>maxOf(updated.red,updated.blue)+.08f)
+            assertTrue("Overlay $kind must remain frozen on initial backdrop: $updated",minOf(updated.red,updated.blue)>updated.green+.04f)
             if(kind==4) {
                 ui.runOnIdle {captureBackdrop.value=false}
                 val fallback=sample()

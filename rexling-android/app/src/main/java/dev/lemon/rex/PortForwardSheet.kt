@@ -32,8 +32,7 @@ import dev.chrisbanes.haze.HazeState
     val context=LocalContext.current
     var editing by remember {mutableStateOf(false)}
     val canAdd=servers.any {it.connected && it.session.isNotBlank()} && PortForwards.items.size<64
-    // Built outside the sheet on purpose: the frost redraws when its host window draws, and inside the
-    // sheet that host is the sheet's own window, which then redraws itself every frame while open.
+    // Built outside the sheet on purpose: drawerFrost captures backdrop blur from the main activity host on open.
     val frost=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
     ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),
         containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,dragHandle=null,contentWindowInsets={WindowInsets.safeDrawing.only(WindowInsetsSides.Top)}) {

@@ -38,7 +38,7 @@ internal object NetworkSettings {
     val controlUrl get()=preferences.getString("control_url","").orEmpty()
     /** The built-in Tailscale device name; blank means the default, rexling-android. */
     val hostname get()=preferences.getString("tailscale_hostname","").orEmpty()
-    private fun vaultKey(): SecretKey {
+    @Synchronized private fun vaultKey(): SecretKey {
         val store=KeyStore.getInstance("AndroidKeyStore").apply {load(null)}
         (store.getKey("rexling-ssh",null) as? SecretKey)?.let {return it}
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore").apply {
@@ -52,6 +52,7 @@ internal object NetworkSettings {
     }
     private fun decrypt(text: String): String {
         val bytes=Base64.decode(text,Base64.NO_WRAP)
+        if(bytes.size<12) return ""
         return String(Cipher.getInstance("AES/GCM/NoPadding").apply {init(Cipher.DECRYPT_MODE,vaultKey(),GCMParameterSpec(128,bytes.copyOfRange(0,12)))}.doFinal(bytes.copyOfRange(12,bytes.size)))
     }
     private fun keyLibrary()=SshKeyLibrary(preferences.getString("ssh_library",null))
@@ -76,24 +77,31 @@ internal object NetworkSettings {
     private fun command(type: String,body: JSONObject=JSONObject()): JSONObject = JSONObject(NativeBridge.networkCommand(body.put("type",type).toString()))
     fun initialize(application: Context) {
         context=application.applicationContext as Application
-        if(!preferences.getBoolean("per_server_routes",false)) {
-            val app=context.getSharedPreferences("rex",Context.MODE_PRIVATE)
-            val endpoints=SavedServers.decode(app.getString("servers",null),app.getString("endpoint","").orEmpty()).map {it.endpoint}
-            val routes=migratedServerRoutes(JSONObject(preferences.getString("routes","{}")!!),endpoints,builtIn)
-            preferences.edit().putString("routes",routes.toString()).putBoolean("tailscale_prepared",tailscaleEnabled)
-                .putBoolean("built_in",false).putBoolean("per_server_routes",true).commit()
+        scope.launch {
+            if(!preferences.getBoolean("per_server_routes",false)) {
+                val app=context.getSharedPreferences("rex",Context.MODE_PRIVATE)
+                val endpoints=SavedServers.decode(app.getString("servers",null),app.getString("endpoint","").orEmpty()).map {it.endpoint}
+                val routes=migratedServerRoutes(JSONObject(preferences.getString("routes","{}")!!),endpoints,builtIn)
+                preferences.edit().putString("routes",routes.toString()).putBoolean("tailscale_prepared",tailscaleEnabled)
+                    .putBoolean("built_in",false).putBoolean("per_server_routes",true).apply()
+            }
+            migrateKeys()
+            // Install configuration before any terminal or monitoring service can connect.
+            interfaces()
+            configure()
+            val manager=context.getSystemService(android.net.ConnectivityManager::class.java)
+            runCatching {manager?.registerDefaultNetworkCallback(object: android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {scope.launch {interfaces()}}
+                override fun onLost(network: android.net.Network) {scope.launch {interfaces()}}
+                override fun onLinkPropertiesChanged(network: android.net.Network,properties: android.net.LinkProperties) {scope.launch {interfaces()}}
+            })}
         }
-        migrateKeys()
-        // Install configuration before any terminal or monitoring service can connect.
-        interfaces()
-        configure()
-        scope.launch {while(isActive) {runCatching {status.value=command("status")};delay(1500)}}
-        val manager=context.getSystemService(android.net.ConnectivityManager::class.java)
-        runCatching {manager.registerDefaultNetworkCallback(object: android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) {scope.launch {interfaces()}}
-            override fun onLost(network: android.net.Network) {scope.launch {interfaces()}}
-            override fun onLinkPropertiesChanged(network: android.net.Network,properties: android.net.LinkProperties) {scope.launch {interfaces()}}
-        })}
+        scope.launch {
+            while(isActive) {
+                runCatching {status.value=command("status")}
+                delay(if(tailscaleEnabled) 3000 else 8000)
+            }
+        }
     }
     private fun interfaces() {
         val list=JSONArray()

@@ -101,7 +101,8 @@ internal fun parseQrServer(raw: String): Pair<String, String>? = runCatching {
     val lifecycleOwner = LocalLifecycleOwner.current
     val view = LocalView.current
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var scanned by remember { mutableStateOf(false) }
+    val scanned = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -109,6 +110,7 @@ internal fun parseQrServer(raw: String): Pair<String, String>? = runCatching {
     DisposableEffect(Unit) {
         onDispose {
             cameraExecutor.shutdown()
+            cameraProvider?.unbindAll()
         }
     }
 
@@ -119,50 +121,54 @@ internal fun parseQrServer(raw: String): Pair<String, String>? = runCatching {
                     scaleType = PreviewView.ScaleType.FILL_CENTER
                 }
                 cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
+                    runCatching {
+                        val provider = cameraProviderFuture.get()
+                        cameraProvider = provider
+                        val preview = Preview.Builder().build().also {
+                            it.surfaceProvider = previewView.surfaceProvider
+                        }
 
-                    val reader = MultiFormatReader().apply {
-                        setHints(mapOf(
-                            DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
-                            DecodeHintType.CHARACTER_SET to "UTF-8"
-                        ))
-                    }
+                        val reader = MultiFormatReader().apply {
+                            setHints(mapOf(
+                                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                                DecodeHintType.CHARACTER_SET to "UTF-8"
+                            ))
+                        }
 
-                    val analysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
+                        val analysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
 
-                    analysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                        if (!scanned) {
-                            val text = decodeQr(imageProxy, reader)
-                            if (!text.isNullOrBlank() && !scanned) {
-                                val parsed = parseQrServer(text)
-                                if (parsed != null) {
-                                    scanned = true
-                                    view.post {
-                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                        onScanned(parsed.first, parsed.second)
-                                        onDismiss()
+                        analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                            if (!scanned.get()) {
+                                val text = decodeQr(imageProxy, reader)
+                                if (!text.isNullOrBlank() && !scanned.get()) {
+                                    val parsed = parseQrServer(text)
+                                    if (parsed != null) {
+                                        if (scanned.compareAndSet(false, true)) {
+                                            view.post {
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                                onScanned(parsed.first, parsed.second)
+                                                onDismiss()
+                                            }
+                                        }
+                                    } else {
+                                        view.post { errorMessage = "Invalid server URL: $text" }
                                     }
-                                } else {
-                                    view.post { errorMessage = "Invalid server URL: $text" }
                                 }
                             }
+                            imageProxy.close()
                         }
-                        imageProxy.close()
-                    }
 
-                    runCatching {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
+                        provider.unbindAll()
+                        provider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
                             analysis
                         )
+                    }.onFailure { err ->
+                        errorMessage = err.localizedMessage ?: "Failed to initialize camera"
                     }
                 }, ContextCompat.getMainExecutor(ctx))
                 previewView

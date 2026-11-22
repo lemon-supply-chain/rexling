@@ -38,6 +38,22 @@ internal object RexTokens {
     val shape: RexShapeTiers = RexShapeTiers
     val space: RexSpace = RexSpace
     val motion: RexMotion = RexMotion
+    val frost: RexFrostTokens = RexFrostTokens
+}
+
+/** Visual tokens for translucent frosted surfaces. */
+internal object RexFrostTokens {
+    val blur = 20.dp
+    val drawerBlur = 24.dp
+    val edgeWidth = 0.5.dp
+    val darkSurface = Color(0xff171a20)
+    const val defaultOpacity = 0.32f
+    const val activeOpacity = 0.46f
+    const val darkSurfaceOpacity = 0.60f
+    const val drawerOpacity = 0.72f
+    const val fallbackOpacity = 0.92f
+    const val edgeAlpha = 0.10f
+    const val noiseFactor = 0.02f
 }
 
 /** Machine text: paths, keycap legends, ports and dimensions. Never prose. */

@@ -28,10 +28,10 @@ import dev.chrisbanes.haze.HazeState
     subtitle: String?=null,surfaceColor: Color=Color.Transparent,headerActions: @Composable RowScope.()->Unit={},content: @Composable ColumnScope.()->Unit) {
     val localHaze=remember {HazeState()}
     val shape=BottomSheetDefaults.ExpandedShape
-    // Built outside the sheet on purpose: drawerFrost redraws when its host window draws, and inside the
-    // sheet that host is the sheet's own window, which then redraws itself every frame while open.
+    // Built outside the sheet on purpose: drawerFrost binds to the host window's ViewTreeObserver to
+    // capture backdrop blur on open, disarming once captured so host redraws do not loop.
     val frost=if(swipeToDismiss) Modifier.drawerFrost(hazeState,shape)
-        else Modifier.paneFrost(hazeState ?: localHaze,shape,edge=false,opacity=.72f,blur=24.dp)
+        else Modifier.paneFrost(hazeState ?: localHaze,shape,edge=false,opacity=RexTokens.frost.drawerOpacity,blur=RexTokens.frost.drawerBlur)
     val surface=if(surfaceColor==Color.Transparent) frost else Modifier.background(surfaceColor,shape).then(frost)
     @Composable fun Body(modifier: Modifier=Modifier) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {

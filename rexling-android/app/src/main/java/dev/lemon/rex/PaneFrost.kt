@@ -24,33 +24,105 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 
 /** Blur the terminal backdrop, keeping foreground icons and labels crisp. */
-@Composable internal fun Modifier.paneFrost(haze: HazeState,shape: Shape,active: Boolean=false,darkSurface: Boolean=false,edge: Boolean=true,tint: Color?=null,invalidator: PopupFrostInvalidator?=null,opacity: Float?=null,blur: androidx.compose.ui.unit.Dp=20.dp): Modifier {
+@Composable internal fun Modifier.paneFrost(
+    haze: HazeState,
+    shape: Shape,
+    active: Boolean=false,
+    darkSurface: Boolean=false,
+    edge: Boolean=true,
+    tint: Color?=null,
+    invalidator: PopupFrostInvalidator?=null,
+    opacity: Float?=null,
+    blur: androidx.compose.ui.unit.Dp=RexTokens.frost.blur
+): Modifier {
     val scheme=MaterialTheme.colorScheme
-    val surface=if(darkSurface) Color(0xff171a20) else scheme.surface
+    val surface=if(darkSurface) RexTokens.frost.darkSurface else scheme.surface
     val resolvedTint=tint ?: if(active) scheme.primaryContainer else surface
-    val outline=if(edge) Modifier.border(.5.dp,scheme.onSurface.copy(alpha=.10f),shape) else Modifier
+    val outline=if(edge) Modifier.border(RexTokens.frost.edgeWidth,scheme.onSurface.copy(alpha=RexTokens.frost.edgeAlpha),shape) else Modifier
     if(!LocalFrostedEffectsEnabled.current) return clip(shape).background(resolvedTint.copy(alpha=1f)).then(outline)
+    val resolvedOpacity=opacity ?: if(darkSurface || tint!=null) RexTokens.frost.darkSurfaceOpacity else if(active) RexTokens.frost.activeOpacity else RexTokens.frost.defaultOpacity
     val style=remember(scheme,active,darkSurface,tint,opacity,blur) {
-        HazeStyle(backgroundColor=surface,tints=listOf(HazeTint(resolvedTint.copy(alpha=opacity ?: if(darkSurface || tint!=null) .60f else if(active) .46f else .32f))),
-            blurRadius=blur,noiseFactor=.02f,fallbackTint=HazeTint(resolvedTint.copy(alpha=.92f)))
+        HazeStyle(
+            backgroundColor=surface,
+            tints=listOf(HazeTint(resolvedTint.copy(alpha=resolvedOpacity))),
+            blurRadius=blur,
+            noiseFactor=RexTokens.frost.noiseFactor,
+            fallbackTint=HazeTint(resolvedTint.copy(alpha=RexTokens.frost.fallbackOpacity))
+        )
     }
-    return clip(shape).then(if(invalidator==null) Modifier.hazeEffect(haze,style=style) else Modifier.then(PopupFrostElement(haze,style,invalidator))).then(outline)
+    return clip(shape)
+        .then(if(invalidator==null) Modifier.hazeEffect(haze,style=style) else Modifier.then(PopupFrostElement(haze,style,invalidator)))
+        .then(outline)
 }
 
 /** Capture a backdrop only while frost can consume it. */
 @Composable internal fun Modifier.frostSource(haze: HazeState,visible: Boolean): Modifier =
     if(visible && LocalFrostedEffectsEnabled.current) hazeSource(haze) else this
 
-/** A Popup has a separate draw tree: redraw its effects when the terminal host draws. */
+/**
+ * A Popup has a separate draw tree: capture its backdrop blur once on open,
+ * then disarm to avoid re-rendering on every background host draw.
+ */
 internal class PopupFrostInvalidator(private val host: android.view.View) {
     private val effects=mutableSetOf<dev.chrisbanes.haze.HazeEffectNode>()
+    private var observer: android.view.ViewTreeObserver?=null
+    private var listening=false
+    private var framesRemaining=0
+
+    @androidx.annotation.VisibleForTesting
+    internal var invalidationCount=0
+        private set
+
+    @androidx.annotation.VisibleForTesting
+    internal val isListening: Boolean get()=listening
+
     private val listener=android.view.ViewTreeObserver.OnPreDrawListener {
-        effects.forEach {if(it.isAttached) it.invalidateDraw()};true
+        val hasSourceLayer=effects.any {effect->
+            effect.isAttached && effect.state.areas.any {area->area.contentLayer!=null}
+        }
+        var invalidated=false
+        effects.forEach {
+            if(it.isAttached) {
+                it.invalidateDraw()
+                invalidated=true
+            }
+        }
+        if(invalidated) {
+            invalidationCount++
+            if(hasSourceLayer) {
+                framesRemaining--
+                if(framesRemaining<=0) stop()
+            }
+        }
+        true
     }
-    fun start() {host.viewTreeObserver.addOnPreDrawListener(listener)}
-    fun stop() {host.viewTreeObserver.takeIf {it.isAlive}?.removeOnPreDrawListener(listener)}
-    fun add(effect: dev.chrisbanes.haze.HazeEffectNode) {effects+=effect}
-    fun remove(effect: dev.chrisbanes.haze.HazeEffectNode) {effects-=effect}
+
+    fun start() {
+        if(listening) return
+        val vto=host.viewTreeObserver
+        if(!vto.isAlive) return
+        listening=true
+        framesRemaining=2
+        observer=vto
+        vto.addOnPreDrawListener(listener)
+    }
+
+    fun stop() {
+        if(!listening) return
+        listening=false
+        observer?.takeIf {it.isAlive}?.removeOnPreDrawListener(listener)
+        observer=null
+    }
+
+    fun add(effect: dev.chrisbanes.haze.HazeEffectNode) {
+        effects+=effect
+        if(!listening && effect.isAttached) start()
+    }
+
+    fun remove(effect: dev.chrisbanes.haze.HazeEffectNode) {
+        effects-=effect
+        if(effects.isEmpty()) stop()
+    }
 }
 
 @OptIn(dev.chrisbanes.haze.ExperimentalHazeApi::class)
@@ -83,7 +155,7 @@ private class PopupFrostNode(haze: HazeState,style: HazeStyle,var invalidator: P
         onDispose {invalidator.stop()}
     }
     return testTag("Frosted overlay")
-        .paneFrost(hazeState ?: localHaze,shape,edge=false,invalidator=invalidator,opacity=.72f,blur=24.dp)
+        .paneFrost(hazeState ?: localHaze,shape,edge=false,invalidator=invalidator,opacity=RexTokens.frost.drawerOpacity,blur=RexTokens.frost.drawerBlur)
 }
 
 /** Retain the captured backdrop through sheet/menu exit animations. */
