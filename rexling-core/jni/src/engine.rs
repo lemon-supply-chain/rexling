@@ -1061,7 +1061,15 @@ impl Actor {
                         }
                         self.program_refresh=tokio::time::Instant::now()+Duration::from_secs(4);
                     }
-                    if self.predictor.expire(std::time::Instant::now()) {self.dirty=true;}
+                    if self.predictor.expire(std::time::Instant::now()) {
+                        if let Some(base) = self.predictor.base() {
+                            if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base)) {
+                                self.screen = Some(base);
+                                self.publish_frame();
+                            }
+                        }
+                        self.dirty = true;
+                    }
                     if self.visible && (self.dirty || animation_at.is_some_and(|at|at<=now)) {
                         self.dirty=false;animation_at=None;
                         if let Some(replica)=self.replica.as_mut().filter(|r|r.ready()) {
@@ -1885,8 +1893,21 @@ impl Actor {
                 program,
                 std::time::Instant::now(),
             );
+            if let Some(base) = self.predictor.base() {
+                let frame = self.predictor.display(base.clone());
+                if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &frame)) {
+                    self.screen = Some(frame);
+                    self.publish_frame();
+                }
+            }
         } else if !click {
             self.predictor.reset();
+            if let Some(base) = self.predictor.base() {
+                if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base)) {
+                    self.screen = Some(base);
+                    self.publish_frame();
+                }
+            }
         }
         // Render only if typing actually moved the viewport. An unconditional render here
         // publishes an unchanged frame and starts the 16 ms render throttle just before
@@ -2066,6 +2087,14 @@ impl Actor {
                     .and_then(crate::prediction::Mode::parse)
                     .context("prediction mode must be off, slow or always")?;
                 self.predictor.set_mode(mode);
+                if mode == crate::prediction::Mode::Off {
+                    if let Some(base) = self.predictor.base() {
+                        if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base)) {
+                            self.screen = Some(base);
+                            self.publish_frame();
+                        }
+                    }
+                }
                 self.dirty = true;
             }
             "retry" | "network" => {
@@ -6710,6 +6739,112 @@ while True:
             longest < Duration::from_millis(100),
             "reconnecting actor held the thread for {longest:?}"
         );
+    }
+
+    #[test]
+    fn predictive_echo_publishes_speculative_frame_immediately_on_input() {
+        let shared = Arc::new(Mutex::new(Shared {
+            revision: 0,
+            json: String::new(),
+            activity: Arc::default(),
+            pending_previews: BTreeMap::new(),
+            frame: None,
+            key: String::new(),
+            wire: crate::updates::WireBase::default(),
+        }));
+        let mut actor = Actor::new(shared.clone(), Arc::new(crate::updates::Updates::default()));
+        actor.visible = true;
+        actor.controlled = true;
+        actor.phase = "connected".into();
+        actor.selected_session = "s".into();
+        actor.selected_block = "b".into();
+        actor.programs = json!({"b": ["bash"]});
+        actor.predictor.set_mode(crate::prediction::Mode::Always);
+
+        let mut cells = Vec::new();
+        for y in 0..4 {
+            for x in 0..20 {
+                cells.push(rex_core::ghostty::Cell {
+                    x,
+                    y,
+                    text: if x == 0 && y == 0 { "$".into() } else { String::new() },
+                    foreground: [200; 3],
+                    background: [0; 3],
+                    attributes: 0,
+                    width: 1,
+                    hyperlink: None,
+                });
+            }
+        }
+        let base_frame = Arc::new(rex_core::ghostty::Frame {
+            columns: 20,
+            rows: 4,
+            cursor: Some((2, 0)),
+            cursor_position: Some((2, 0)),
+            cursor_style: 1,
+            cursor_blinking: true,
+            foreground: [200; 3],
+            background: [0; 3],
+            cells: cells.clone(),
+            scroll_total: 4,
+            scroll_offset: 0,
+            scroll_visible: 4,
+            input_flags: 0,
+            next_image_delay_ms: None,
+            image_cell_width: 0,
+            image_cell_height: 0,
+            images: Vec::new(),
+            above: Vec::new(),
+            below: Vec::new(),
+        });
+
+        let target_key = prediction_key(&actor.input_target());
+        actor.predictor.retarget(&target_key);
+        actor.predictor.observe(base_frame.clone(), std::time::Instant::now());
+        // Confirm epoch 1 with an echo
+        actor.predictor.input(&target_key, "x", crate::prediction::Program::Shell, std::time::Instant::now());
+        let mut cells_with_x = cells.clone();
+        cells_with_x[2] = rex_core::ghostty::Cell {
+            x: 2,
+            y: 0,
+            text: "x".into(),
+            foreground: [200; 3],
+            background: [0; 3],
+            attributes: 0,
+            width: 1,
+            hyperlink: None,
+        };
+        let echo_frame = Arc::new(rex_core::ghostty::Frame {
+            cursor: Some((3, 0)),
+            cursor_position: Some((3, 0)),
+            cells: cells_with_x,
+            ..(*base_frame).clone()
+        });
+        actor.predictor.observe(echo_frame.clone(), std::time::Instant::now());
+        actor.screen = Some(echo_frame.clone());
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let mut input = json!({
+            "type": "input",
+            "session": "s",
+            "block": "b",
+            "text": "ls"
+        });
+        actor.input_target().bind(&mut input);
+        let _ = runtime.block_on(actor.send_input(input));
+
+        let state = shared.lock().unwrap();
+        let frame = state.frame.as_ref().expect("speculative frame published");
+        assert!(!Arc::ptr_eq(frame, &echo_frame), "must be a new speculative frame");
+        let text_at_3 = frame.cells.iter().find(|c| c.x == 3 && c.y == 0).unwrap();
+        assert_eq!(text_at_3.text, "l");
+        let text_at_4 = frame.cells.iter().find(|c| c.x == 4 && c.y == 0).unwrap();
+        assert_eq!(text_at_4.text, "s");
+        assert_eq!(frame.cursor, Some((5, 0)));
     }
 }
 

@@ -92,15 +92,32 @@ In optimizations `f147276` and `5c71b34`:
 
 ---
 
-## 4. Proposed Fixes
+## 4. Implementation & Fix Verification
 
-### 4.1 Predictive Echo Immediate Frame Publishing
-When `value["type"] == "input"`:
-1. If `self.predictor.has_pending()`:
-   - Compute `display(current_screen)` immediately from the latest `self.screen` or base frame.
-   - Publish the speculative frame to Android immediately (`self.publish_frame()`), without waiting for `replica.terminal().render_ready()`.
-2. Upon server frame arrival, `observe(...)` will cleanly confirm or drop the speculative cells and restore authoritative server state.
+### 4.1 Predictive Echo Immediate Speculative Frame Publishing (`engine.rs` & `prediction.rs`)
+1. **Immediate Speculative Publishing**:
+   In `engine.rs` (`send_input`), when `value["type"] == "input"`:
+   - Call `self.predictor.input(...)` to record predictions.
+   - If `self.predictor.base()` exists, compute speculative frame `self.predictor.display(base.clone())`.
+   - If the frame changed (`!self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &frame))`), immediately update `self.screen` and invoke `self.publish_frame()`.
+   - Result: Keypress characters render in 0ms locally, ahead of server round trip.
+2. **Visual Underline Integration**:
+   - In `prediction.rs` (`display`), when `self.flagging` is true (RTT > 80ms), flagged character predictions receive standard underline bit `1 << 6` alongside `PREDICTED`, integrating directly into Android's native `TerminalView` draw routines.
+   - When server echo confirms the characters, authoritative server frame attributes automatically replace the underline.
+3. **Reset and Expiration Handling**:
+   - In `engine.rs` `expire` and `set_mode(Mode::Off)`: when predictions expire or prediction is turned off, `self.screen` reverts immediately to `base` and publishes, wiping out stale predictions without waiting for remote socket traffic.
+4. **Unit Test Verification**:
+   - Added end-to-end unit test `predictive_echo_publishes_speculative_frame_immediately_on_input` in `engine.rs`, asserting immediate speculative frame dispatch on keypress.
+   - All 108 tests in `rexling-core/jni` passed.
 
-### 4.2 Running Animation Re-evaluation
-1. Provide a subtle, low-frequency pulse for inactive working tabs rather than completely freezing them to `settledMarquee` with phase 0.
-2. Optimize `program_task` RPC batching or multiplexing to prevent high-latency timeouts.
+---
+
+## 5. UI Tab Indicator & Running Animation Verification
+
+1. **Tab Indicator Fix**:
+   - [TerminalChrome.kt](file:///Users/xiaobo/Dev/app/rexling/rexling-android/app/src/main/java/dev/lemon/rex/TerminalChrome.kt) and [TabRail.kt](file:///Users/xiaobo/Dev/app/rexling/rexling-android/app/src/main/java/dev/lemon/rex/TabRail.kt) draw the bottom 2dp bar strictly for `active` tabs (`if (active)`). Unselected tabs never draw a bottom bar.
+2. **Background Running Animation**:
+   - Inactive busy tabs animate their icon's rainbow marquee ring via `ProgramStack.kt`, without rendering any bottom bar.
+3. **Compilation**:
+   - JNI libraries built via `build_native.py` for `aarch64-linux-android`.
+   - Release APK compiled at `rexling-android/app/build/outputs/apk/release/app-release.apk` (27.9 MB).

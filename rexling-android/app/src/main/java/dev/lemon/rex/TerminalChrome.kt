@@ -1288,6 +1288,7 @@ internal fun TerminalTabs(
                     val workPhase =
                         rememberWorkingPhase(
                             animateWorking &&
+                                active &&
                                 if (progress != null) progress.busy && progress.percent == null
                                 else busy
                         )
@@ -1325,7 +1326,7 @@ internal fun TerminalTabs(
                                 .width(width)
                                 .drawWithContent {
                                     drawContent()
-                                    if (active || busy || progress != null) {
+                                    if (active) {
                                         val origin = Offset(0f, size.height - 2.dp.toPx())
                                         val bar = Size(size.width, 2.dp.toPx())
                                         if (progress != null) {

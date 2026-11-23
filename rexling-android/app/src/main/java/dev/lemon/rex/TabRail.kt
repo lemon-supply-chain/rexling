@@ -159,13 +159,13 @@ internal enum class TabWidthClass(
                 val busy=paneWorking(w) || progress?.busy==true
                 val indicator=terminalProgressColor(progress)
                 Box(Modifier.animateItem(fadeInSpec=null,fadeOutSpec=null)) {
-                    val workPhase=rememberWorkingPhase(animateWorking && if(progress!=null) progress.busy && progress.percent==null else busy)
+                    val workPhase=rememberWorkingPhase(animateWorking && active && if(progress!=null) progress.busy && progress.percent==null else busy)
                     Row(Modifier.fillMaxWidth().height(48.dp)
                         .background(if(active) scheme.surfaceVariant else Color.Transparent)
                         .drawWithContent {
                             drawContent()
-                            // The same bottom bar as the bottom tab bar: active, progress and working.
-                            if(active || progress!=null || busy) {
+                            // The bottom indicator bar is only drawn on the active tab.
+                            if(active) {
                                 val origin=Offset(0f,size.height-2.dp.toPx());val bar=Size(size.width,2.dp.toPx())
                                 if(progress!=null) {
                                     drawWorkingBar(indicator.copy(alpha=.18f),origin,bar)
