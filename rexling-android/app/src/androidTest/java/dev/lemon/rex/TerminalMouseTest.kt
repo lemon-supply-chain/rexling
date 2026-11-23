@@ -57,7 +57,6 @@ class TerminalMouseTest {
             val view=view().apply {
                 mouseTarget={target}
                 onMouseClick={_,_,_,_->clicks++}
-                tapOpensKeyboard=true
             }
             view.primaryPointerButton(true,5f,5f)
             assertEquals(0,clicks)
@@ -106,13 +105,45 @@ class TerminalMouseTest {
             assertEquals(0,clicks);assertEquals(0,activated)
         }
     }
-    @Test fun readonlyAndOrdinaryTerminalTapsKeepActivationBehavior() {
+    @Test fun takingControlFromOutputDoesNotRequestKeyboard() {
         instrumentation.runOnMainSync {
-            var activated=0;var clicks=0
-            val view=view().apply {controlled=false;onActivate={activated++};onMouseClick={_,_,_,_->clicks++}}
-            event(view,MotionEvent.ACTION_DOWN,5f,5f,0);event(view,MotionEvent.ACTION_UP,5f,5f,30)
-            view.screen=frame(6);event(view,MotionEvent.ACTION_DOWN,5f,5f,100);event(view,MotionEvent.ACTION_UP,5f,5f,130)
-            assertEquals(2,activated);assertEquals(0,clicks)
+            val requests=mutableListOf<Boolean>()
+            var clicks=0
+            val metrics=TerminalFonts(instrumentation.targetContext).configure(Paint(),10f)
+            val view=view().apply {
+                controlled=false
+                onActivate={requests+=it}
+                onMouseClick={_,_,_,_->clicks++}
+            }
+            fun tap(row: Int,time: Long) {
+                val y=metrics.cellHeight*(row+.5f)
+                event(view,MotionEvent.ACTION_DOWN,5f,y,time);event(view,MotionEvent.ACTION_UP,5f,y,time+30)
+            }
+            tap(0,0)
+            view.screen=frame(0).copy(cursorX=2,cursorY=3)
+            tap(2,100)
+            tap(3,200)
+            assertEquals(listOf(false,false,true),requests)
+            assertEquals(0,clicks)
+        }
+    }
+    @Test fun unmarkedShellOpensKeyboardOnlyAtLiveInputRow() {
+        instrumentation.runOnMainSync {
+            val metrics=TerminalFonts(instrumentation.targetContext).configure(Paint(),10f)
+            val shell=frame(0).copy(cursorX=2,cursorY=3)
+            val view=view().apply {screen=shell}
+            fun tap(row: Int,time: Long,x: Float=5f) {
+                val y=metrics.cellHeight*(row+.5f)
+                event(view,MotionEvent.ACTION_DOWN,x,y,time);event(view,MotionEvent.ACTION_UP,x,y,time+30)
+            }
+            tap(2,0);assertFalse(view.hasFocus())
+            tap(3,100,1200f);assertFalse(view.hasFocus())
+            tap(3,200);assertTrue(view.hasFocus())
+            view.clearFocus()
+            view.screen=shell.copy(scroll=TerminalScroll(100,0,12))
+            tap(3,300);assertFalse(view.hasFocus())
+            view.screen=shell.copy(inputFlags=2)
+            tap(3,400);assertFalse(view.hasFocus())
         }
     }
     @Test fun webLinksKeepPriorityOverApplicationMouseClicks() {

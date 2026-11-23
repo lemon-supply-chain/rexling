@@ -59,7 +59,7 @@ class TerminalImeViewportTest {
                         listOf(PanePlacement("a",0f,0f,1f,.37f),PanePlacement("b",0f,.37f,1f,.63f)),
                         focused,focused,true,emptyMap(),emptySet(),11f,
                         onFocus={id,_->focused=id},onView={views[focused]=it},onImage={_,_->false},
-                        onPaste={false},imeEnterSubmits=false,tapOpensKeyboard=false,
+                        onPaste={false},imeEnterSubmits=false,
                         keyboardChrome={0},extendsUnderNavigation=false,hazeState=remember {HazeState()},captureBackdrop=false,
                         ime=WindowInsets(bottom=covered),navigation=WindowInsets(0,0,0,0))
                 }
@@ -138,7 +138,7 @@ class TerminalImeViewportTest {
             ui.setContent {MaterialTheme {
                 MultiPaneLayout(client,"session","tab",tiled,focused,live,live.isNotBlank(),emptyMap(),emptySet(),11f,
                     onFocus={_,_->},onView={view->view.screen=frame;views[live]=view},
-                    onImage={_,_->false},onPaste={false},imeEnterSubmits=false,tapOpensKeyboard=false,
+                    onImage={_,_->false},onPaste={false},imeEnterSubmits=false,
                     keyboardChrome={0},extendsUnderNavigation=false,hazeState=remember {HazeState()},captureBackdrop=false,
                     floatingPanes=floating)
             }}

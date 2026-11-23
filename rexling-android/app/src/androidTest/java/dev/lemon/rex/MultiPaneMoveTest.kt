@@ -64,7 +64,7 @@ class MultiPaneMoveTest {
                     Box(Modifier.weight(1f).fillMaxHeight().testTag("Tiled workspace")) {
                         MultiPaneLayout(client,"session","tab",serverPanes,focused="",liveBlock="",controlled=false,
                             programs=emptyMap(),waiting=emptySet(),fontSize=11f,onFocus={_,_->},onView={},
-                            onImage={_,_->false},onPaste={false},imeEnterSubmits=false,tapOpensKeyboard=false,
+                            onImage={_,_->false},onPaste={false},imeEnterSubmits=false,
                             keyboardChrome={0},extendsUnderNavigation=false,hazeState=remember {HazeState()},
                             captureBackdrop=false,sideRail=rail,splits=serverSplits)
                     }
@@ -165,7 +165,7 @@ class MultiPaneMoveTest {
                         focused=selected,liveBlock=selected,controlled=true,programs=emptyMap(),
                         waiting=emptySet(),fontSize=11f,onFocus={id,_->focused.value=id},
                         onView={},onImage={_,_->false},onPaste={false},imeEnterSubmits=false,
-                        tapOpensKeyboard=false,keyboardChrome={0},extendsUnderNavigation=false,
+                        keyboardChrome={0},extendsUnderNavigation=false,
                         hazeState=haze,captureBackdrop=false,floatingPanes=overlay,allowFloat=true,
                         onFloat={actions+="float:$it"},onDockFloating={actions+="dock:$it"},
                         onClosePane={actions+="close:$it"},
@@ -240,7 +240,7 @@ class MultiPaneMoveTest {
                         ),focused="left",liveBlock="left",controlled=true,programs=emptyMap(),
                         waiting=emptySet(),fontSize=11f,onFocus={_,_->error("Dragging must preserve focus")},
                         onView={},onImage={_,_->false},onPaste={false},imeEnterSubmits=false,
-                        tapOpensKeyboard=false,keyboardChrome={0},extendsUnderNavigation=false,
+                        keyboardChrome={0},extendsUnderNavigation=false,
                         hazeState=remember {HazeState()},captureBackdrop=false,
                         onSplit={id,split->splits+=id to split},
                         onDrop={source,target,position->drops+=Triple(source,target,position)},

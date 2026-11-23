@@ -33,17 +33,18 @@ internal object CodexAttentionPolicy {
     }
 }
 
-internal data class WatchedPane(val server: String,val endpoint: String,val session: String,val block: String) {
-    fun contains(profile: ServerProfile,record: ActivityRecord)=profile.id==server && profile.endpoint==endpoint && record.session==session && record.block==block
+internal data class WatchedPanes(val server: String,val endpoint: String,val session: String,val selectedBlock: String,val blocks: Set<String>) {
+    fun contains(profile: ServerProfile,record: ActivityRecord)=profile.id==server && profile.endpoint==endpoint && record.session==session && record.block in blocks
 }
 
 
 internal object ActivityFocusPolicy {
-    fun acknowledge(profile: ServerProfile,records: List<ActivityRecord>,watched: WatchedPane?,seen: (ActivityRecord)->Boolean)=
+    fun acknowledge(profile: ServerProfile,records: List<ActivityRecord>,watched: WatchedPanes?,seen: (ActivityRecord)->Boolean)=
         records.filter {it.notifiable && watched?.contains(profile,it)==true && !seen(it)}
     fun unread(records: List<ActivityRecord>,seen: (ActivityRecord)->Boolean)=records.count {it.notifiable && !seen(it)}
-    fun watched(profile: ServerProfile,state: AppState,foreground: Boolean,obscured: Boolean,hasScreen: Boolean,navigating: Boolean,
-        interactive: Boolean,locked: Boolean): WatchedPane? = if(foreground && !obscured && hasScreen && !navigating && interactive && !locked &&
-            state.connected && state.selectedSession.isNotBlank() && state.selectedBlock.isNotBlank())
-        WatchedPane(profile.id,profile.endpoint,state.selectedSession,state.selectedBlock) else null
+    fun watched(profile: ServerProfile,state: AppState,visible: WatchedPanes?,foreground: Boolean,navigating: Boolean,
+        interactive: Boolean,locked: Boolean): WatchedPanes? = visible?.takeIf {
+        foreground && !navigating && interactive && !locked && state.connected && it.blocks.isNotEmpty() &&
+            it.server==profile.id && it.endpoint==profile.endpoint && it.session==state.selectedSession && it.selectedBlock==state.selectedBlock
+    }
 }

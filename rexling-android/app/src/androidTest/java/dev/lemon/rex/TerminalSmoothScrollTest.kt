@@ -79,6 +79,25 @@ class TerminalSmoothScrollTest {
             before.recycle();after.recycle()
         }
     }
+    @Test fun applicationScrollReusesMovedRowsAndPreservesFixedRowsAndLinks() {
+        instrumentation.runOnMainSync {
+            val original=frame(50).copy(inputFlags=1,scroll=TerminalScroll(20,0,20))
+            val shifted=frame(51).lines.mapIndexed {y,cells->if(y==1 || y==18) original.lines[y] else cells}
+            val scrolled=original.copy(lines=shifted,cells=shifted.flatten())
+            val cached=view().apply {screen=original}
+            draw(cached).recycle()
+            for(next in listOf(scrolled,original)) {
+                val before=cached.recordedRowCount
+                cached.scrollByPixels(if(next===scrolled) -100f else 100f)
+                cached.screen=next
+                val reused=draw(cached)
+                val fresh=draw(view().apply {screen=next})
+                assertTrue("Reuse must preserve the pixels after scrolling in either direction",reused.sameAs(fresh))
+                assertTrue("Only new rows and the padded edges should be recorded",cached.recordedRowCount-before<=5)
+                reused.recycle();fresh.recycle()
+            }
+        }
+    }
     @Test fun tappingDuringMovementOnlyStopsItThenLinksUseTheSettledGrid() {
         instrumentation.runOnMainSync {
             val view=view();var opened="";view.onOpenLink={opened=it}

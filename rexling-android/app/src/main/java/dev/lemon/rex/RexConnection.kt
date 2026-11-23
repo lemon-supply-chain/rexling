@@ -570,10 +570,11 @@ internal class RexConnection(application: Application, private val scope: Corout
         if (lastSize.first > 0 && lastSize.second > 0) sentSize = PaneSize(lastSize.first,lastSize.second,0,0,
             current.selectedSession,current.selectedBlock,current.navigationId,current.connectionEpoch)
     }
-    fun takeControl() {
+    fun takeControl(showKeyboard: Boolean=true) {
         val current=state.value
         if(visible && current.connected && !current.creating && !navigationRequest.pending && current.selectedBlock.isNotBlank()) {
-            keyboardRequest=current.selectedBlock;sendTake(current)
+            if(showKeyboard) keyboardRequest=current.selectedBlock
+            sendTake(current)
         }
     }
     fun keyboardShown() {keyboardRequest=""}

@@ -38,11 +38,11 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
 
 @Composable internal fun TerminalCarousel(blocks: List<BlockItem>,selectedBlock: String,liveBlock: String,
     liveScreen: TerminalScreen?,previewFrame: (String)->TerminalScreen?,programs: Map<String,ProgramIdentity>,controlled: Boolean,fontSize: Float,
-    onInput: (String)->Unit,onScroll: (Int)->Unit,onWheel: (Int,Int,Int,Int,Int)->Unit,onActivate: ()->Unit,onBottom: ()->Unit,onDimensions: (Int,Int)->Unit,onSelect: (String)->Unit,onPanes: ()->Unit,
+    onInput: (String)->Unit,onScroll: (Int)->Unit,onWheel: (Int,Int,Int,Int,Int)->Unit,onActivate: (Boolean)->Unit,onBottom: ()->Unit,onDimensions: (Int,Int)->Unit,onSelect: (String)->Unit,onPanes: ()->Unit,
     onView: (TerminalView)->Unit,modifier: Modifier=Modifier,bindLiveView: ((String,TerminalView)->Boolean)?=null,
     onMouseClick: (Int,Int,Int,Int)->Unit={_,_,_,_->},mouseTarget: ()->String={""},onImage: (android.net.Uri,()->Unit)->Boolean={_,release->release();false},onPaste: ()->Boolean={false},imageTarget: ()->String=mouseTarget,
     padding: TerminalPadding=TerminalPadding.NORMAL,extendPadding: Boolean=true,
-    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,imeEnterSubmits: Boolean=false,tapOpensKeyboard: Boolean=false,keyboardChrome: ()->Int={0},
+    bottomControlsInset: androidx.compose.ui.unit.Dp=0.dp,paneLayout: List<PanePlacement> = emptyList(),titles: Map<String,String> = emptyMap(),directories: Map<String,String> = emptyMap(),hazeState: HazeState?=null,captureBackdrop: Boolean=false,imeEnterSubmits: Boolean=false,keyboardChrome: ()->Int={0},
     squareCorners: Boolean=false,extendsUnderNavigation: Boolean=false,navigationClearance: Dp=0.dp,bottomOverlayInset: Dp=0.dp) {
     val context=androidx.compose.ui.platform.LocalContext.current
     val switchLayout=remember(paneLayout,blocks) {paneLayout.filter {p->blocks.any {it.id==p.id}}.sortedBy {it.layer}}
@@ -152,7 +152,6 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                                 view.interactive=center
                                 view.keyboardSuggestions=keyboardSuggestions && profile.keyboardSuggestions
                                 view.imeEnterSubmits=imeEnterSubmits
-                                view.tapOpensKeyboard=tapOpensKeyboard
                                 view.imeAnchor=profile.imeAnchor
                                 view.edgePolicy=profile.edgePolicy
                                 view.controlled=center && controlled && block.id==liveBlock
@@ -162,7 +161,7 @@ internal val LocalKeyboardSuggestions=staticCompositionLocalOf {false}
                                 view.onInput=onInput
                                 view.onMouseClick=if(center && block.id==liveBlock) onMouseClick else ({_,_,_,_->})
                                 view.mouseTarget=mouseTarget
-                                view.onActivate=if(center && block.id==liveBlock) onActivate else ({})
+                                view.onActivate=if(center && block.id==liveBlock) onActivate else ({_ ->})
                                 view.onWheel=if(center && block.id==liveBlock) onWheel else ({_,_,_,_,_->})
                                 view.onScroll=if(center && block.id==liveBlock) onScroll else {_->}
                                 view.onPaneDrag=if(center) {dx,active ->

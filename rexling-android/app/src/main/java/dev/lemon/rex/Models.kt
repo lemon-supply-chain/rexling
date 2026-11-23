@@ -21,6 +21,7 @@ data class TerminalScreen(val columns: Int, val rows: Int, val cursorX: Int?, va
     fun isSemanticInputRow(row: Int): Boolean = inputFlags and 16!=0 && scroll.below==0L &&
         row in lines.indices && lines[row].any {it.attributes and (1 shl 30)!=0}
     val mouseTracking: Boolean get()=inputFlags and 1!=0
+    val alternateScreen: Boolean get()=inputFlags and 2!=0
     val applicationScroll: Boolean get()=inputFlags and 1!=0 || inputFlags and 6==6
     fun plainText(): String = (0 until rows).joinToString("\n") { y ->
         cells.asSequence().filter { it.y == y && it.width > 0 }.joinToString("") { it.text.ifEmpty { " " } }.trimEnd()

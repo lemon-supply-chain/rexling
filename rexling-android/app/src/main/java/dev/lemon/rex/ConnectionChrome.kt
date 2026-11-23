@@ -34,6 +34,9 @@ internal fun connectionMessage(phase: String,network: Boolean?): String? = when 
     connectionNoticeText(phase,network)?.let {message->
         Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(start=12.dp,end=6.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            if(network!=false && (phase=="connecting" || phase=="reconnecting")) {
+                CircularProgressIndicator(Modifier.size(12.dp),strokeWidth=1.5.dp)
+            }
             Text(message,Modifier.weight(1f),fontSize=11.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick=onRetry,enabled=network!=false,contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp)) {Text(stringResource(R.string.retry_now),fontSize=11.sp)}
         }

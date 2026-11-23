@@ -29,24 +29,26 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         private set
     internal var networkAvailable by mutableStateOf<Boolean?>(null)
         private set
-    private var paneObscured=true
-    internal fun setPaneObscured(value: Boolean) {paneObscured=value;updateActivity()}
+    private var visibleActivityPanes: WatchedPanes?=null
+    internal fun setVisibleActivityPanes(panes: WatchedPanes?) {
+        if(visibleActivityPanes==panes) return
+        visibleActivityPanes=panes
+        updateActivity()
+    }
     /** The IME started closing: eagerly restore the full-height terminal grid. */
     internal fun onImeClosing() {connections[activeServerId]?.onImeClosing()}
     /** The IME finished animating: the terminal grid is settled, so send its resize now. */
     internal fun onImeAnimationEnd() {connections[activeServerId]?.flushPendingSize()}
-    private fun watchedPane(): WatchedPane? {
-        val client=connections[activeServerId] ?: return null
-        val state=client.state.value
-        val app=getApplication<Application>()
-        return ActivityFocusPolicy.watched(activeServer,state,foreground && windowFocused,paneObscured || activityVisible,client.hasScreen && state.screen!=null,client.navigationRequest.pending,
-            app.getSystemService(android.os.PowerManager::class.java).isInteractive,app.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
-    }
     private fun updateActivity() {
-        val watched=watchedPane()
-        if(watched!=null) connections[watched.server]?.let {client->
-            val profile=servers.firstOrNull {it.id==watched.server}
-            if(profile!=null) ActivityFocusPolicy.acknowledge(profile,client.state.value.activity,watched,client::isActivitySeen).takeIf {it.isNotEmpty()}?.let(client::markActivitySeen)
+        val visible=visibleActivityPanes
+        val active=connections[activeServerId]
+        if(visible!=null && active!=null) {
+            val app=getApplication<Application>()
+            val state=active.state.value
+            val profile=activeServer
+            val watched=ActivityFocusPolicy.watched(profile,state,visible,foreground && windowFocused && !activityVisible,active.navigationRequest.pending,
+                app.getSystemService(android.os.PowerManager::class.java).isInteractive,app.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
+            ActivityFocusPolicy.acknowledge(profile,state.activity,watched,active::isActivitySeen).takeIf {it.isNotEmpty()}?.let(active::markActivitySeen)
         }
         attentionCount=connections.values.sumOf {client->if(client.state.value.connected) ActivityFocusPolicy.unread(client.state.value.activity,client::isActivitySeen) else 0}
         activitySources=servers.mapNotNull {server->connections[server.id]?.state?.value?.let {state->
@@ -293,7 +295,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     private var closingSessionId=""
     private val connections=mutableMapOf<String,RexConnection>()
     private val observers=mutableMapOf<String,Job>()
-    private var desired=preferences.getStringSet("connected_servers",emptySet()).orEmpty().filter {id->servers.any {it.id==id}}.toSet()
+    private var desired by mutableStateOf(preferences.getStringSet("connected_servers",emptySet()).orEmpty().filter {id->servers.any {it.id==id}}.toSet())
     private var palette: TerminalPalette?=null
     private var windowFocused=false
     internal fun windowFocusChanged(focused: Boolean) {windowFocused=focused;updateActivity()}
@@ -311,6 +313,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     internal var activeClient by mutableStateOf(connection(activeServer))
         private set
     val activeServer: ServerProfile get()=servers.firstOrNull {it.id==activeServerId} ?: ServerProfile.Empty
+    internal val activeConnectionRequested: Boolean get()=activeServerId in desired
     val connectedCount: Int get()=serverStatuses.values.count {it.connected}
 
     init {viewModelScope.launch {NetworkSettings.revision.drop(1).collect {connections.filterKeys {it in desired}.values.forEach {it.retryNow()}}};preferences.registerOnSharedPreferenceChangeListener(alertsListener);desired.toList().forEach {id->connectServer(id,select=false)}}

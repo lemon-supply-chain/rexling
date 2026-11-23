@@ -30,7 +30,13 @@ class PaneActivationTest {
     }
     @Test fun anOldOwnedFrameDoesNotConsumeThePendingActivation() {
         val a=PaneActivation();assertFalse(a.shouldTake(ready.copy(error="Missing pane"),request,true,size))
-        assertFalse(a.shouldTake(ready.copy(controlled=true),request,true,size))
-        assertTrue(a.shouldTake(ready,request,true,size))
+        assertFalse(a.shouldTake(ready.copy(controlled=true),NavigationRequest(block="b",id=2),true,size))
+        assertTrue(a.shouldTake(ready.copy(selectedBlock="b",navigationId=2),NavigationRequest(id=2),true,size))
+    }
+    @Test fun returningToAnOwnedPaneDoesNotFightAnExplicitTakeover() {
+        val a=PaneActivation()
+        assertFalse(a.shouldTake(ready.copy(controlled=true,screen=null),request,true,size))
+        assertFalse(a.shouldTake(ready,request,true,size))
+        a.navigate();assertTrue(a.shouldTake(ready,request,true,size))
     }
 }

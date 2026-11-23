@@ -107,7 +107,7 @@ class AppearanceSheetTest {
     }
     @Test fun themedSheetsRenderInLightAndDark() {
         val selected=mutableStateOf(themes.first {it.id=="abyssal-trench"})
-        ui.setContent {val theme=selected.value;MaterialTheme(colorScheme=(if(theme.terminal.dark) darkColorScheme() else lightColorScheme()).withTokens(theme.ui)) {
+        ui.setContent {val theme=selected.value;RexTheme(theme.terminal.dark,theme) {
             Surface(Modifier.fillMaxSize()) {AppearanceSheet(Appearance.SYSTEM,themes,themes.first {it.id=="alpine-milk"},themes.first {it.id=="abyssal-trench"},{},{},onClose={})}
         }}
         for(id in listOf("abyssal-trench","alpine-milk")) {

@@ -85,7 +85,7 @@ internal fun MultiPaneLayout(
     focused: String, liveBlock: String, controlled: Boolean, programs: Map<String, ProgramIdentity>,
     waiting: Set<String>, fontSize: Float, onFocus: (String, Pair<Int,Int>?) -> Unit,
     onView: (TerminalView) -> Unit, onImage: (android.net.Uri, () -> Unit) -> Boolean,
-    onPaste: () -> Boolean, imeEnterSubmits: Boolean, tapOpensKeyboard: Boolean,
+    onPaste: () -> Boolean, imeEnterSubmits: Boolean,
     keyboardChrome: () -> Int, extendsUnderNavigation: Boolean, hazeState: HazeState, captureBackdrop: Boolean,
     bottomPaddingDp: Int = 6, bottomMargin: Boolean = true,
     sideRail: TabBarPosition = TabBarPosition.BOTTOM,
@@ -297,7 +297,6 @@ internal fun MultiPaneLayout(
                         view.imeAnchor=profile.imeAnchor
                         view.edgePolicy=profile.edgePolicy
                         view.imeEnterSubmits=imeEnterSubmits
-                        view.tapOpensKeyboard=tapOpensKeyboard
                         view.controlled=live && controlled
                         view.onDimensions=dimensions
                         view.onKeyboardFocus=if(live) ({keyboardFocus=it}) else null

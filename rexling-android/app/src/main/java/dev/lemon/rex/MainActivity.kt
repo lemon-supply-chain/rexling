@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) installLaunchReveal()
         // The stored in-app appearance decides the window colour before Compose draws,
         // so a light appearance does not flash the dark theme's background.
         window.setBackgroundDrawable(
@@ -235,6 +236,11 @@ private data class TerminalCloseTarget(
 @Composable
 private fun RexWorkspace(model: RexModel, client: RexConnection) {
     val state by client.chromeState.collectAsState()
+    val connectionRequested = model.activeConnectionRequested
+    val connectionPhase =
+        if (connectionRequested && state.phase in listOf("disconnected", "paused")) {
+            if (client.hasScreen) "reconnecting" else "connecting"
+        } else state.phase
     val navigation = client.navigationRequest
     val displayedSession = navigation.session ?: state.selectedSession
     val currentSessionKey = sessionKey(model.activeServerId, displayedSession)
@@ -261,15 +267,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     val activeWindowId = window?.id.orEmpty()
     val ready = state.connected && !navigation.pending && !state.creating
     val keyTarget = client.keyTarget()
-    val activityBadges =
-        remember(model.activitySources, model.activeServer, displayedSession, windows) {
-            ActivityBadgePolicy.route(
-                model.activitySources,
-                model.activeServer,
-                displayedSession,
-                windows,
-            )
-        }
     val terminalHaze = remember { HazeState() }
     val workspaceHaze = remember { HazeState() }
     var readyBackdrop by remember { mutableStateOf(false) }
@@ -277,7 +274,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     var ownerBackdrop by remember { mutableStateOf(false) }
     val palette = LocalTerminalPalette.current
     var endpoint by rememberSaveable { mutableStateOf(client.savedEndpoint) }
-    var showServer by rememberSaveable { mutableStateOf(true) }
     var servers by remember { mutableStateOf(false) }
     var addServer by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
@@ -406,7 +402,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         model.pendingImageTarget = target
         filePicker.launch(arrayOf("*/*"))
     }
-    DisposableEffect(client) { onDispose { model.setPaneObscured(true) } }
+    DisposableEffect(client) { onDispose { model.setVisibleActivityPanes(null) } }
     val keyboardDensity = LocalDensity.current
     val keyboardInsets = WindowInsets.ime
     val keyboardVisible by
@@ -473,19 +469,62 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         else emptyList()
     var dockFloatingPane by remember(displayedSession, window?.id) { mutableStateOf<String?>(null) }
     val controlled = state.controlled && ready && client.hasScreen
+    val paneObscured =
+        menu ||
+            model.activityVisible ||
+            picker.isNotEmpty() ||
+            settings.isNotEmpty() ||
+            servers ||
+            addServer ||
+            forwards ||
+            newSession ||
+            pendingShortcut != null ||
+            closeTarget != null ||
+            dockFloatingPane != null
+    val zoomed = window?.zoomed.orEmpty()
+    val activityPaneIds =
+        remember(chosen, tiles, floatingOverlay, zoomed) {
+            activityPaneCandidates(chosen, tiles, floatingOverlay, zoomed)
+        }
+    val display = client.displayLayout.collectAsState()
+    val visibleActivityBlocks by
+        remember(client, display, activityPaneIds, ready, paneObscured, state.selectedBlock) {
+            derivedStateOf<Set<String>>(structuralEqualityPolicy()) {
+                if (!ready || paneObscured) emptySet()
+                else
+                    activityPaneIds.filterTo(mutableSetOf()) { id ->
+                        id == state.selectedBlock && display.value.hasScreen || id in client.paneFrames
+                    }
+            }
+        }
+    val activityServer = model.activeServer
+    val activityBadges =
+        remember(
+            model.activitySources,
+            activityServer,
+            displayedSession,
+            windows,
+            visibleActivityBlocks,
+        ) {
+            ActivityBadgePolicy.route(
+                model.activitySources,
+                activityServer,
+                displayedSession,
+                windows,
+                visibleActivityBlocks,
+            )
+        }
     SideEffect {
-        model.setPaneObscured(
-            menu ||
-                model.activityVisible ||
-                picker.isNotEmpty() ||
-                settings.isNotEmpty() ||
-                servers ||
-                addServer ||
-                forwards ||
-                newSession ||
-                pendingShortcut != null ||
-                closeTarget != null ||
-                dockFloatingPane != null
+        model.setVisibleActivityPanes(
+            visibleActivityBlocks.takeIf { it.isNotEmpty() }?.let {
+                WatchedPanes(
+                    activityServer.id,
+                    activityServer.endpoint,
+                    displayedSession,
+                    state.selectedBlock,
+                    it,
+                )
+            }
         )
     }
     fun openPane(id: String) {
@@ -552,9 +591,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     LaunchedEffect(state.selectedSession) { closeTarget = null }
     LaunchedEffect(palette) { model.updateTerminalTheme(palette) }
-    LaunchedEffect(state.phase) {
-        if (state.connected || state.phase == "preview") showServer = false
-    }
     LaunchedEffect(
         state.connected,
         state.selectedSession,
@@ -718,7 +754,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.fillMaxSize()) {
-                    if (showServer || (state.phase == "disconnected" && !client.hasScreen)) {
+                    if (model.servers.isEmpty() || (!connectionRequested && state.phase == "disconnected" && !client.hasScreen)) {
                         Surface(
                             Modifier.padding(12.dp),
                             shape = RoundedCornerShape(18.dp),
@@ -765,8 +801,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
                                             onClick = { connectionError = model.connect(endpoint) },
-                                            enabled =
-                                                state.phase != "connecting" && endpoint.isNotBlank(),
+                                            enabled = endpoint.isNotBlank(),
                                         ) {
                                             Text(stringResource(R.string.connect))
                                         }
@@ -778,7 +813,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                 onClick = {
                                                     model.disconnectServer(model.activeServerId)
                                                 }
-                                            ) {
+                                             ) {
                                                 Text(stringResource(R.string.disconnect))
                                             }
                                         else
@@ -789,16 +824,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             ) {
                                                 Text(stringResource(R.string.try_preview))
                                             }
-                                        if (client.hasScreen)
-                                            TextButton(onClick = { showServer = false }) {
-                                                Text(stringResource(R.string.hide))
-                                            }
                                     }
                                 }
                         }
                     }
                     if (blocks.isEmpty() && model.servers.isNotEmpty())
-                        ConnectionNotice(state.phase, model.networkAvailable, client::retryNow)
+                        ConnectionNotice(connectionPhase, model.networkAvailable, client::retryNow)
                     if (
                         blocks.isEmpty() &&
                             state.connected &&
@@ -913,7 +944,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     onImage = imageCommit,
                                     onPaste = ::pasteClipboard,
                                     imeEnterSubmits = model.enterSubmits,
-                                    tapOpensKeyboard = model.toolbarWithKeyboardOnly,
                                     keyboardChrome = { if (model.toolbarWithKeyboardOnly) toolbarHeight[0] else 0 },
                                     extendsUnderNavigation = extendUnderNav,
                                     hazeState = terminalHaze,
@@ -960,7 +990,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     padding = model.terminalPadding,
                                     extendPadding = model.extendPadding,
                                     imeEnterSubmits = model.enterSubmits,
-                                    tapOpensKeyboard = model.toolbarWithKeyboardOnly,
                                     keyboardChrome = { if (model.toolbarWithKeyboardOnly) toolbarHeight[0] else 0 },
                                     squareCorners = tabLayout.side,
                                     extendsUnderNavigation = extendUnderNav,
@@ -968,9 +997,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     bottomOverlayInset = bottomOverlayInset,
                                 )
                             }
-                            ConnectionNotice(state.phase, model.networkAvailable, client::retryNow, Modifier.align(Alignment.TopCenter).padding(8.dp))
+                            ConnectionNotice(connectionPhase, model.networkAvailable, client::retryNow, Modifier.align(Alignment.TopCenter).padding(8.dp))
                             ReadyNotice(state.connectionEpoch, controlled, ready, Modifier.align(Alignment.TopCenter).padding(8.dp), hazeState = terminalHaze, onVisibleChange = { readyBackdrop = it })
-                            OtherOwnerNotice(chosen, state.otherOwner && !controlled, ready, client.screenDimensions, client::takeControl, Modifier.align(Alignment.TopEnd).padding(10.dp), hazeState = terminalHaze, onVisibleChange = { ownerBackdrop = it })
+                            OtherOwnerNotice(chosen, state.otherOwner && !controlled, ready, client.screenDimensions, { client.takeControl() }, Modifier.align(Alignment.TopEnd).padding(10.dp), hazeState = terminalHaze, onVisibleChange = { ownerBackdrop = it })
                             val shortcutProfile =
                                 if (ready && chosen == liveBlock && chosen !in state.cachedPrograms)
                                     ShortcutProfiles.active(model.shortcutProfiles, state.programs[chosen])
@@ -1013,13 +1042,15 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         }
                         if (tabLayout.position == TabBarPosition.RIGHT) tabRail()
                     } else Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            if (state.connected) stringResource(R.string.choose_session_or_start)
-                            else stringResource(R.string.terminals_anywhere),
-                            fontFamily = MonoUi,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (state.connected || !connectionRequested) {
+                            Text(
+                                if (state.connected) stringResource(R.string.choose_session_or_start)
+                                else stringResource(R.string.terminals_anywhere),
+                                fontFamily = MonoUi,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     if (state.connected || state.phase == "preview" || client.hasScreen) {
                         WorkspaceBottomBar(
@@ -1069,12 +1100,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     )
                 }
                 // Loading feedback must not resize the terminal grid during navigation.
-                if (
-                    state.creating ||
-                        navigation.pending ||
-                        state.phase == "connecting" ||
-                        state.phase == "reconnecting"
-                )
+                if (state.creating || navigation.pending)
                     LinearProgressIndicator(
                         Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp)
                     )
@@ -1795,7 +1821,7 @@ private fun LiveTerminal(
     onInput: (String) -> Unit,
     onScroll: (Int) -> Unit,
     onWheel: (Int, Int, Int, Int, Int) -> Unit,
-    onActivate: () -> Unit,
+    onActivate: (Boolean) -> Unit,
     onBottom: () -> Unit,
     onDimensions: (Int, Int) -> Unit,
     onSelect: (String) -> Unit,
@@ -1816,7 +1842,6 @@ private fun LiveTerminal(
     padding: TerminalPadding = TerminalPadding.NORMAL,
     extendPadding: Boolean = true,
     imeEnterSubmits: Boolean = false,
-    tapOpensKeyboard: Boolean = false,
     keyboardChrome: () -> Int = { 0 },
     squareCorners: Boolean = false,
     extendsUnderNavigation: Boolean = false,
@@ -1859,7 +1884,6 @@ private fun LiveTerminal(
         padding = padding,
         extendPadding = extendPadding,
         imeEnterSubmits = imeEnterSubmits,
-        tapOpensKeyboard = tapOpensKeyboard,
         keyboardChrome = keyboardChrome,
         squareCorners = squareCorners,
         extendsUnderNavigation = extendsUnderNavigation,

@@ -1,6 +1,6 @@
 # Upstream Sync Plan & Status
 
-Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884c48f3600dd787f17a5` through `da7a0f9fa45759ffcf2f01d41865c3bbec614742` (`upstream/main`), while preserving repository customizations:
+Synchronized all upstream features and UI/UX design through `d786ea0cef9480e03e5c9bf4f0d7e7e6ae96395e` (`upstream/main`, Build 171), while preserving repository customizations:
 - Package name `dev.lemon.rex` preserved.
 - Icon rainbow marquee and glint effects (`RainbowMarquee.kt`, `ProgramStack.kt`, `TerminalChrome.kt`) preserved.
 - Custom vector artwork system (`ProgramArtwork.kt`, `ProgramVectorPicture.kt`, `ProgramVocabulary.kt`) preserved.
@@ -310,12 +310,52 @@ Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884
   - **Area**: Versioning
   - **Status**: Bumped `versionCode = 170` in `app/build.gradle.kts`.
 
+- [x] **60. `6634084`** - Repair the appearance instrumentation test
+  - **Full Hash**: `66340840b2efd3fece07ce88ffbc2a9a7a60d6a0`
+  - **Area**: Appearance Tests, Theme Engine
+  - **Status**: Fixed `AppearanceSheetTest` to wrap content in `RexTheme(theme.terminal.dark, theme)`.
+
+- [x] **61. `33c35c8`** - Clear activity badges for visible panes
+  - **Full Hash**: `33c35c8ea3fcdeba56db97ce4f526b77df0fc9a5`
+  - **Area**: Activity Indicators, Focus & Badge Policies
+  - **Status**: Added `WatchedPanes` and `activityPaneCandidates(...)`, clearing unread badges for visible/tiled/floating panes; updated `ActivityBadgePolicy`, `ActivityFocusPolicy`, and `MainActivity`.
+
+- [x] **62. `660ff41`** - Keep terminal pane sizes stable across tab switches
+  - **Full Hash**: `660ff4156c1d76343dc968858a74e54e449df5c8`
+  - **Area**: JNI Engine, Pane Activation, Mirror Protocol
+  - **Status**: Added `mirror.park()` to preserve claimed pane sizing without issuing disowns; added `owned_blocks` tracking in `Actor` and `release_session_panes()`; updated `PaneActivation.shouldTake()`.
+
+- [x] **63. `7952f76`** - Reuse drawn rows when terminal apps scroll
+  - **Full Hash**: `7952f76846174a7428c0bceee077797746569eb2`
+  - **Area**: Terminal Rendering, Row Cache Performance
+  - **Status**: Added row content hash tracking and `reuseApplicationRows` in `TerminalView.kt` to preserve unchanged rows across terminal application scrolling without full redraws.
+
+- [x] **64. `890f059`** - Open the keyboard only from terminal input
+  - **Full Hash**: `890f059cb79e75553b4fcb7fefea44040a4cf028`
+  - **Area**: IME / Input System, Terminal View
+  - **Status**: Removed `tapOpensKeyboard` global flag; keyboard is requested only on deliberate taps within active input rows, cursor areas, or prompts; `takeControl(showKeyboard)` updated.
+
+- [x] **65. `8402063`** - Show reconnect progress for the last used server
+  - **Full Hash**: `84020634c0369527cf6e680d221ce4f5b0266da5`
+  - **Area**: Workspace Connection UI, Connection Notice
+  - **Status**: Added `activeConnectionRequested` state, reconnect progress indicator in `ConnectionChrome.kt`, and `WorkspaceConnectionTest.kt`.
+
+- [x] **66. `cfeb748`** - Reveal the terminal with a blue paper tear on launch
+  - **Full Hash**: `cfeb748281358f27aa51c2069cb910543e343ec4`
+  - **Area**: App Launch Animation, Splash Theme
+  - **Status**: Added `LaunchReveal.kt` with tear mask canvas reveal on Android 12+, splash screen background `@color/launch_paper` (`#4E8BFF`) in `styles.xml`.
+
+- [x] **67. `d786ea0`** - Prepare release build 171
+  - **Full Hash**: `d786ea0cef9480e03e5c9bf4f0d7e7e6ae96395e`
+  - **Area**: Versioning
+  - **Status**: Bumped `versionCode = 171` in `rexling-android/app/build.gradle.kts`.
+
 ---
 
 ## Verification
 - Rust Core (`rexling-core`): 50 passed, 3 ignored (6 suites).
-- Rust JNI Bridge (`rexling-core/jni`): 107 passed, 16 ignored (2 suites).
+- Rust JNI Bridge (`rexling-core/jni`): 109 passed, 17 ignored (2 suites).
 - JNI Smoke Test (`rexling-android/scripts/test_jni.py`): PASSED (handles, worker, snapshot, Unicode, secret redaction, and cleanup).
 - Android Application Unit Tests (`rexling-android`):
-  - Unit tests: 324 passed, 1 skipped (`./gradlew testDebugUnitTest` SUCCESS).
+  - Unit tests: 326 passed, 1 skipped (`./gradlew testDebugUnitTest` SUCCESS).
   - Debug APK assembly: `BUILD SUCCESSFUL` (`./gradlew assembleDebug`).

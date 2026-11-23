@@ -232,6 +232,19 @@ impl Mirror {
         }
     }
 
+    /// Stop streaming a tab while leaving its panes at their current size.
+    pub fn park(&mut self) -> Vec<String> {
+        self.slots
+            .drain(..)
+            .filter_map(|slot| {
+                if let Some(live) = slot.live {
+                    close(live.data);
+                }
+                slot.claimed.then_some(slot.want.block)
+            })
+            .collect()
+    }
+
     /// Send requests and return immediately to the actor loop. The control reader
     /// resolves their replies while input, rendering and other panes keep running.
     pub async fn start(&mut self, control: &mut Control) {
@@ -517,5 +530,29 @@ mod tests {
         assert!(mirror.due().is_none());
         assert!(mirror.frames().is_empty());
         assert!(mirror.slots.is_empty());
+    }
+
+    #[test]
+    fn parking_a_tab_keeps_claimed_panes_without_queuing_disowns() {
+        let mut mirror = Mirror::default();
+        mirror.request(
+            "session",
+            vec![
+                Wanted {
+                    block: "claimed".into(),
+                    columns: 80,
+                    rows: 24,
+                },
+                Wanted {
+                    block: "pending".into(),
+                    columns: 80,
+                    rows: 24,
+                },
+            ],
+        );
+        mirror.slots[0].claimed = true;
+        assert_eq!(mirror.park(), ["claimed"]);
+        assert!(mirror.slots.is_empty());
+        assert!(mirror.release.is_empty());
     }
 }
