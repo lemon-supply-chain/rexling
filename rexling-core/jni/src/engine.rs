@@ -78,10 +78,10 @@ impl Session {
             .tx
             .try_reserve()
             .context("terminal command queue is full or closed")?;
-        if matches!(value["type"].as_str(), Some("block" | "session")) {
-            if let Some(id) = value["navigationId"].as_u64() {
-                self.latest_navigation.fetch_max(id, Ordering::AcqRel);
-            }
+        if matches!(value["type"].as_str(), Some("block" | "session"))
+            && let Some(id) = value["navigationId"].as_u64()
+        {
+            self.latest_navigation.fetch_max(id, Ordering::AcqRel);
         }
         permit.send(value);
         Ok(())
@@ -1058,12 +1058,12 @@ impl Actor {
                         }
                         self.program_refresh=tokio::time::Instant::now()+Duration::from_secs(4);
                     }
-                    if self.predictor.expire(std::time::Instant::now()) {
-                        if let Some(base) = self.predictor.base() {
-                            if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base)) {
-                                self.screen = Some(base);
-                                self.publish_frame();
-                            }
+                    if self.predictor.expire(std::time::Instant::now())
+                        && let Some(base) = self.predictor.base()
+                    {
+                        if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base)) {
+                            self.screen = Some(base);
+                            self.publish_frame();
                         }
                         self.dirty = true;
                     }
@@ -1386,7 +1386,10 @@ impl Actor {
                         continue;
                     }
                     let id = block["block_id"].as_str().unwrap_or("");
-                    if !id.is_empty() && !client.is_empty() && block["owner"].as_str() == Some(client) {
+                    if !id.is_empty()
+                        && !client.is_empty()
+                        && block["owner"].as_str() == Some(client)
+                    {
                         self.owned_blocks.insert(id.to_owned());
                     }
                     if id == self.selected_block {
@@ -1724,10 +1727,10 @@ impl Actor {
                             crate::activity::pane_key(sid, id),
                             json!({"session":sid,"block":id,"event":block["payload"]}),
                         );
-                        if self.activity_titles.len() > 1024 {
-                            if let Some(key) = self.activity_titles.keys().next().cloned() {
-                                self.activity_titles.remove(&key);
-                            }
+                        if self.activity_titles.len() > 1024
+                            && let Some(key) = self.activity_titles.keys().next().cloned()
+                        {
+                            self.activity_titles.remove(&key);
                         }
                     }
                     if sid == self.selected_session {
@@ -1807,10 +1810,8 @@ impl Actor {
     fn command_error(&mut self, error: anyhow::Error, navigation: Option<u64>, input: bool) {
         let superseded =
             navigation.is_some_and(|id| id < self.latest_navigation.load(Ordering::Acquire));
-        if !superseded {
-            if let Some(id) = navigation {
-                self.navigation_id = self.navigation_id.max(id);
-            }
+        if !superseded && let Some(id) = navigation {
+            self.navigation_id = self.navigation_id.max(id);
         }
         self.creating = false;
         let message = error.to_string();
@@ -1914,11 +1915,11 @@ impl Actor {
             }
         } else if !click {
             self.predictor.reset();
-            if let Some(base) = self.predictor.base() {
-                if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base)) {
-                    self.screen = Some(base);
-                    self.publish_frame();
-                }
+            if let Some(base) = self.predictor.base()
+                && !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base))
+            {
+                self.screen = Some(base);
+                self.publish_frame();
             }
         }
         // Render only if typing actually moved the viewport. An unconditional render here
@@ -2099,13 +2100,12 @@ impl Actor {
                     .and_then(crate::prediction::Mode::parse)
                     .context("prediction mode must be off, slow or always")?;
                 self.predictor.set_mode(mode);
-                if mode == crate::prediction::Mode::Off {
-                    if let Some(base) = self.predictor.base() {
-                        if !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base)) {
-                            self.screen = Some(base);
-                            self.publish_frame();
-                        }
-                    }
+                if mode == crate::prediction::Mode::Off
+                    && let Some(base) = self.predictor.base()
+                    && !self.screen.as_ref().is_some_and(|s| Arc::ptr_eq(s, &base))
+                {
+                    self.screen = Some(base);
+                    self.publish_frame();
                 }
                 self.dirty = true;
             }
@@ -2949,7 +2949,8 @@ impl Actor {
             }
             "pause" => {
                 // Always drop connections after this bounded explicit-release attempt.
-                let _ = tokio::time::timeout(Duration::from_secs(2), self.release_session_panes()).await;
+                let _ = tokio::time::timeout(Duration::from_secs(2), self.release_session_panes())
+                    .await;
                 self.paused = true;
                 self.retry = None;
                 self.lose_connections();
@@ -3294,13 +3295,17 @@ impl Actor {
         if let Some(control) = self.control.as_mut() {
             self.mirror.start(control).await;
             if !self.selected_session.is_empty() && !self.owned_blocks.is_empty() {
-                let request = json!({"session_id":self.selected_session,"block_ids":self.owned_blocks});
+                let request =
+                    json!({"session_id":self.selected_session,"block_ids":self.owned_blocks});
                 if let Err(error) = control.call("session.disown_block", request).await {
                     if !missing_terminal(&error) {
                         return Err(error);
                     }
                     // A pane closed after the last view may invalidate the batch.
-                    match control.call("session.view", json!({"session_id":self.selected_session})).await {
+                    match control
+                        .call("session.view", json!({"session_id":self.selected_session}))
+                        .await
+                    {
                         Ok(view) => self.set_view(&view),
                         Err(error) if missing_terminal(&error) => self.owned_blocks.clear(),
                         Err(error) => return Err(error),
@@ -4364,8 +4369,11 @@ mod tests {
             ))
             .unwrap();
         let session = created["session_id"].as_str().unwrap();
-        let block =
-            |index: usize| created["initial_windows"][index]["block_ids"][0].as_str().unwrap();
+        let block = |index: usize| {
+            created["initial_windows"][index]["block_ids"][0]
+                .as_str()
+                .unwrap()
+        };
         let (first, second, untouched) = (block(0), block(1), block(2));
         let mut fixtures = vec![session.to_owned()];
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -6973,7 +6981,11 @@ while True:
                 cells.push(rex_core::ghostty::Cell {
                     x,
                     y,
-                    text: if x == 0 && y == 0 { "$".into() } else { String::new() },
+                    text: if x == 0 && y == 0 {
+                        "$".into()
+                    } else {
+                        String::new()
+                    },
                     foreground: [200; 3],
                     background: [0; 3],
                     attributes: 0,
@@ -7006,9 +7018,16 @@ while True:
 
         let target_key = prediction_key(&actor.input_target());
         actor.predictor.retarget(&target_key);
-        actor.predictor.observe(base_frame.clone(), std::time::Instant::now());
+        actor
+            .predictor
+            .observe(base_frame.clone(), std::time::Instant::now());
         // Confirm epoch 1 with an echo
-        actor.predictor.input(&target_key, "x", crate::prediction::Program::Shell, std::time::Instant::now());
+        actor.predictor.input(
+            &target_key,
+            "x",
+            crate::prediction::Program::Shell,
+            std::time::Instant::now(),
+        );
         let mut cells_with_x = cells.clone();
         cells_with_x[2] = rex_core::ghostty::Cell {
             x: 2,
@@ -7026,7 +7045,9 @@ while True:
             cells: cells_with_x,
             ..(*base_frame).clone()
         });
-        actor.predictor.observe(echo_frame.clone(), std::time::Instant::now());
+        actor
+            .predictor
+            .observe(echo_frame.clone(), std::time::Instant::now());
         actor.screen = Some(echo_frame.clone());
 
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -7045,7 +7066,10 @@ while True:
 
         let state = shared.lock().unwrap();
         let frame = state.frame.as_ref().expect("speculative frame published");
-        assert!(!Arc::ptr_eq(frame, &echo_frame), "must be a new speculative frame");
+        assert!(
+            !Arc::ptr_eq(frame, &echo_frame),
+            "must be a new speculative frame"
+        );
         let text_at_3 = frame.cells.iter().find(|c| c.x == 3 && c.y == 0).unwrap();
         assert_eq!(text_at_3.text, "l");
         let text_at_4 = frame.cells.iter().find(|c| c.x == 4 && c.y == 0).unwrap();

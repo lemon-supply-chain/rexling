@@ -91,10 +91,10 @@ pub fn create(value: Value) -> Result<u64> {
                 }
                 Err(_) => Some("Forward worker failed".into()),
             };
-            if let Some(error) = error {
-                if let Ok(mut state) = shared.lock() {
-                    *state = json!({"phase":"failed","error":error});
-                }
+            if let Some(error) = error
+                && let Ok(mut state) = shared.lock()
+            {
+                *state = json!({"phase":"failed","error":error});
             }
         })?;
     registry.insert(id, Job { state, cancel });
@@ -111,9 +111,9 @@ pub fn poll(id: u64) -> Value {
         .unwrap_or_else(|| json!({"phase":"failed","error":"Forward is closed"}))
 }
 pub fn destroy(id: u64) {
-    if let Ok(mut jobs) = jobs().lock() {
-        if let Some(job) = jobs.remove(&id) {
-            let _ = job.cancel.send(());
-        }
+    if let Ok(mut jobs) = jobs().lock()
+        && let Some(job) = jobs.remove(&id)
+    {
+        let _ = job.cancel.send(());
     }
 }

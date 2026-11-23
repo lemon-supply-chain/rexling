@@ -1,4 +1,6 @@
 //! Real actor + Ghostty + loopback protocol peers with deliberately held replies.
+//! tungstenite's upgrade callback returns a large ErrorResponse; the size is fixed by the API.
+#![allow(clippy::result_large_err)]
 use super::*;
 use futures_util::{SinkExt, StreamExt, stream::FuturesUnordered};
 use std::sync::atomic::{AtomicUsize, Ordering};

@@ -248,6 +248,9 @@ impl Frame {
     }
 }
 
+/// Consumed bytes and APC events produced by one snapshot decode step.
+type SnapshotStep = (usize, Vec<(u8, Vec<u8>)>);
+
 pub struct Terminal {
     handle: NonNull<c_void>,
     _owner_thread: PhantomData<Rc<()>>,
@@ -334,7 +337,7 @@ impl Terminal {
         )?;
         Ok((consumed, finished != 0))
     }
-    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<(u8, Vec<u8>)>)> {
+    fn step(&mut self, bytes: &[u8]) -> Result<SnapshotStep> {
         unsafe extern "C" fn apc(userdata: *mut c_void, kind: u8, bytes: *const u8, len: usize) {
             // Synchronous callback, borrowed bytes copied before native code returns.
             unsafe {

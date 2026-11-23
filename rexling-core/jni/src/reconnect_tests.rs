@@ -1,4 +1,6 @@
 //! Session shutdown races over a loopback control connection.
+//! tungstenite's upgrade callback returns a large ErrorResponse; the size is fixed by the API.
+#![allow(clippy::result_large_err)]
 use super::*;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{
@@ -110,8 +112,8 @@ async fn reconnect(
             };
             actor.event(json!({"payload":payload})).await.unwrap();
         }
-    } else {
-        actor.recover(result.unwrap_err());
+    } else if let Err(error) = result {
+        actor.recover(error);
     }
     // The peer only exits when it sees the close frame, so end the handshake cleanly.
     if let Some(control) = actor.control.as_mut() {

@@ -1,4 +1,6 @@
 //! Real control RPCs against an isolated peer; no live user sessions are touched.
+//! tungstenite's upgrade callback returns a large ErrorResponse; the size is fixed by the API.
+#![allow(clippy::result_large_err)]
 use super::*;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{

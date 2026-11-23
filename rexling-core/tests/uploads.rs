@@ -1,4 +1,6 @@
 //! Loopback uploads: real WebSocket control/data framing, no production hosts.
+//! tungstenite's upgrade callback returns a large ErrorResponse; the size is fixed by the API.
+#![allow(clippy::result_large_err)]
 use futures_util::{SinkExt, StreamExt};
 use rexling_core::{
     transport::{CONTROL, Endpoint},

@@ -1,4 +1,6 @@
 //! Exercise control demultiplexing against a small protocol peer, not a Rex process.
+//! tungstenite's upgrade callback returns a large ErrorResponse; the size is fixed by the API.
+#![allow(clippy::result_large_err)]
 use futures_util::{SinkExt, StreamExt};
 use rex_probe::{
     control::{Control, Trace},
