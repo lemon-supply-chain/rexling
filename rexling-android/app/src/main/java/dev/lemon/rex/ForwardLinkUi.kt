@@ -3,7 +3,6 @@ package dev.lemon.rex
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
@@ -21,20 +20,32 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 
 @Composable internal fun ForwardLinkUi(modifier: Modifier=Modifier,hazeState: HazeState?=null) {
     val context=LocalContext.current
     val message=PortForwards.linkNotice
+    // A forward that finishes while the app is backgrounded must open once it returns.
+    val lifecycleOwner=LocalLifecycleOwner.current
+    var resumed by remember(lifecycleOwner) {mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
+    DisposableEffect(lifecycleOwner) {
+        val observer=LifecycleEventObserver {_,_->resumed=lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)}
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {lifecycleOwner.lifecycle.removeObserver(observer)}
+    }
     val openLinkDescription=stringResource(R.string.a11y_open_forwarded_link)
     val forwardingStatusDescription=stringResource(R.string.a11y_forwarding_status)
     val copyLinkDescription=stringResource(R.string.a11y_copy_forwarded_link)
     val dismissNoticeDescription=stringResource(R.string.a11y_dismiss_forwarding_notice)
-    LaunchedEffect(message) {
+    LaunchedEffect(message,resumed) {
         if(message?.autoOpen==true) {
-            if((context as? ComponentActivity)?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED)==true)
+            // Keep the request pending while backgrounded; clearing it here dropped the link.
+            if(resumed) {
                 PortForwards.openBrowser(context,message.url)
-            if(PortForwards.linkNotice==message) PortForwards.linkNotice=message.copy(autoOpen=false)
+                if(PortForwards.linkNotice==message) PortForwards.linkNotice=message.copy(autoOpen=false)
+            }
         } else if(message!=null && (message.url.isNotBlank() || message.error.isNotBlank())) {
             delay(10_000)
             if(PortForwards.linkNotice==message) PortForwards.linkNotice=null
