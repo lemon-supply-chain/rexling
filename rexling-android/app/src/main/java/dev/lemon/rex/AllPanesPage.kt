@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -67,16 +68,17 @@ import androidx.compose.ui.unit.dp
             Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            ChromeButton(ChromeIcon.LEFT, "Back to sessions", onClick = onBack)
-            SwitcherSearchField(search, { search = it }, "Find a pane…", Modifier.weight(1f))
-            ChromeButton(ChromeIcon.REFRESH, "Refresh panes", enabled = !loading && sources.isNotEmpty()) {
+            ChromeButton(ChromeIcon.LEFT, stringResource(R.string.a11y_back_to_sessions), onClick = onBack)
+            SwitcherSearchField(search, { search = it }, stringResource(R.string.find_a_pane), Modifier.weight(1f))
+            ChromeButton(ChromeIcon.REFRESH, stringResource(R.string.refresh_panes), enabled = !loading && sources.isNotEmpty()) {
                 missedPane = false
                 onRefresh()
             }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp).height(2.dp))
         if (incomplete || missedPane) Text(
-            if (missedPane) "That pane is unavailable. Refresh to update the list." else "Some pane details are unavailable. Refresh to try again.",
+            if (missedPane) stringResource(R.string.pane_unavailable_refresh)
+            else stringResource(R.string.pane_details_unavailable_refresh),
             Modifier.padding(horizontal = 16.dp, vertical = 6.dp), style = SettingsType.detail, color = colors.onSurfaceVariant,
         )
         LazyColumn(
@@ -85,7 +87,9 @@ import androidx.compose.ui.unit.dp
         ) {
             if (results.isEmpty() && !loading) item {
                 Text(
-                    if (sources.isEmpty()) "No servers connected" else if (search.isBlank()) "No panes available" else "No matching panes",
+                    if (sources.isEmpty()) stringResource(R.string.no_servers_connected)
+                    else if (search.isBlank()) stringResource(R.string.no_panes_available)
+                    else stringResource(R.string.no_matching_panes),
                     Modifier.padding(vertical = 16.dp), style = SettingsType.row, color = colors.onSurfaceVariant,
                 )
             }

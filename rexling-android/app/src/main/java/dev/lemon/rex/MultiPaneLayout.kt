@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -318,24 +319,25 @@ internal fun MultiPaneLayout(
                 )
                 if(retiring) return@Box
                 if(!active) {
-                    Box(Modifier.matchParentSize().semantics {contentDescription="Focus pane"}
+                    val focusDescription=stringResource(R.string.a11y_focus_pane)
+                    Box(Modifier.matchParentSize().semantics {contentDescription=focusDescription}
                         .clickable(interactionSource=remember {MutableInteractionSource()},indication=null,role=Role.Button) {
                             onFocus(pane.id,sizes[pane.id])
                         })
                     if(pane.id in waiting || (paneFrame==null && pane.id!=liveBlock)) Text(
-                        if(paneFrame==null) "Opening terminal…" else "Reconnecting…",
+                        stringResource(if(paneFrame==null) R.string.opening_terminal else R.string.reconnecting_pane),
                         Modifier.align(Alignment.Center).background(scheme.surface).padding(6.dp),
                         color=scheme.onSurfaceVariant,fontSize=11.sp,
                     )
                 } else {
                     val display by client.displayLayout.collectAsState()
                     if(live && display.below) {
-                        Text("↓ Latest",Modifier.align(Alignment.BottomEnd).padding(10.dp)
+                        Text(stringResource(R.string.label_latest),Modifier.align(Alignment.BottomEnd).padding(10.dp)
                             .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).background(scheme.surface)
                             .clickable(role=Role.Button,onClick=client::scrollToBottom).padding(horizontal=12.dp,vertical=7.dp),
                             fontSize=11.sp,color=scheme.primary)
                     } else if(paneFrame==null && (!live || !display.hasScreen)) {
-                        Text("Opening terminal…",Modifier.align(Alignment.Center),
+                        Text(stringResource(R.string.opening_terminal),Modifier.align(Alignment.Center),
                             fontFamily=MonoUi,fontSize=12.sp,color=scheme.onSurfaceVariant)
                     }
                 }
@@ -363,24 +365,26 @@ internal fun MultiPaneLayout(
                     )
                     if(floating && canAdjustFloat) {
                         FloatingLayerGrip(
-                            ChromeIcon.MOVE,"Move floating pane",Modifier.align(Alignment.TopStart).padding(6.dp),
+                            ChromeIcon.MOVE,stringResource(R.string.a11y_move_floating_pane),Modifier.align(Alignment.TopStart).padding(6.dp),
                             onAdjust={adjustFloat(it,false)},onFinish={finishFloatAdjustment()},onCancel={cancelFloatAdjustment()},
                         )
                     } else if(!floating && !isZoomed && paneActionsEnabled) {
                         val handleCoordinates=remember {arrayOfNulls<LayoutCoordinates>(1)}
                         val otherPanes=shownTiles.filter {it.id!=pane.id}
                         val targetActions=otherPanes.map {other->
-                            CustomAccessibilityAction("Swap with pane ${shownTiles.indexOf(other)+1}") {
+                            CustomAccessibilityAction(stringResource(R.string.a11y_swap_with_pane,shownTiles.indexOf(other)+1)) {
                                 completeMove(pane.id,PaneDrop(other.id,PaneDropPosition.CENTER))
                                 true
                             }
                         }
+                        val moveDescription=stringResource(R.string.a11y_move_pane)
+                        val movingDescription=stringResource(R.string.moving)
                         PaneActionPill(Modifier.align(Alignment.TopStart).padding(6.dp),active=moveSource) {
                             Box(Modifier.size(36.dp)
                                 .onGloballyPositioned {handleCoordinates[0]=it}
                                 .semantics {
-                                    contentDescription="Move pane"
-                                    if(moveSource) stateDescription="Moving"
+                                    contentDescription=moveDescription
+                                    if(moveSource) stateDescription=movingDescription
                                     customActions=targetActions
                                 }
                                 .pointerInput(session,window,placements,pane.id) {
@@ -414,8 +418,9 @@ internal fun MultiPaneLayout(
                     }
                 } else {
                     for(corner in listOf(Alignment.TopStart,Alignment.TopEnd)) {
+                        val cornerDescription=stringResource(if(corner==Alignment.TopStart) R.string.a11y_pane_actions_top_left else R.string.a11y_pane_actions)
                         Box(Modifier.align(corner).size(44.dp)
-                            .semantics {contentDescription=if(corner==Alignment.TopStart) "Pane actions, top left" else "Pane actions"}
+                            .semantics {contentDescription=cornerDescription}
                             .clickable(enabled=!moving,interactionSource=remember {MutableInteractionSource()},
                                 indication=null,role=Role.Button) {menuFor=pane.id})
                     }
@@ -428,7 +433,7 @@ internal fun MultiPaneLayout(
             val gripTop=(visibleHeight*(layerBounds.y+layerBounds.height)-grip-5.dp)
                 .coerceAtMost(visibleHeight-grip-34.dp)
             FloatingLayerGrip(
-                ChromeIcon.RESIZE,"Resize floating pane",
+                ChromeIcon.RESIZE,stringResource(R.string.a11y_resize_floating_pane),
                 Modifier.offset(maxWidth*(layerBounds.x+layerBounds.width)-grip-5.dp,gripTop).zIndex(layerZ(resizePane.layer)+2f),
                 onAdjust={adjustFloat(it,true)},onFinish={finishFloatAdjustment()},onCancel={cancelFloatAdjustment()},
             )
@@ -449,7 +454,8 @@ internal fun MultiPaneLayout(
             val touch=24.dp
             val handle=if(horizontal) Modifier.offset(startX+spanW*shown-touch/2,startY).size(touch,spanH)
                 else Modifier.offset(startX,startY+spanH*shown-touch/2).size(spanW,touch)
-            Box(handle.semantics {contentDescription=if(horizontal) "Resize panes side by side" else "Resize stacked panes"}
+            val splitDescription=stringResource(if(horizontal) R.string.a11y_resize_panes_side_by_side else R.string.a11y_resize_stacked_panes)
+            Box(handle.semantics {contentDescription=splitDescription}
                 .pointerInput(client,session,window,split.id,horizontal) {
                     var previous: PaneResize?=null
                     val start: (Offset)->Unit={
@@ -488,21 +494,21 @@ private fun PaneCornerActions(
 ) {
     val actions=buildList {
         if(!zoomed) {
-            add(PaneCornerAction(ChromeIcon.SPLIT_RIGHT,PaneSplit.RIGHT.label) {onSplit(PaneSplit.RIGHT)})
-            add(PaneCornerAction(ChromeIcon.SPLIT_BELOW,PaneSplit.BELOW.label) {onSplit(PaneSplit.BELOW)})
-            onFloat?.let {add(PaneCornerAction(ChromeIcon.FLOAT,"Float pane",it))}
-            onDock?.let {add(PaneCornerAction(ChromeIcon.FLOAT,"Dock pane",it))}
+            add(PaneCornerAction(ChromeIcon.SPLIT_RIGHT,stringResource(PaneSplit.RIGHT.labelRes)) {onSplit(PaneSplit.RIGHT)})
+            add(PaneCornerAction(ChromeIcon.SPLIT_BELOW,stringResource(PaneSplit.BELOW.labelRes)) {onSplit(PaneSplit.BELOW)})
+            onFloat?.let {add(PaneCornerAction(ChromeIcon.FLOAT,stringResource(R.string.float_pane),it))}
+            onDock?.let {add(PaneCornerAction(ChromeIcon.FLOAT,stringResource(R.string.dock_pane),it))}
         }
         add(PaneCornerAction(if(zoomed) ChromeIcon.UNZOOM else ChromeIcon.ZOOM,
-            if(zoomed) "Restore pane layout" else "Zoom pane",onZoom))
-        onMinimize?.let {add(PaneCornerAction(ChromeIcon.MINIMIZE,"Minimize floating pane",it))}
+            stringResource(if(zoomed) R.string.restore_pane_layout else R.string.zoom_pane),onZoom))
+        onMinimize?.let {add(PaneCornerAction(ChromeIcon.MINIMIZE,stringResource(R.string.a11y_minimize_floating_pane),it))}
     }
     if(!zoomed && paneWidth<60.dp+36.dp*actions.size) {
         // Leave room for the move handle on narrow tiles.
         var expanded by remember {mutableStateOf(false)}
         Box(modifier) {
             PaneActionPill(Modifier) {
-                ChromeButton(ChromeIcon.MORE,"More pane actions",enabled=enabled) {expanded=true}
+                ChromeButton(ChromeIcon.MORE,stringResource(R.string.a11y_more_pane_actions),enabled=enabled) {expanded=true}
             }
             DropdownMenu(expanded=expanded && enabled,onDismissRequest={expanded=false}) {
                 for(action in actions) {

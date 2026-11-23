@@ -218,8 +218,8 @@ private enum class SwitcherPage(val labelRes: Int,val fallback: String) {
                                     },
                                     Modifier.animateItem(fadeInSpec=null,fadeOutSpec=null,placementSpec=if(drag.id==block.id) null else androidx.compose.animation.core.spring()).then(rowModifier(block.id)),
                                     rowActions(block.id),revealedRow==block.id,{reveal(block.id,it)},buildList {
-                                        add(SwitcherRowAction(PaneSplit.RIGHT.label,ChromeIcon.SPLIT_RIGHT,enabled=canCreatePane) {onNewPane(block.id,PaneSplit.RIGHT)})
-                                        add(SwitcherRowAction(PaneSplit.BELOW.label,ChromeIcon.SPLIT_BELOW,enabled=canCreatePane) {onNewPane(block.id,PaneSplit.BELOW)})
+                                        add(SwitcherRowAction(stringResource(PaneSplit.RIGHT.labelRes),ChromeIcon.SPLIT_RIGHT,enabled=canCreatePane) {onNewPane(block.id,PaneSplit.RIGHT)})
+                                        add(SwitcherRowAction(stringResource(PaneSplit.BELOW.labelRes),ChromeIcon.SPLIT_BELOW,enabled=canCreatePane) {onNewPane(block.id,PaneSplit.BELOW)})
                                         add(SwitcherRowAction("Rename pane",ChromeIcon.EDIT) {rename=TerminalRenameTarget(selectedWindow,block.id,false,block.label)})
                                         if(placement?.floating==true) {
                                             add(SwitcherRowAction("Dock pane",ChromeIcon.SPLIT,enabled=tiledCount>0) {dock=selectedWindow to block.id})

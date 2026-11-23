@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -51,9 +52,11 @@ import androidx.compose.ui.unit.dp
             Column(Modifier.heightIn(max=256.dp).verticalScroll(rememberScrollState()).padding(horizontal=8.dp,vertical=12.dp),horizontalAlignment=Alignment.End,verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 panes.forEach {pane->
                     val isActive=pane.id==active
+                    val paneTitle=title(pane)
+                    val paneDescription=if(isActive) stringResource(R.string.a11y_minimize_floating_pane_named,paneTitle) else stringResource(R.string.a11y_open_floating_pane,paneTitle)
                     Row(Modifier.widthIn(max=260.dp).height(32.dp).shadow(4.dp,RoundedCornerShape(16.dp),clip=false).paneFrost(haze,RoundedCornerShape(16.dp),active=isActive)
                         .clickable(enabled=enabled,role=Role.Button) {choose(pane)}
-                        .semantics {contentDescription=if(isActive) "Minimize floating pane: ${title(pane)}" else "Open floating pane: ${title(pane)}";selected=isActive},
+                        .semantics {contentDescription=paneDescription;selected=isActive},
                         verticalAlignment=Alignment.CenterVertically) {
                         Text(listOf(title(pane),directories[pane.id].orEmpty()).filter {it.isNotBlank()}.joinToString(" · "),Modifier.weight(1f,fill=false).padding(start=12.dp,end=8.dp),
                             fontSize=13.sp,lineHeight=18.sp,letterSpacing=0.sp,fontWeight=FontWeight.Medium,maxLines=1,overflow=TextOverflow.Ellipsis,
@@ -63,12 +66,19 @@ import androidx.compose.ui.unit.dp
                 }
             }
         }
+        val singleTitle=if(panes.size==1) title(panes.single()) else ""
+        val toggleDescription=when {
+            grouped->stringResource(R.string.a11y_floating_panes)
+            active!=null->stringResource(R.string.a11y_minimize_floating_pane_named,singleTitle)
+            else->stringResource(R.string.a11y_open_floating_pane,singleTitle)
+        }
+        val expandedDescription=if(expanded) stringResource(R.string.a11y_state_expanded) else stringResource(R.string.a11y_state_collapsed)
         Box(Modifier.padding(end=8.dp).size(40.dp,28.dp)
             .clickable(interactionSource=remember {MutableInteractionSource()},indication=null,enabled=enabled,role=Role.Button) {if(grouped) expanded=!expanded else choose(panes.single())}
             .semantics {
-                contentDescription=if(grouped) "Floating panes" else if(active!=null) "Minimize floating pane: ${title(panes.single())}" else "Open floating pane: ${title(panes.single())}"
+                contentDescription=toggleDescription
                 selected=active!=null
-                if(grouped) stateDescription=if(expanded) "Expanded" else "Collapsed"
+                if(grouped) stateDescription=expandedDescription
             },contentAlignment=Alignment.Center) {
             val index=panes.indexOfFirst {it.id==active}.coerceAtLeast(0)
             ProgramStack(panes.map {programs[it.id] ?: ProgramIdentity.Loading},index,fixedSlot=true,highlighted=active!=null)

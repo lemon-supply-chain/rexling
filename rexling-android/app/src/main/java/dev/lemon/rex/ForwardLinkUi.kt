@@ -45,12 +45,12 @@ import kotlinx.coroutines.delay
         val record=PortForwards.items.firstOrNull {it.id==message.id}
         val ink=androidx.compose.ui.graphics.Color(0xff202a3c)
         val label=when {
-            message.error.isNotBlank()->"Forwarding failed"
-            ready->"Forwarding ${record?.target ?: message.url.substringAfter("://").substringBefore('/')}"
-            PortForwards.conflict?.id==message.id->"Choose a phone port"
-            else->"Starting forward…"
+            message.error.isNotBlank()->stringResource(R.string.forwarding_failed)
+            ready->stringResource(R.string.forwarding_to,record?.target ?: message.url.substringAfter("://").substringBefore('/'))
+            PortForwards.conflict?.id==message.id->stringResource(R.string.choose_phone_port)
+            else->stringResource(R.string.starting_forward)
         }
-        TransferNoticeSurface(modifier,hazeState,title="Port forwarding") {
+        TransferNoticeSurface(modifier,hazeState,title=stringResource(R.string.port_forwarding)) {
             Column {
                 Row(Modifier.padding(start=8.dp,end=2.dp).heightIn(min=32.dp),
                     verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -62,7 +62,7 @@ import kotlinx.coroutines.delay
                         .semantics {contentDescription=if(ready) openLinkDescription else forwardingStatusDescription},
                         style=UploadPillText,color=ink,maxLines=1,overflow=TextOverflow.Ellipsis)
                     if(ready) IconButton(onClick={
-                        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Forwarded link",message.url))
+                        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(context.getString(R.string.forwarded_link),message.url))
                     },modifier=Modifier.size(32.dp).semantics {contentDescription=copyLinkDescription}) {
                         ChromeSymbol(ChromeIcon.COPY,Modifier.size(13.dp),color=MaterialTheme.colorScheme.primary)
                     }

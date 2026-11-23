@@ -13,9 +13,9 @@ import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 
 internal data class TerminalRenameTarget(val window: String,val id: String,val tab: Boolean,val label: String)
-internal fun terminalLabelError(value: String): String? = when {
-    value.codePointCount(0,value.length)>128->"Use at most 128 characters"
-    value.any {it.isISOControl()}->"Use a single-line name"
+internal fun terminalLabelError(value: String): Int? = when {
+    value.codePointCount(0,value.length)>128->R.string.session_name_too_long
+    value.any {it.isISOControl()}->R.string.name_single_line
     else->null
 }
 private fun editableTerminalLabel(label: String)=label.takeUnless {
@@ -29,7 +29,7 @@ private fun editableTerminalLabel(label: String)=label.takeUnless {
     AlertDialog(onDismissRequest=onClose,title={Text(stringResource(if(target.tab) R.string.label_rename_tab else R.string.label_rename_pane))},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(label,{label=it;rejected=false},Modifier.fillMaxWidth(),label={Text(stringResource(R.string.name))},singleLine=true,isError=error!=null)
-            Text(error ?: stringResource(if(rejected) R.string.label_terminal_changed else R.string.label_leave_empty_hint),style=SettingsType.detail,
+            Text(error?.let {stringResource(it)} ?: stringResource(if(rejected) R.string.label_terminal_changed else R.string.label_leave_empty_hint),style=SettingsType.detail,
                 color=if(error!=null || rejected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     },confirmButton={TextButton(enabled=enabled && error==null,onClick={if(onSave(label.trim())) onClose() else rejected=true}) {Text(stringResource(R.string.save))}},
@@ -50,7 +50,7 @@ private fun editableTerminalLabel(label: String)=label.takeUnless {
     val selected=anchors.firstOrNull {it.id==anchor}
     fun title(block: BlockItem)=(programs[block.id] ?: ProgramIdentity.Loading).paneTitle(block.label,titles[block.id].orEmpty())
     fun choose(id: String) {anchor=id;picker=false;rejected=false}
-    SettingsDrawer(stringResource(R.string.label_dock_pane),"Close dock pane",onClose,hazeState,surfaceColor=MaterialTheme.colorScheme.surface) {
+    SettingsDrawer(stringResource(R.string.label_dock_pane),stringResource(R.string.close_dock_pane),onClose,hazeState,surfaceColor=MaterialTheme.colorScheme.surface) {
         Column(
             Modifier.weight(1f,fill=false).fillMaxWidth().verticalScroll(rememberScrollState())
                 .padding(horizontal=16.dp).padding(bottom=12.dp),
@@ -73,7 +73,7 @@ private fun editableTerminalLabel(label: String)=label.takeUnless {
                             anchors.forEach {block->DropdownMenuItem(text={Text(title(block),style=SettingsType.detail)},onClick={choose(block.id)})}
                         }
                     } else if(selected!=null) {
-                        Text("Dock next to ${title(selected)}",style=SettingsType.detail,maxLines=1,overflow=TextOverflow.Ellipsis,
+                        Text(stringResource(R.string.dock_next_to,title(selected)),style=SettingsType.detail,maxLines=1,overflow=TextOverflow.Ellipsis,
                             color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -90,7 +90,7 @@ private fun editableTerminalLabel(label: String)=label.takeUnless {
                         ChromeSymbol(if(right) ChromeIcon.SPLIT_RIGHT else ChromeIcon.SPLIT_BELOW,
                             Modifier.size(16.dp),LocalContentColor.current)
                         Spacer(Modifier.width(6.dp))
-                        Text(if(right) "Dock right" else "Dock below",style=SettingsType.row)
+                        Text(stringResource(if(right) R.string.dock_right else R.string.dock_below),style=SettingsType.row)
                     }
                 }
             }

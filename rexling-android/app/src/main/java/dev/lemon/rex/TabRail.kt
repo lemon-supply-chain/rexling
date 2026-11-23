@@ -24,6 +24,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -117,6 +119,8 @@ internal enum class TabWidthClass(
     LaunchedEffect(ids) {menuId=null}
     LaunchedEffect(selectedId,reorderKey,index) {if(index>=0) list.animateScrollToItem(index)}
     val islandShape=androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val styleToggleDescription=stringResource(if(titles) R.string.show_icons_only else R.string.show_tab_titles)
+    val tabsDescription=stringResource(R.string.a11y_tabs)
     Column(Modifier.fillMaxHeight()
         .then(if(island) Modifier.padding(start=if(side==TabBarPosition.LEFT) 8.dp else 0.dp,end=if(side==TabBarPosition.RIGHT) 8.dp else 0.dp,top=8.dp,bottom=islandBottom)
             .width(width).clip(islandShape).background(scheme.surface).border(1.5.dp,scheme.outline.copy(alpha=.25f),islandShape)
@@ -137,10 +141,10 @@ internal enum class TabWidthClass(
                 swipe=0f
                 if(next!=style) {haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress);onStyle(next)}
             })
-        .semantics {customActions=listOf(CustomAccessibilityAction(if(titles) "Show icons only" else "Show tab titles") {
+        .semantics {customActions=listOf(CustomAccessibilityAction(styleToggleDescription) {
             onStyle(if(titles) TabRailStyle.ICONS else TabRailStyle.TITLES);true})}
         .padding(vertical=4.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().semantics {contentDescription="Tabs"},state=list,
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().semantics {contentDescription=tabsDescription},state=list,
             contentPadding=PaddingValues(horizontal=if(titles) 4.dp else 2.dp,vertical=2.dp),verticalArrangement=Arrangement.spacedBy(4.dp,Alignment.Bottom)) {
             itemsIndexed(windows,key={_,w->w.id}) {i,w->
                 fun moveBy(delta: Int): Boolean {
@@ -158,6 +162,11 @@ internal enum class TabWidthClass(
                 val progress=paneProgress(w)
                 val busy=paneWorking(w) || progress?.busy==true
                 val indicator=terminalProgressColor(progress)
+                val tabDescription=stringResource(if(busy && progress==null) R.string.a11y_tab_working else R.string.a11y_tab,title,program.label)
+                val unreadDescription=pluralStringResource(R.plurals.a11y_unread_items,unread,unread)
+                val moveUpLabel=stringResource(R.string.move_up)
+                val moveDownLabel=stringResource(R.string.move_down)
+                val tabOptionsLabel=stringResource(R.string.tab_options)
                 Box(Modifier.animateItem(fadeInSpec=null,fadeOutSpec=null)) {
                     val workPhase=rememberWorkingPhase(animateWorking && active && if(progress!=null) progress.busy && progress.percent==null else busy)
                     Row(Modifier.fillMaxWidth().height(48.dp)
@@ -174,16 +183,16 @@ internal enum class TabWidthClass(
                                 } else drawWorkingBar(indicator,origin,bar,phase=if(busy && animateWorking) workPhase.value else null)
                             }
                         }
-                        .semantics(mergeDescendants=true) {contentDescription="Tab $title, ${program.label}"+(progress?.let {", ${it.description}"} ?: if(busy) ", working" else "")}
+                        .semantics(mergeDescendants=true) {contentDescription=tabDescription+(progress?.let {", ${it.description}"} ?: "")}
                         .semantics {
                             selected=active
-                            if(unread>0) stateDescription="$unread new activity items"
+                            if(unread>0) stateDescription=unreadDescription
                             if(enabled) customActions=buildList {
-                                if(i>0) add(CustomAccessibilityAction("Move up") {moveBy(-1)})
-                                if(i<windows.lastIndex) add(CustomAccessibilityAction("Move down") {moveBy(1)})
+                                if(i>0) add(CustomAccessibilityAction(moveUpLabel) {moveBy(-1)})
+                                if(i<windows.lastIndex) add(CustomAccessibilityAction(moveDownLabel) {moveBy(1)})
                             }
                         }
-                        .combinedClickable(enabled=enabled,role=Role.Tab,onLongClickLabel="Tab options",
+                        .combinedClickable(enabled=enabled,role=Role.Tab,onLongClickLabel=tabOptionsLabel,
                             onLongClick={menuId=w.id},onClick={onSelect(w.id)})
                         .padding(horizontal=if(titles) 6.dp else 0.dp),
                         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(titles) Arrangement.spacedBy(4.dp) else Arrangement.Center) {
@@ -198,16 +207,16 @@ internal enum class TabWidthClass(
                             fontWeight=if(active) FontWeight.Bold else FontWeight.Normal,color=if(active) scheme.onSurface else scheme.onSurfaceVariant)
                     }
                     DropdownMenu(menuId==w.id,{menuId=null},containerColor=scheme.surface,tonalElevation=0.dp) {
-                        TerminalMenuItem("Move up",ChromeIcon.UP,enabled=enabled && i>0,onClick={menuId=null;moveBy(-1)})
-                        TerminalMenuItem("Move down",ChromeIcon.DOWN,enabled=enabled && i<windows.lastIndex,onClick={menuId=null;moveBy(1)})
-                        TerminalMenuItem("Close tab",ChromeIcon.CLOSE,enabled=enabled,onClick={menuId=null;onClose(w)})
+                        TerminalMenuItem(moveUpLabel,ChromeIcon.UP,enabled=enabled && i>0,onClick={menuId=null;moveBy(-1)})
+                        TerminalMenuItem(moveDownLabel,ChromeIcon.DOWN,enabled=enabled && i<windows.lastIndex,onClick={menuId=null;moveBy(1)})
+                        TerminalMenuItem(stringResource(R.string.close_tab),ChromeIcon.CLOSE,enabled=enabled,onClick={menuId=null;onClose(w)})
                     }
                 }
             }
         }
         // Points the way the rail will go: toward the terminal to show titles, toward the edge to hide them.
         val towardTerminal=if(side==TabBarPosition.LEFT) -90f else 90f
-        ChromeButton(ChromeIcon.CHEVRON,if(titles) "Show icons only" else "Show tab titles",
+        ChromeButton(ChromeIcon.CHEVRON,styleToggleDescription,
             modifier=Modifier.graphicsLayer {rotationZ=if(titles) -towardTerminal else towardTerminal}) {
             onStyle(if(titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
         }
