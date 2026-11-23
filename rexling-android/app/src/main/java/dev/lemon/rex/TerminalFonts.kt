@@ -18,7 +18,7 @@ data class TerminalMetrics(val cellWidth: Float, val cellHeight: Float, val base
 /** Nerd Font Mono keeps icon glyphs and text on the same fixed grid on every device. */
 class TerminalFonts(private val context: Context,private val compositeFallback: Boolean=Build.VERSION.SDK_INT>=29) {
     private val faces=if(compositeFallback && Build.VERSION.SDK_INT>=29) Api29.faces(context.resources)
-        else listOf(R.font.jetbrains_nerd_regular,R.font.jetbrains_nerd_bold,R.font.jetbrains_nerd_italic,R.font.jetbrains_nerd_bold_italic).map(context.resources::getFont)
+        else List(4) { context.resources.getFont(R.font.jetbrains_nerd_regular) }
     val regular: Typeface get()=faces[0]
     val bold: Typeface get()=faces[1]
     val italic: Typeface get()=faces[2]
@@ -46,11 +46,8 @@ class TerminalFonts(private val context: Context,private val compositeFallback: 
         @Volatile private var cached: List<Typeface>?=null
         fun faces(resources: Resources): List<Typeface> = cached ?: synchronized(this) {
             cached ?: run {
-                val ids=listOf(R.font.jetbrains_nerd_regular,R.font.jetbrains_nerd_bold,R.font.jetbrains_nerd_italic,R.font.jetbrains_nerd_bold_italic)
                 fun style(index: Int)=FontStyle(if(index and 1!=0) 700 else 400,if(index and 2!=0) FontStyle.FONT_SLANT_ITALIC else FontStyle.FONT_SLANT_UPRIGHT)
-                fun font(index: Int)=Font.Builder(resources,ids[index]).setWeight(if(index and 1!=0) 700 else 400).setSlant(style(index).slant).build()
-                val builder=FontFamily.Builder(font(0));for(index in 1..3) builder.addFont(font(index))
-                val primary=builder.build()
+                val primary=FontFamily.Builder(Font.Builder(resources,R.font.jetbrains_nerd_regular).build()).build()
                 val symbols=FontFamily.Builder(Font.Builder(resources,R.font.noto_sans_symbols2).build()).build()
                 List(4) {index->Typeface.CustomFallbackBuilder(primary).addCustomFallback(symbols).setSystemFallback("monospace").setStyle(style(index)).build()}
                     .also {cached=it}

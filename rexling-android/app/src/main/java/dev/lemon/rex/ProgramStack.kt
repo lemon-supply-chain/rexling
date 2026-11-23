@@ -85,7 +85,7 @@ internal fun ProgramStack(
                 .then(tileHighlight),
             framed,
             if (others.isNotEmpty()) -6f else 0f,
-            marquee = if (isPaneWorking(front)) marquee else null,
+            marquee = if (isPaneWorking(front) || progress?.busy == true) marquee else null,
             progress = progress,
         )
     }

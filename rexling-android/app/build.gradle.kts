@@ -41,8 +41,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    packaging { jniLibs { useLegacyPackaging = false } }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            excludes += "**/libc++_shared.so"
+        }
+    }
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
             // Preserve the installed prototype identity for local release upgrades.
             signingConfig=signingConfigs.getByName("debug")

@@ -28,3 +28,10 @@ url = "2.5"
 [workspace]
 members = [".", "jni", "probe"]
 resolver = "2"
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+strip = true
+

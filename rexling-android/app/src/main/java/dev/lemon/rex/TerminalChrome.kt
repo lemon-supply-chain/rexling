@@ -1135,8 +1135,10 @@ internal fun TerminalTabs(
     val list = rememberLazyListState()
     val tabsDescription = stringResource(R.string.a11y_tabs)
     val context = androidx.compose.ui.platform.LocalContext.current
-    val marquee = rememberRainbowMarquee(animateWorking && windows.any(paneWorking))
-    val settledMarquee = remember { RainbowMarquee(mutableStateOf(0f), mutableStateOf(0f)) }
+    val marquee =
+        rememberRainbowMarquee(
+            animateWorking && windows.any { paneWorking(it) || paneProgress(it)?.busy == true }
+        )
     val drag = remember(reorderKey) { TabDrag() }
     var menuId by remember(reorderKey) { mutableStateOf<String?>(null) }
     val ids = windows.map { it.id }
@@ -1286,7 +1288,6 @@ internal fun TerminalTabs(
                     val workPhase =
                         rememberWorkingPhase(
                             animateWorking &&
-                                active &&
                                 if (progress != null) progress.busy && progress.percent == null
                                 else busy
                         )
@@ -1324,7 +1325,7 @@ internal fun TerminalTabs(
                                 .width(width)
                                 .drawWithContent {
                                     drawContent()
-                                    if (active) {
+                                    if (active || busy || progress != null) {
                                         val origin = Offset(0f, size.height - 2.dp.toPx())
                                         val bar = Size(size.width, 2.dp.toPx())
                                         if (progress != null) {
@@ -1414,10 +1415,11 @@ internal fun TerminalTabs(
                                         programs,
                                         pane,
                                         fixedSlot = true,
-                                        marquee =
-                                            if (active || marquee == null) marquee
-                                            else settledMarquee,
-                                        isPaneWorking = { isPaneWorking(w, it) },
+                                        marquee = marquee,
+                                        isPaneWorking = {
+                                            isPaneWorking(w, it) ||
+                                                (it == pane && progress?.busy == true)
+                                        },
                                         progress = progress,
                                     )
                                     if (unread > 0) {
