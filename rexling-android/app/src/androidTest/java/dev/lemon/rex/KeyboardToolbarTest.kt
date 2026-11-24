@@ -210,7 +210,7 @@ class KeyboardToolbarTest {
             }
         }
         ui.onNodeWithContentDescription(appString(R.string.paste)).performClick()
-        ui.onNodeWithContentDescription(appString(R.string.enter_section)).performClick()
+        ui.onNodeWithContentDescription("Enter").performClick()
         ui.onNodeWithContentDescription("Ctrl+C").performClick()
         ui.runOnIdle {
             assertEquals(1, pasted)

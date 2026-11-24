@@ -336,9 +336,7 @@ class KeyboardBarTest {
             .performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
             .assertDoesNotExist()
-        ui.onNodeWithContentDescription(appString(R.string.enter_section))
-            .assertIsNotEnabled()
-            .performTouchInput { click() }
+        ui.onNodeWithContentDescription("Enter").assertIsNotEnabled().performTouchInput { click() }
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
     }
 
@@ -454,9 +452,7 @@ class KeyboardBarTest {
             ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard))
                 .fetchSemanticsNode()
                 .boundsInRoot
-        ui.onNodeWithContentDescription(appString(R.string.enter_section)).performTouchInput {
-            click()
-        }
+        ui.onNodeWithContentDescription("Enter").performTouchInput { click() }
         ui.runOnIdle { assertEquals(listOf("\r"), sent) }
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
             .assertIsNotDisplayed()
@@ -689,10 +685,7 @@ class KeyboardBarTest {
             }
         }
         capture("arrow-dock", ui.onNodeWithTag("Keyboard dock"))
-        val enter =
-            ui.onNodeWithContentDescription(appString(R.string.enter_section))
-                .fetchSemanticsNode()
-                .boundsInRoot
+        val enter = ui.onNodeWithContentDescription("Enter").fetchSemanticsNode().boundsInRoot
         val trigger = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         trigger.performTouchInput {
             down(center)
@@ -704,9 +697,7 @@ class KeyboardBarTest {
         assertEquals(face.width, face.height, 1f)
         assertEquals(
             enter,
-            ui.onNodeWithContentDescription(appString(R.string.enter_section))
-                .fetchSemanticsNode()
-                .boundsInRoot,
+            ui.onNodeWithContentDescription("Enter").fetchSemanticsNode().boundsInRoot,
         )
         capture("arrow-joystick-light", popup)
         ui.runOnIdle { dark.value = true }
