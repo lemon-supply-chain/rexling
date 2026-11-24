@@ -318,3 +318,20 @@ Queue the intent (or open it from `ON_RESUME`) instead of discarding it.
 4. Correct the research note and stale comments (2.1, 2.2).
 5. Pay down i18n and token debt for the files touched here (2.3, 2.5).
 6. Add CI and a whole-tree formatter pass as separate, no-behavior commits (2.6, 2.7).
+
+## Status (2026-11-24)
+
+Fixed in the review follow-ups: 1.2 (the invalidator now keeps a test-visible weak reference,
+stops after two frames with a source layer or eight attempts without one, and
+`DrawerFrostTest` asserts that it disarms), 1.3, 1.4/1.5 (network initialization gate,
+consumer-driven foreground polling with backoff, `configurationError` surfaced and retried),
+2.1/2.2 (docs and comments), 2.3 (remaining UI copy routed through resources; instrumented
+tests resolve copy with `appString()`), 2.4 (24 unused strings and the dinosaur drawable
+removed, dead `connectionMessage` deleted, English enum duplicates dropped, window colours
+moved to resources), 2.5 (frost tokens), 2.6 (ktfmt plugin, whole-tree pass, CI check),
+2.7 (verify workflow), 2.10 (auto-open survives backgrounding).
+
+Still open: 2.8 (one connection per saved server), 2.9 (cleartext warning), 3 (the worst
+remaining nit: `TerminalProgress.description` and `ProgramIdentity` labels are still English
+model strings, not resources), and device-level verification — the instrumented suite still
+cannot install on the attached device (`INSTALL_FAILED_USER_RESTRICTED`).

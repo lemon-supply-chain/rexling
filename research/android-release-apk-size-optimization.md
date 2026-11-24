@@ -48,3 +48,14 @@ Release build comparison before and after applying optimizations:
 - Installation: `adb install -r rexling-android/app/build/outputs/apk/release/app-release.apk` (Success)
 - Launch & Runtime: Process `dev.lemon.rex` started cleanly with zero runtime crashes or missing symbol exceptions.
 - Unit Tests: All debug and release unit tests passed (`BUILD SUCCESSFUL`).
+
+## Current measurement
+
+Measured on 2026-11-24 from this tree (build 171 plus the review follow-ups):
+
+- Compressed APK: **29.38 MB** (28.01 MiB); the "After" column above is the original
+  baseline from the change that introduced this analysis.
+- `lib/arm64-v8a/librex_android.so` 4.53 MB, `librex_network.so` 16.87 MB, and no
+  `libc++_shared.so`.
+- The tree since gained localized `values-zh` copy, the contact-shadow removal and the
+  ktfmt pass; re-measure after a dependency bump instead of trusting these numbers.

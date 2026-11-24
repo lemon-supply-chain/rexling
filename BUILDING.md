@@ -7,7 +7,7 @@ arm64-v8a Android 9/API 28 or newer; other Android ABIs are not built yet.
 
 ## Prerequisites
 
-- Rust 1.93+ and rustup, with Cargo available on PATH or under `~/.cargo/bin`.
+- Rust 1.100+ and rustup, with Cargo available on PATH or under `~/.cargo/bin`.
 - Python 3.9+ and curl for the native build helper.
 - Android Studio, or an Android SDK plus JDK 25.
 - SDK platform `platforms;android-37`, Build Tools `build-tools;36.0.0`, NDK

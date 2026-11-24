@@ -352,10 +352,10 @@ Synchronized all upstream features and UI/UX design through `d786ea0cef9480e03e5
 
 ---
 
-## Verification
-- Rust Core (`rexling-core`): 50 passed, 3 ignored (6 suites).
-- Rust JNI Bridge (`rexling-core/jni`): 109 passed, 17 ignored (2 suites).
+## Verification (2026-11-24, after the review follow-ups)
+- Rust workspace: `cargo test --workspace` 167 passed, 20 ignored (13 suites); `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean.
 - JNI Smoke Test (`rexling-android/scripts/test_jni.py`): PASSED (handles, worker, snapshot, Unicode, secret redaction, and cleanup).
-- Android Application Unit Tests (`rexling-android`):
-  - Unit tests: 326 passed, 1 skipped (`./gradlew testDebugUnitTest` SUCCESS).
-  - Debug APK assembly: `BUILD SUCCESSFUL` (`./gradlew assembleDebug`).
+- Android Application Unit Tests (`rexling-android`): 327 passed, 1 skipped (`./gradlew :app:testDebugUnitTest`).
+- Lint: `./gradlew :app:lintDebug` 0 errors, 0 unused resources.
+- Formatting: `./gradlew ktfmtCheck` clean (ktfmt Gradle plugin 0.28.0).
+- Debug and release APK assembly: `BUILD SUCCESSFUL`; release APK 29.38 MB (`:app:assembleRelease`).
