@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -151,7 +150,6 @@ internal fun PaneProgramTile(
         modifier
             .graphicsLayer { rotationZ = rotation }
             .rainbowMarquee(marquee, radius)
-            .shadow(if (large) 2.dp else 1.dp, shape)
             .clip(shape)
             .background(Brush.verticalGradient(colors))
             .drawWithContent {

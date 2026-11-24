@@ -15,7 +15,7 @@ used by the chrome.
 | --- | --- |
 | Tiles render at roughly 18–27dp and 34dp | Compact tiles cannot carry a multi-layer material. |
 | Vector catalog supports paths, solid fills and linear/radial gradients only | No runtime SVG filters; blur is pre-rendered or absent. |
-| Hardware canvas has no blur filter below API 31 | Contact shadows are cached software-rendered bitmaps. |
+| Hardware canvas has no blur filter below API 31 | Contact shadows are removed; the 1px inner rim provides edge contrast without dirty halos. |
 | 162 brand-coloured logos | Material is derived from each tile's own plate colour. |
 | Redraw happens every frame while a tile animates | Material is static per tile; no per-frame shader or bitmap rebuilds. |
 | Artwork carries its own squircle edge inset | Never clip the plate to a rounded rectangle; use the artwork outline. |
@@ -30,28 +30,27 @@ haze at 18dp.
 
 ### Compact: below 30dp
 
-1. Contact shadow, sized for the tile.
-2. Flat brand plate.
-3. One device-pixel rim along the top and sides, fading by mid height.
+1. Flat brand plate.
+2. One device-pixel rim along the top and sides, fading by mid height.
 
-No body ramp, no keel, no sheen, no symbol shadow or rim. The plate stays close
+No body ramp, no keel, no sheen, no symbol shadow or rim, and no contact shadow. The plate stays close
 to the brand colour, and the rim is the only material cue.
 
 ### Detailed: 30dp and above
 
-1. Contact shadow.
-2. Body ramp: a warm top, the brand colour at mid height, and a darker bottom
+1. Body ramp: a warm top, the brand colour at mid height, and a darker bottom
    derived from the same hue. The ramp does not mix every accent toward a
    shared blue.
-3. Keel: a soft dark gradient in the bottom quarter.
-4. Rim: one device-pixel inner edge, brightest at the top.
-5. Sheen: a low white wash over the top 40%.
-6. Symbol: brand colours stay; the logo keeps a one-pixel bright rim offset above
+2. Keel: a soft dark gradient in the bottom quarter.
+3. Rim: one device-pixel inner edge, brightest at the top.
+4. Sheen: a low white wash over the top 40%.
+5. Symbol: brand colours stay; the logo keeps a one-pixel bright rim offset above
    without downward hard shadow replays.
-7. Grain: reserved for a later pass; not implemented.
+6. Grain: reserved for a later pass; not implemented.
 
 Legibility rule: the compact tier is the default. The detailed tier is only
-used when the tile is at least 30dp wide.
+used when the tile is at least 30dp wide. Contact shadows are intentionally omitted
+to keep tab rows and chrome clean and avoid smudged halos.
 
 ---
 
@@ -83,7 +82,7 @@ tiles look like a different product from the catalog tiles.
 | Keel | Detailed | `scripts/build_program_vectors.py` | Bottom-quarter gradient in the accent's own dark tone. |
 | Sheen | Detailed | `scripts/build_program_vectors.py` | Top-40% white wash. |
 | Rim | Both | `ProgramVectorPicture.drawRim` | A 2px stroke clipped to the inner half, so one device pixel remains visible at every density. |
-| Contact shadow | Both | `TileShadow` | Cached bitmap per tile and pixel size; blur and offset are tiered. |
+| Contact shadow | Both | — | Removed; previously produced a dirty halo at small chrome sizes and accumulated software bitmap memory. |
 | Symbol shadow | Detailed | — | Removed; previously unblurred downward replays produced a 2010s hard bevel / reflection. |
 | Symbol rim | Detailed | `ProgramVectorPicture` | One device-pixel white offset above the logo. |
 | Grain | Detailed | — | Not implemented. |
@@ -115,7 +114,7 @@ frame.
 | --- | --- | --- |
 | Plate | Flat accent | Body ramp + keel + sheen |
 | Rim | 1 device px | 1 device px |
-| Contact shadow dy / blur | 0.5 / 0.8dp at 22dp; 0.8 / 1.2dp up to 29dp | 1.0 / 1.6dp |
+| Contact shadow dy / blur | off | off |
 | Symbol shadow / rim | off | on |
 | Grain | off | not implemented |
 
@@ -132,7 +131,7 @@ Unknown programs keep the same plate language as the catalog:
 - a solid or three-stop vertical gradient derived from the skin colours;
 - no white top wash and no 1dp white border;
 - a one-pixel inner rim with the same top-to-bottom falloff;
-- a single Compose shadow, not a second shadow stacked on the material shadow.
+- no drop shadow or contact shadow.
 
 `TERMINAL`, `SSH` and `TMUX` skins intentionally have no tile, so executable
 and candidate artwork can still win. Their fallback plate is now flat rather

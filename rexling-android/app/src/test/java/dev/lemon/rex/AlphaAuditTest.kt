@@ -17,7 +17,6 @@ class AlphaAuditTest {
     private val renderingFiles = setOf(
         "PaneFrost.kt",
         "PaneCompositing.kt",
-        "TileMaterial.kt",
         "ProgramIcon.kt",
         "ProgramStack.kt",
         "ProgramVectorPicture.kt",

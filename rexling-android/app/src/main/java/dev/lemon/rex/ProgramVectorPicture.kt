@@ -18,7 +18,6 @@ import android.graphics.RectF
 import android.graphics.Shader
 import androidx.core.graphics.PathParser
 import kotlin.math.ceil
-import kotlin.math.max
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -34,7 +33,6 @@ private constructor(
     private val accent: Int,
     private val outline: Path?,
 ) {
-    private val dark = neutral(darken(accent))
     private val symbolRim =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
@@ -125,7 +123,6 @@ private constructor(
         canvas.rotate(rotation, width / 2, height / 2)
         canvas.scale(width / this.width, height / this.height)
         val unitsToPx = (width / this.width).coerceAtLeast(.01f)
-        if (outline != null) contactShadow(canvas, width, height, unitsToPx, density, outline)
         canvas.drawPicture(if (detailed && surface != null) surface else flat)
         if (outline != null) drawRim(canvas, outline, unitsToPx)
         if (symbol != null) {
@@ -155,43 +152,6 @@ private constructor(
         rimPaint.strokeWidth = 2f / unitsToPx
         canvas.drawPath(outline, rimPaint)
         canvas.restoreToCount(layer)
-    }
-
-    private fun contactShadow(
-        canvas: Canvas,
-        width: Float,
-        height: Float,
-        unitsToPx: Float,
-        density: Float,
-        outline: Path,
-    ) {
-        val widthDp = width / density
-        val (blurDp, dyDp) =
-            when {
-                widthDp >= 30f -> 1.6f to 1.0f
-                widthDp >= 24f -> 1.2f to .8f
-                else -> .8f to .5f
-            }
-        val image =
-            TileShadow.get(
-                "$key:${width.toInt()}x${height.toInt()}",
-                outline,
-                width.toInt(),
-                height.toInt(),
-                unitsToPx,
-                max(1f, blurDp * density),
-                dyDp * density,
-                dark,
-                .3f,
-            ) ?: return
-        canvas.drawBitmap(
-            image.bitmap,
-            Matrix().apply {
-                setScale(1f / unitsToPx, 1f / unitsToPx)
-                postTranslate(-image.pad / unitsToPx, -image.pad / unitsToPx)
-            },
-            null,
-        )
     }
 
     companion object {
@@ -343,25 +303,9 @@ private constructor(
             return matrix
         }
 
-        /** Darker tone of the accent, near 20% value, for tile and symbol shadows. */
-        private fun darken(color: Int): Int {
-            val hsv = FloatArray(3)
-            Color.colorToHSV(color, hsv)
-            hsv[2] *= .2f
-            return Color.HSVToColor(Color.alpha(color), hsv)
-        }
-
         private fun luminance(color: Int): Float =
             (.299f * Color.red(color) + .587f * Color.green(color) + .114f * Color.blue(color)) /
                 255f
-
-        /** Shadows lean neutral so a brand hue never tints the surrounding surface. */
-        private fun neutral(color: Int): Int =
-            Color.rgb(
-                (Color.red(color) * .45f).toInt().coerceIn(0, 255),
-                (Color.green(color) * .45f + 3f).toInt().coerceIn(0, 255),
-                (Color.blue(color) * .45f + 9f).toInt().coerceIn(0, 255),
-            )
 
         private fun JSONObject.float(key: String) = getDouble(key).toFloat()
 
