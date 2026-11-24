@@ -1,4 +1,9 @@
-plugins { id("com.android.test") }
+plugins {
+    id("com.android.test")
+    id("com.ncorti.ktfmt.gradle")
+}
+
+ktfmt { kotlinLangStyle() }
 android {
     namespace="dev.lemon.rex.benchmark"
     compileSdk {version=release(37)}

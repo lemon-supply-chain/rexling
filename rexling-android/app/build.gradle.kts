@@ -7,7 +7,10 @@ import java.time.format.DateTimeFormatter
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.ncorti.ktfmt.gradle")
 }
+
+ktfmt { kotlinLangStyle() }
 // SOURCE_DATE_EPOCH allows rebuilding an older release with its original UTC date.
 val buildInstant=providers.environmentVariable("SOURCE_DATE_EPOCH").orNull?.let {Instant.ofEpochSecond(it.toLong())} ?: Instant.now()
 val dateVersion=DateTimeFormatter.ofPattern("yyyy.MM.dd").withZone(ZoneOffset.UTC).format(buildInstant)
