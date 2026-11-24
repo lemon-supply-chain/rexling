@@ -536,9 +536,15 @@ class TerminalImeViewportTest {
             MaterialTheme {
                 val ime = WindowInsets.ime
                 val navigation = WindowInsets.navigationBars
+                // Production shape for a shown panel: top/horizontal safe insets only, the
+                // IME padding, and the terminal extending under the navigation bar.
                 Column(
                     Modifier.fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                            ),
+                        )
                         .imePadding(),
                 ) {
                     Spacer(Modifier.height(48.dp))
@@ -559,7 +565,11 @@ class TerminalImeViewportTest {
                                 }
                             },
                             modifier =
-                                Modifier.fillMaxSize().terminalImeViewport(ime, navigation) {
+                                Modifier.fillMaxSize().terminalImeViewport(
+                                    ime,
+                                    navigation,
+                                    extendsUnderNavigation = true,
+                                ) {
                                     cursorBottom
                                 },
                             update = { cursorBottom = it.keyboardFocus },

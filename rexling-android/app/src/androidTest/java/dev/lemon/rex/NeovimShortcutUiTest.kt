@@ -687,14 +687,10 @@ class NeovimShortcutUiTest {
             .performClick()
         ui.waitForIdle()
         fun checkCentered(resting: Rect) {
-            // Native and Compose bounds can differ by one device pixel.
-            val opened = nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim"))
-            assertTrue(
-                "Opening the wheel must not move its button: $resting vs $opened",
-                kotlin.math.abs(resting.left - opened.left) <= 1f &&
-                    kotlin.math.abs(resting.top - opened.top) <= 1f &&
-                    kotlin.math.abs(resting.right - opened.right) <= 1f &&
-                    kotlin.math.abs(resting.bottom - opened.bottom) <= 1f,
+            assertSameBounds(
+                "Opening the wheel must not move its button",
+                resting,
+                nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim")),
             )
             // Translate the Compose anchor into native screen coordinates.
             val button =
@@ -720,7 +716,11 @@ class NeovimShortcutUiTest {
             .performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertDoesNotExist()
-        assertEquals(rest, nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim")))
+        assertSameBounds(
+            "Closing the wheel must restore the button",
+            rest,
+            nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim")),
+        )
         ui.runOnIdle {
             assertEquals(0, saved)
             position.value = Offset(1f, 0f)
@@ -1348,6 +1348,17 @@ class NeovimShortcutUiTest {
             SystemClock.sleep(20)
         }
         error("No native node $description")
+    }
+
+    /** Compose and native bounds may differ by one device pixel. */
+    private fun assertSameBounds(label: String, expected: Rect, actual: Rect) {
+        assertTrue(
+            "$label: $expected vs $actual",
+            kotlin.math.abs(expected.left - actual.left) <= 1f &&
+                kotlin.math.abs(expected.top - actual.top) <= 1f &&
+                kotlin.math.abs(expected.right - actual.right) <= 1f &&
+                kotlin.math.abs(expected.bottom - actual.bottom) <= 1f,
+        )
     }
 
     private fun nativeTap(x: Float, y: Float) {

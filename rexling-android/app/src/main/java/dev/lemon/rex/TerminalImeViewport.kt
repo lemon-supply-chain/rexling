@@ -29,14 +29,21 @@ internal class TerminalImePanState {
             offset = terminalImePan(lastFocus, visibleHeight, covered)
         } else if (focus != null && covered > 0) {
             // Once the keyboard settles, do not recenter on every cursor move.
-            // Status lines can change the prompt/content heuristic abruptly.
-            // Only reveal a cursor that actually leaves the visible viewport.
+            // When the cursor leaves the viewport, reveal the prompt footer and
+            // status lines too if they fit above the keyboard; an in-viewport
+            // cursor step (an editor arrow) keeps the current offset.
+            val content = ceil(focus.contentBottom - visibleHeight).toInt()
+            val cursor = ceil(focus.cursorBottom - visibleHeight).toInt()
+            val row = (focus.cursorBottom - focus.top).coerceAtLeast(1f)
+            val overshoot = focus.cursorBottom - (offset + visibleHeight)
             offset =
                 when {
                     focus.top < offset -> floor(focus.top).toInt()
-                    focus.cursorBottom > offset + visibleHeight ->
-                        ceil(focus.cursorBottom - visibleHeight).toInt()
-                    else -> offset
+                    overshoot <= 0f -> offset
+                    // A cursor that jumped well past the edge (a prompt at the bottom)
+                    // brings its footer and status lines; a one-row arrow does not.
+                    overshoot > row && content > offset && content <= covered -> content
+                    else -> cursor
                 }.coerceIn(0, covered)
         }
         return offset
