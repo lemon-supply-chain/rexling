@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.json.JSONObject
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -49,16 +50,19 @@ class TerminalProgressUiTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription("Working · 40%", substring = true).assertIsDisplayed()
+        // A determinate report shows its percentage; the state word replaces it otherwise.
+        fun described(@androidx.annotation.StringRes id: Int, vararg args: Any) =
+            ui.onNodeWithContentDescription(appString(id, *args), substring = true)
+        described(R.string.a11y_progress_percent, 40).assertIsDisplayed()
         capture("progress-tab-light.png")
         ui.runOnIdle { report = TerminalProgress("pause", 40) }
-        ui.onNodeWithContentDescription("Paused · 40%", substring = true).assertIsDisplayed()
+        described(R.string.a11y_progress_paused).assertIsDisplayed()
         ui.runOnIdle { report = TerminalProgress("error", 40) }
-        ui.onNodeWithContentDescription("Failed · 40%", substring = true).assertIsDisplayed()
+        described(R.string.a11y_progress_failed).assertIsDisplayed()
         ui.runOnIdle { report = TerminalProgress("indeterminate", null) }
-        ui.onNodeWithContentDescription("Working", substring = true).assertIsDisplayed()
+        described(R.string.a11y_progress_working).assertIsDisplayed()
         ui.runOnIdle { report = null }
-        ui.onNodeWithContentDescription("40%", substring = true).assertDoesNotExist()
+        described(R.string.a11y_progress_percent, 40).assertDoesNotExist()
         ui.onNodeWithText("Cargo build").assertIsDisplayed()
     }
 
@@ -78,10 +82,25 @@ class TerminalProgressUiTest {
                     {},
                     {},
                     {},
+                    initialFilter = ActivityFilter.ALL,
                 )
             }
         }
-        ui.onNodeWithText("40%", substring = true).assertIsDisplayed()
+        // The percentage rides on the row's state description rather than a text node.
+        val rowDescription =
+            appString(
+                R.string.a11y_activity_record,
+                "Cargo build",
+                TerminalProgress("set", 40).label,
+                "Build session",
+                "Mac",
+            )
+        val row =
+            ui.onNodeWithContentDescription(rowDescription, useUnmergedTree = true)
+                .fetchSemanticsNode()
+        val state: String =
+            row.config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription]
+        assertTrue("state=$state", state.contains("40%"))
         ui.onNodeWithText(appString(R.string.mark_seen)).assertIsNotEnabled()
         capture("progress-activity-dark.png")
     }

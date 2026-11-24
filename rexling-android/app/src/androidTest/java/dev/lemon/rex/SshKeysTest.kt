@@ -116,11 +116,12 @@ class SshKeysTest {
                     SshKeyEditor(selected.value) { selected.value = it }
                 }
             }
-            ui.onNodeWithText("No key", useUnmergedTree = true).performClick()
+            ui.onNodeWithText(appString(R.string.no_key), useUnmergedTree = true).performClick()
             ui.onNodeWithText("Selector key", useUnmergedTree = true).performClick()
             ui.runOnIdle { assertEquals(id, selected.value) }
             ui.onNodeWithText("Selector key", useUnmergedTree = true).performClick()
-            ui.onNodeWithText("No key (Tailscale SSH)", useUnmergedTree = true).performClick()
+            ui.onNodeWithText(appString(R.string.no_key_tailscale), useUnmergedTree = true)
+                .performClick()
             ui.runOnIdle { assertNull(selected.value) }
             assertTrue(NetworkSettings.sshKeys.value.any { it.id == id })
         } finally {
@@ -150,12 +151,13 @@ class SshKeysTest {
                 }
             ui.onNodeWithText("Old name").performClick()
             ui.onNodeWithText(appString(R.string.name)).performTextReplacement("New name")
-            ui.onNodeWithText("Save", useUnmergedTree = true).performClick()
+            ui.onNodeWithText(appString(R.string.save), useUnmergedTree = true).performClick()
             ui.waitUntil(5000) {
                 NetworkSettings.sshKeys.value.any { it.id == id && it.name == "New name" }
             }
-            ui.onNodeWithContentDescription("Delete SSH key New name").performClick()
-            ui.onNodeWithText("Delete", useUnmergedTree = true).performClick()
+            ui.onNodeWithContentDescription(appString(R.string.delete_ssh_key_desc, "New name"))
+                .performClick()
+            ui.onNodeWithText(appString(R.string.delete), useUnmergedTree = true).performClick()
             ui.waitUntil(5000) { NetworkSettings.sshKeys.value.none { it.id == id } }
         } finally {
             runBlocking { NetworkSettings.deleteKey(id) }

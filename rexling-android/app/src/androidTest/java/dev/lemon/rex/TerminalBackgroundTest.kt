@@ -112,10 +112,13 @@ class TerminalBackgroundTest {
             val view =
                 TerminalView(context).apply {
                     onDimensions = { columns, rows -> reported = columns to rows }
+                    // Padding extends the edge cells only under the editor edge policy.
+                    edgePolicy = TerminalEdgePolicy.EDITOR
                     setTerminalPaddingDp(6, 8, 10)
                     screen = TerminalScreen(2, 2, null, null, -1, 0, cells)
                 }
-            val w = (2 * grid.cellWidth).toInt() + horizontal * 2
+            // A pixel of slack absorbs padding rounding so the fit still reports two columns.
+            val w = (2 * grid.cellWidth).toInt() + horizontal * 2 + 2
             val h = (2 * grid.cellHeight).toInt() + top + bottom
             view.measure(
                 View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),

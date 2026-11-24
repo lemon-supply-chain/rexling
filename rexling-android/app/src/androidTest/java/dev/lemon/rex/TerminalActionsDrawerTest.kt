@@ -35,15 +35,29 @@ class TerminalActionsDrawerTest {
                         ownership = {},
                         quickActions =
                             listOf(
-                                TerminalDrawerAction("Paste", ChromeIcon.PASTE, enabled = false) {},
-                                TerminalDrawerAction("Image", ChromeIcon.IMAGE, enabled = false) {},
                                 TerminalDrawerAction(
-                                    "Attach file",
+                                    appString(R.string.paste),
+                                    ChromeIcon.PASTE,
+                                    enabled = false,
+                                ) {},
+                                TerminalDrawerAction(
+                                    appString(R.string.image),
+                                    ChromeIcon.IMAGE,
+                                    enabled = false,
+                                ) {},
+                                TerminalDrawerAction(
+                                    appString(R.string.attach_file),
                                     ChromeIcon.FILE,
                                     enabled = false,
                                 ) {},
-                                TerminalDrawerAction("Copy viewport", ChromeIcon.COPY) {},
-                                TerminalDrawerAction("Light theme", ChromeIcon.SUN) {},
+                                TerminalDrawerAction(
+                                    appString(R.string.copy_viewport),
+                                    ChromeIcon.COPY,
+                                ) {},
+                                TerminalDrawerAction(
+                                    appString(R.string.light_theme),
+                                    ChromeIcon.SUN,
+                                ) {},
                             ),
                         actions =
                             listOf(
