@@ -183,6 +183,19 @@ class DrawerFrostTest {
                 }
             }
         }
+        // The invalidator must stop by itself; a build that keeps re-invalidating
+        // every host draw used to pass the pixel checks below.
+        fun disarm(): PopupFrostInvalidator {
+            repeat(120) {
+                PopupFrostInvalidator.lastSeen?.get()?.let { if (!it.isListening) return it }
+                ui.waitForIdle()
+                Thread.sleep(8)
+            }
+            val last = PopupFrostInvalidator.lastSeen?.get()
+            assertNotNull("Frost invalidator was never created", last)
+            assertFalse("Frost invalidator never disarmed", last!!.isListening)
+            return last
+        }
         for (isDark in listOf(false, true)) for (kind in 0..4) {
             ui.runOnIdle { choice.intValue = -1 }
             ui.waitForIdle()
@@ -252,12 +265,21 @@ class DrawerFrostTest {
                 "Overlay $kind must remain frozen on initial backdrop: $updated",
                 minOf(updated.red, updated.blue) > updated.green + .04f,
             )
+            val frost = disarm()
+            assertTrue(
+                "Overlay $kind must stop invalidating: ${frost.invalidationCount}",
+                frost.invalidationCount <= 10,
+            )
             if (kind == 4) {
                 ui.runOnIdle { captureBackdrop.value = false }
                 val fallback = sample()
                 assertTrue(
                     "Dock pane must keep its surface when the backdrop is unavailable: $fallback",
                     fallback.green < maxOf(fallback.red, fallback.blue) + .04f,
+                )
+                assertFalse(
+                    "Dock pane frost must stay disarmed without a source",
+                    frost.isListening,
                 )
                 val instrumentation = InstrumentationRegistry.getInstrumentation()
                 val screenshot = instrumentation.uiAutomation.takeScreenshot()
@@ -269,6 +291,19 @@ class DrawerFrostTest {
                     .use { screenshot.compress(Bitmap.CompressFormat.PNG, 100, it) }
             }
         }
+        // A drawer whose haze never gets a source must still disarm after bounded attempts.
+        ui.runOnIdle {
+            dark.value = false
+            green.value = false
+            captureBackdrop.value = false
+            choice.intValue = 4
+        }
+        ui.waitForIdle()
+        val cold = disarm()
+        assertTrue(
+            "Cold frost must stop invalidating: ${cold.invalidationCount}",
+            cold.invalidationCount <= 10,
+        )
         ui.runOnIdle { choice.intValue = -1 }
     }
 }

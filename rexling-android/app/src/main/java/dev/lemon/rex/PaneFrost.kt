@@ -78,13 +78,15 @@ internal fun Modifier.frostSource(haze: HazeState, visible: Boolean): Modifier =
 
 /**
  * A Popup has a separate draw tree: capture its backdrop blur once on open, then disarm to avoid
- * re-rendering on every background host draw.
+ * re-rendering on every background host draw. If the source layer never arrives (no captured
+ * backdrop), stop after a bounded number of pre-draw attempts instead of invalidating forever.
  */
 internal class PopupFrostInvalidator(private val host: android.view.View) {
     private val effects = mutableSetOf<dev.chrisbanes.haze.HazeEffectNode>()
     private var observer: android.view.ViewTreeObserver? = null
     private var listening = false
     private var framesRemaining = 0
+    private var attempts = 0
 
     @androidx.annotation.VisibleForTesting
     internal var invalidationCount = 0
@@ -93,6 +95,21 @@ internal class PopupFrostInvalidator(private val host: android.view.View) {
     @androidx.annotation.VisibleForTesting
     internal val isListening: Boolean
         get() = listening
+
+    internal companion object {
+        private const val SOURCE_ATTEMPTS = 8
+
+        /**
+         * Most recently created invalidator, weakly held so tests can assert it disarms without
+         * pinning the host view.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal var lastSeen: java.lang.ref.WeakReference<PopupFrostInvalidator>? = null
+    }
+
+    init {
+        lastSeen = java.lang.ref.WeakReference(this)
+    }
 
     private val listener =
         android.view.ViewTreeObserver.OnPreDrawListener {
@@ -111,6 +128,8 @@ internal class PopupFrostInvalidator(private val host: android.view.View) {
                 if (hasSourceLayer) {
                     framesRemaining--
                     if (framesRemaining <= 0) stop()
+                } else if (--attempts <= 0) {
+                    stop()
                 }
             }
             true
@@ -122,6 +141,7 @@ internal class PopupFrostInvalidator(private val host: android.view.View) {
         if (!vto.isAlive) return
         listening = true
         framesRemaining = 2
+        attempts = SOURCE_ATTEMPTS
         observer = vto
         vto.addOnPreDrawListener(listener)
     }
