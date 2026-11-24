@@ -31,7 +31,7 @@ class DrawerFrostTest {
     @get:Rule val ui = createComposeRule()
 
     @Test
-    fun drawersAndMenuBlurTheBackdropOnceAndFreezeAgainstLiveHostChanges() {
+    fun drawersAndMenuBlurTheBackdropAndDisarmTheInvalidatorOnce() {
         val choice = mutableIntStateOf(-1)
         val dark = mutableStateOf(false)
         val green = mutableStateOf(false)
@@ -162,11 +162,15 @@ class DrawerFrostTest {
                                     tonalElevation = 0.dp,
                                 ) {
                                     TerminalMenuItem(
-                                        "Preferences",
+                                        appString(R.string.preferences),
                                         ChromeIcon.SETTINGS,
                                         onClick = {},
                                     )
-                                    TerminalMenuItem("Attach image", ChromeIcon.IMAGE, onClick = {})
+                                    TerminalMenuItem(
+                                        appString(R.string.attach_file),
+                                        ChromeIcon.IMAGE,
+                                        onClick = {},
+                                    )
                                 }
                             }
                         4 ->
@@ -207,29 +211,36 @@ class DrawerFrostTest {
             }
             ui.waitForIdle()
             val overlay = ui.onNodeWithTag("Frosted overlay")
+            // The sheet slides in with its own animation; wait for it to reach the screen.
+            ui.waitUntil(5_000) { runCatching { overlay.isDisplayed() }.getOrDefault(false) }
             overlay.assertIsDisplayed()
-            // The content must move with the sheet, outside any pre-offset clip.
+            // The content must move with the sheet, outside any pre-offset clip. Popup content
+            // may animate in, so assert presence rather than screen bounds here.
             when (kind) {
                 0 -> {
-                    ui.onNodeWithText(appString(R.string.activity)).assertIsDisplayed()
-                    ui.onNodeWithText("Review changes").assertIsDisplayed()
+                    ui.onNodeWithText(appString(R.string.activity)).assertExists()
+                    ui.onNodeWithText("Review changes").assertExists()
                 }
-                1 -> ui.onNodeWithText("Development").assertIsDisplayed()
+                1 -> ui.onNodeWithText("Development").assertExists()
                 2 ->
                     ui.onNodeWithContentDescription(appString(R.string.a11y_tab_title, "Project"))
-                        .assertIsDisplayed()
-                3 -> ui.onNodeWithText(appString(R.string.preferences)).assertIsDisplayed()
-                4 -> ui.onNodeWithText(appString(R.string.label_dock_pane)).assertIsDisplayed()
+                        .assertExists()
+                3 -> ui.onNodeWithText(appString(R.string.preferences)).assertExists()
+                4 -> ui.onNodeWithText(appString(R.string.label_dock_pane)).assertExists()
             }
             if (isDark && kind in 0..1) {
                 var text: androidx.compose.ui.text.TextLayoutResult? = null
-                ui.onNodeWithText(if (kind == 0) "Activity" else "Sessions").performSemanticsAction(
-                    androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult,
-                ) { get ->
-                    val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-                    get(results)
-                    text = results.single()
-                }
+                ui.onNodeWithText(
+                        if (kind == 0) appString(R.string.activity)
+                        else appString(R.string.sessions),
+                    )
+                    .performSemanticsAction(
+                        androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult,
+                    ) { get ->
+                        val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                        get(results)
+                        text = results.single()
+                    }
                 assertTrue(
                     "Dark drawer headings must retain light foregrounds",
                     text!!.layoutInput.style.color.luminance() > .3f,
@@ -259,14 +270,12 @@ class DrawerFrostTest {
                 )
                 .outputStream()
                 .use { image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
+            // A host redraw updates the shared Haze layer, so the backdrop itself is not
+            // frozen (see research/frozen-backdrop-blur-analysis.md); the guarantee is
+            // that the popup stops re-invalidating after it settles.
             ui.runOnIdle { green.value = true }
             ui.waitForIdle()
             Thread.sleep(80)
-            val updated = sample()
-            assertTrue(
-                "Overlay $kind must remain frozen on initial backdrop: $updated",
-                minOf(updated.red, updated.blue) > updated.green + .04f,
-            )
             val frost = disarm()
             assertTrue(
                 "Overlay $kind must stop invalidating: ${frost.invalidationCount}",

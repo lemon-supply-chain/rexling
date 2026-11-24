@@ -77,9 +77,10 @@ internal fun Modifier.frostSource(haze: HazeState, visible: Boolean): Modifier =
     if (visible && LocalFrostedEffectsEnabled.current) hazeSource(haze) else this
 
 /**
- * A Popup has a separate draw tree: capture its backdrop blur once on open, then disarm to avoid
- * re-rendering on every background host draw. If the source layer never arrives (no captured
- * backdrop), stop after a bounded number of pre-draw attempts instead of invalidating forever.
+ * A Popup has a separate draw tree: invalidate its backdrop once the source layer exists, then
+ * disarm so a background host draw does not schedule another blur pass. The shared Haze layer may
+ * still update when the host re-records it; this only removes the per-frame invalidation loop. If
+ * the source layer never arrives, stop after a bounded number of pre-draw attempts.
  */
 internal class PopupFrostInvalidator(private val host: android.view.View) {
     private val effects = mutableSetOf<dev.chrisbanes.haze.HazeEffectNode>()
@@ -87,6 +88,9 @@ internal class PopupFrostInvalidator(private val host: android.view.View) {
     private var listening = false
     private var framesRemaining = 0
     private var attempts = 0
+
+    /** A popup that never draws would otherwise keep the pre-draw listener forever. */
+    private val timeout = Runnable { stop() }
 
     @androidx.annotation.VisibleForTesting
     internal var invalidationCount = 0
@@ -144,11 +148,13 @@ internal class PopupFrostInvalidator(private val host: android.view.View) {
         attempts = SOURCE_ATTEMPTS
         observer = vto
         vto.addOnPreDrawListener(listener)
+        host.postDelayed(timeout, 400L)
     }
 
     fun stop() {
         if (!listening) return
         listening = false
+        host.removeCallbacks(timeout)
         observer?.takeIf { it.isAlive }?.removeOnPreDrawListener(listener)
         observer = null
     }
