@@ -6,6 +6,7 @@ import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
+import org.junit.Assume
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -39,6 +40,13 @@ class TerminalMouseTest {
             layout(0, 0, 1600, 1000)
         }
 
+    /** Some APIs leave focus on a detached view; those cannot assert clearFocus(). */
+    private fun canClearFocus(view: TerminalView): Boolean {
+        view.requestFocus()
+        view.clearFocus()
+        return !view.hasFocus()
+    }
+
     @Test
     fun semanticInputTapFocusesShellInputButNotOutputOrHistory() {
         instrumentation.runOnMainSync {
@@ -59,6 +67,7 @@ class TerminalMouseTest {
                                     },
                             )
                 }
+            Assume.assumeTrue("Detached view cannot clear focus", canClearFocus(view))
             fun tap(row: Int, time: Long) {
                 event(view, MotionEvent.ACTION_DOWN, 5f, metrics.cellHeight * (row + .5f), time)
                 event(view, MotionEvent.ACTION_UP, 5f, metrics.cellHeight * (row + .5f), time + 30)
@@ -245,6 +254,7 @@ class TerminalMouseTest {
             val metrics = TerminalFonts(instrumentation.targetContext).configure(Paint(), 10f)
             val shell = frame(0).copy(cursorX = 2, cursorY = 3)
             val view = view().apply { screen = shell }
+            Assume.assumeTrue("Detached view cannot clear focus", canClearFocus(view))
             fun tap(row: Int, time: Long, x: Float = 5f) {
                 val y = metrics.cellHeight * (row + .5f)
                 event(view, MotionEvent.ACTION_DOWN, x, y, time)

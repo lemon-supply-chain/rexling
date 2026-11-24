@@ -193,9 +193,12 @@ class TerminalView(context: Context) : View(context) {
             }
         }
 
-    internal fun inputCursorRow(frame: TerminalScreen) =
+    internal fun inputCursorRow(frame: TerminalScreen): Int? =
         frame.cursorY
-            ?: frame.cursorAnchorY.takeIf { allowHiddenCursorInput && frame.cursorAnchorX != null }
+            ?: frame.cursorAnchorY.takeIf {
+                // A hidden caret only anchors the live grid, never scrollback.
+                allowHiddenCursorInput && frame.cursorAnchorX != null && frame.scroll.below == 0L
+            }
 
     /** Chosen by program identity: pan to a hidden caret, or resize a full-screen TUI. */
     internal var imeAnchor: ImeAnchor = ImeAnchor.CURSOR
@@ -222,8 +225,14 @@ class TerminalView(context: Context) : View(context) {
     internal val keyboardFocus: TerminalKeyboardFocus?
         get() {
             val frame = screen ?: return null
-            val row = (inputCursorRow(frame) ?: frame.imeAnchorRow(imeAnchor)) ?: return null
-            val lastText = frame.lastPaintedRow()
+            // Scrollback keeps the current viewport; only the live grid may follow a caret.
+            val live = frame.scroll.below == 0L
+            val row =
+                (if (live) inputCursorRow(frame) else null)
+                    ?: frame.imeAnchorRow(imeAnchor)
+                    ?: return null
+            // Content that sits past the visible grid cannot be revealed by a pan.
+            val lastText = frame.lastPaintedRow().coerceIn(0, (frame.rows - 1).coerceAtLeast(0))
             val bottom = insetTop + (row + 1) * cellHeight + insetBottom
             return TerminalKeyboardFocus(
                 insetTop + row * cellHeight,

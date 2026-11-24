@@ -576,6 +576,9 @@ class TerminalImeViewportTest {
                     .first()
             WindowCompat.setDecorFitsSystemWindows(activity.window, false)
             activity.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            // Re-evaluate insets: the window was already attached when edge-to-edge flipped.
+            ViewCompat.requestApplyInsets(activity.window.decorView)
+            activity.window.decorView.requestLayout()
         }
         ui.waitForIdle()
         var height = 0
@@ -590,6 +593,8 @@ class TerminalImeViewportTest {
                 ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) ==
                     true
             }
+            // The IME inset animates in; let the padding settle before measuring.
+            Thread.sleep(400)
             ui.waitForIdle()
             ui.runOnIdle {
                 assertTrue("Keyboard should reduce the visible viewport", visibleHeight < height)
