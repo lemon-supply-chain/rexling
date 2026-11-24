@@ -369,6 +369,13 @@ class TerminalView(context: Context) : View(context) {
         rowGeometry = ""
     }
 
+    /** Android 9 has one face per style slot, so fake the weight and slant there. */
+    private fun applyTypeface(style: Int, text: String) {
+        paint.typeface = fonts.typefaceFor(style, text)
+        paint.isFakeBoldText = fonts.syntheticStyles && style and 1 != 0
+        paint.textSkewX = if (fonts.syntheticStyles && style and 2 != 0) -.25f else 0f
+    }
+
     private fun advance(text: String, style: Int): Float =
         advances.getOrPut(style to text) { paint.measureText(text) }
 
@@ -452,6 +459,8 @@ class TerminalView(context: Context) : View(context) {
         cellWidth = fitted
         paint.textSize = size
         paint.typeface = fonts.regular
+        paint.isFakeBoldText = false
+        paint.textSkewX = 0f
         paint.textScaleX = 1f
         paint.textScaleX = fitted / paint.measureText("M").coerceAtLeast(.01f)
         val metrics = paint.fontMetrics
@@ -678,7 +687,7 @@ class TerminalView(context: Context) : View(context) {
             ) {
                 paint.color = palette.cursorText
                 paint.alpha = 255
-                paint.typeface = fonts.typefaceFor(cell.attributes and 3, cell.text)
+                applyTypeface(cell.attributes and 3, cell.text)
                 val advance = advance(cell.text, cell.attributes and 3)
                 canvas.save()
                 canvas.clipRect(x, y, x + cursorWidth, y + cellHeight)
@@ -692,7 +701,7 @@ class TerminalView(context: Context) : View(context) {
                 canvas.restore()
             }
             if (composing.isNotEmpty()) {
-                paint.typeface = fonts.typefaceFor(0, composing)
+                applyTypeface(0, composing)
                 paint.color = android.graphics.Color.WHITE
                 val composingWidth = max(cellWidth, paint.measureText(composing))
                 canvas.drawRect(x, y, x + composingWidth, y + cellHeight, backgroundPaint)
@@ -899,7 +908,7 @@ class TerminalView(context: Context) : View(context) {
             )
                 continue
             val style = cell.attributes and 3
-            paint.typeface = fonts.typefaceFor(style, cell.text)
+            applyTypeface(style, cell.text)
             paint.color = textColors.foreground(palette, cell)
             paint.alpha = if (cell.attributes and 4 != 0) 150 else 255
             var text = cell.text

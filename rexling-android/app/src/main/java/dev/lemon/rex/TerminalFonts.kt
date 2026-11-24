@@ -35,6 +35,14 @@ class TerminalFonts(
     val boldItalic: Typeface
         get() = faces[3]
 
+    /**
+     * Android 9 cannot synthesize a weight or slant from a single font file, while
+     * the API 29+ fallback family applies the requested [FontStyle]. Callers fake
+     * bold and slant while this is true.
+     */
+    val syntheticStyles: Boolean
+        get() = !(compositeFallback && Build.VERSION.SDK_INT >= 29)
+
     private val symbols by lazy { context.resources.getFont(R.font.noto_sans_symbols2) }
     private val probe by lazy { Paint().apply { textSize = 32f } }
     private val fallback =
@@ -99,6 +107,8 @@ class TerminalFonts(
 
     fun configure(paint: Paint, sizeSp: Float): TerminalMetrics {
         paint.typeface = regular
+        paint.isFakeBoldText = false
+        paint.textSkewX = 0f
         paint.textSize =
             TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_SP,
