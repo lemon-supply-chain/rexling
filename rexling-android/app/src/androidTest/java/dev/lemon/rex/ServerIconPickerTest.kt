@@ -38,7 +38,8 @@ class ServerIconPickerTest {
                         .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
                 }
             }
-            ui.onNode(hasText(icon.label) and hasAnyAncestor(isPopup())).performClick()
+            ui.onNode(hasText(appString(icon.labelRes)) and hasAnyAncestor(isPopup()))
+                .performClick()
             ui.onNode(isPopup()).assertDoesNotExist()
             ui.runOnIdle { assertEquals(icon, selected.value) }
         }
@@ -59,7 +60,8 @@ class ServerIconPickerTest {
             }
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_choose_server_icon)).performClick()
-        ui.onNode(hasText("MacBook") and hasAnyAncestor(isPopup())).performClick()
+        ui.onNode(hasText(appString(ServerIcon.MACBOOK.labelRes)) and hasAnyAncestor(isPopup()))
+            .performClick()
         ui.runOnIdle {
             assertNull(saved)
             assertEquals(0, closed)

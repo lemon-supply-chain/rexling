@@ -246,7 +246,7 @@ class ProgramTileRenderingTest {
         assertEquals("top", tile("top"))
         assertEquals("rust", tile("cargo"))
         assertEquals("fish", tile("fish"))
-        assertEquals("terminal", glyph("fish"))
+        assertEquals("fish", glyph("fish"))
         assertEquals("tmux", glyph("tmux"))
         assertEquals("ssh", glyph("ssh"))
         assertEquals("terminal", glyph("unmapped-program"))

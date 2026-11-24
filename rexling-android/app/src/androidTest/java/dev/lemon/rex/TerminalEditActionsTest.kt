@@ -120,7 +120,10 @@ class TerminalEditActionsTest {
         assertEquals(4f / 3f, map.width / map.height, .01f)
         assertEquals(drawer.center.x, map.center.x, 1f)
         assertTrue(map.width < drawer.width)
-        ui.onNodeWithContentDescription("Layout pane Floating task").assertDoesNotExist()
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_layout_pane_format, "Floating task"),
+            )
+            .assertDoesNotExist()
         ui.onNodeWithText(appString(R.string.dock_right)).assertIsDisplayed().performClick()
         ui.onNodeWithContentDescription(appString(R.string.close_dock_pane)).assertDoesNotExist()
         ui.onNodeWithContentDescription(appString(R.string.a11y_pane_title, "Floating task"))

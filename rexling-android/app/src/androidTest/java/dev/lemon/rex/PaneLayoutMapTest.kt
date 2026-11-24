@@ -64,7 +64,8 @@ class PaneLayoutMapTest {
         }
     }
 
-    private fun pane(title: String) = ui.onNodeWithContentDescription("Layout pane $title")
+    private fun pane(title: String) =
+        ui.onNodeWithContentDescription(appString(R.string.a11y_layout_pane_format, title))
 
     @Test
     fun nestedRatiosAndSelectionMatchTheWindowAndTapsUsePaneIds() {

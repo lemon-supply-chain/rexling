@@ -15,7 +15,7 @@ class ServerEditorCompactTest {
     @get:Rule val ui = createComposeRule()
 
     @Test
-    fun savedKeyActionsStayOnOneRowAndTheEditorFitsBothThemes() {
+    fun savedKeySelectorAndTheEditorFitBothThemes() {
         val endpoint = "ssh://compact-ui@127.0.0.1:2222"
         val pair =
             java.security.KeyPairGenerator.getInstance("RSA")
@@ -42,21 +42,9 @@ class ServerEditorCompactTest {
             }
             for (value in listOf(false, true)) {
                 ui.runOnIdle { dark = value }
-                ui.onNodeWithText("Remove").assertIsDisplayed()
                 ui.onNodeWithText(appString(R.string.save_and_connect)).assertIsDisplayed()
-                val file =
-                    ui.onNodeWithText(appString(R.string.import_file))
-                        .fetchSemanticsNode()
-                        .boundsInRoot
-                val paste =
-                    ui.onNodeWithText(appString(R.string.paste_key))
-                        .fetchSemanticsNode()
-                        .boundsInRoot
-                val remove = ui.onNodeWithText("Remove").fetchSemanticsNode().boundsInRoot
-                assertEquals(file.center.y, paste.center.y, 2f)
-                assertEquals(file.center.y, remove.center.y, 2f)
-                assertTrue(paste.left >= file.right)
-                assertTrue(remove.left >= paste.right)
+                // The editor selects a saved key; file/paste actions live in the keys sheet.
+                ui.onNodeWithText(appString(R.string.ssh_key)).assertIsDisplayed()
                 ui.onNodeWithContentDescription(appString(R.string.a11y_choose_server_icon))
                     .assertIsDisplayed()
                 val instrumentation = InstrumentationRegistry.getInstrumentation()

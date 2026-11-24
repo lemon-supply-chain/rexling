@@ -44,10 +44,14 @@ class PortForwardTest {
         compose.onNodeWithContentDescription(appString(R.string.add_port_forward)).performClick()
         compose.onNodeWithText(appString(R.string.remote_host)).assertDoesNotExist()
         compose.onNodeWithText(appString(R.string.phone_port)).assertDoesNotExist()
-        compose.onNodeWithText("Forward", useUnmergedTree = true).performClick()
+        compose
+            .onNodeWithText(appString(R.string.forward_action), useUnmergedTree = true)
+            .performClick()
         compose.onNodeWithText("Enter valid ports from 1 to 65535.").assertIsDisplayed()
         compose.onNodeWithText(appString(R.string.remote_port)).performTextInput("3000")
-        compose.onNodeWithText("Forward", useUnmergedTree = true).performClick()
+        compose
+            .onNodeWithText(appString(R.string.forward_action), useUnmergedTree = true)
+            .performClick()
         compose.runOnIdle { assertEquals(Triple("127.0.0.1", 3000, 3000), chosen.get()) }
     }
 

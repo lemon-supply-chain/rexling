@@ -155,20 +155,20 @@ class NetworkUiTest {
         }
         compose.onNodeWithText(appString(R.string.tailscale_needs_login)).assertIsDisplayed()
         compose.onNodeWithText("NeedsLogin").assertDoesNotExist()
-        compose.onNodeWithText("Sign in").performClick()
+        compose.onNodeWithText(appString(R.string.sign_in)).performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
-        compose.onNodeWithText("Sign in").assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.sign_in)).assertDoesNotExist()
     }
 
     @Test
     fun connectedStatusReplacesSignInRatherThanOfferingItAgain() {
         var state by androidx.compose.runtime.mutableStateOf("NeedsLogin")
         compose.setContent { MaterialTheme { TailscaleStatusCard(state, false, onSignIn = {}) } }
-        compose.onNodeWithText("Sign in").assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.sign_in)).assertIsDisplayed()
         compose.runOnIdle { state = "Running" }
         compose.onNodeWithText(appString(R.string.status_connected)).assertIsDisplayed()
         compose.onNodeWithTag("Tailscale sign out button").assertIsDisplayed()
-        compose.onNodeWithText("Sign in").assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.sign_in)).assertDoesNotExist()
         compose.onNodeWithText("Sign in again").assertDoesNotExist()
     }
 
@@ -211,7 +211,7 @@ class NetworkUiTest {
             compose.onNodeWithText(appString(R.string.active_connections)).assertIsDisplayed()
             compose.onNodeWithText("shipyard-rex").assertIsDisplayed()
             compose.onNodeWithText("Direct").assertIsDisplayed()
-            compose.onNodeWithText("Sign in").assertDoesNotExist()
+            compose.onNodeWithText(appString(R.string.sign_in)).assertDoesNotExist()
             compose.waitForIdle()
             val image = compose.onRoot().captureToImage().asAndroidBitmap()
             File(

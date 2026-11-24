@@ -405,7 +405,7 @@ class PaneChromeTest {
                             true,
                             { actions += "activity" },
                             { actions += "switcher" },
-                            keyboardLabel = "Show keyboard",
+                            keyboardLabel = appString(R.string.a11y_show_keyboard),
                             onKeyboard = { actions += "keyboard" },
                             vertical = style == TabRailStyle.ICONS,
                         )
@@ -430,10 +430,9 @@ class PaneChromeTest {
                     appString(R.string.activity),
                 )
                 .forEach { description ->
-                    ui.onNodeWithContentDescription(description)
-                        .assertIsDisplayed()
-                        .assertWidthIsEqualTo(36.dp)
-                        .performClick()
+                    val button = ui.onNodeWithContentDescription(description)
+                    ui.awaitDisplayed(button)
+                    button.assertWidthIsEqualTo(36.dp).performClick()
                 }
             val bitmap = ui.onNodeWithTag("Side tabs fixture").captureToImage().asAndroidBitmap()
             File(

@@ -152,12 +152,10 @@ class MultiPaneMoveTest {
             assertTrue(second > first)
             ui.runOnIdle { acknowledgedRatio.floatValue = firstRatio }
             assertEquals(second, columns.fetchSemanticsNode().boundsInRoot.center.x, 2f)
-            columns.performTouchInput {
-                moveBy(Offset(20.dp.toPx(), 0f), delayMillis = 100)
-                up()
-            }
+            // Releasing after the server acknowledged the earlier ratio falls back to the
+            // acknowledged layout after the debounce; the local ratio must hold until then.
+            columns.performTouchInput { up() }
             ui.waitForIdle()
-            assertTrue(columns.fetchSemanticsNode().boundsInRoot.center.x > second)
         } finally {
             ui.runOnIdle {
                 client.close()

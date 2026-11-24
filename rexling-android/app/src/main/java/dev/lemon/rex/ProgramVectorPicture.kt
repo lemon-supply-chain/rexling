@@ -415,7 +415,8 @@ private constructor(
                 val colors = IntArray(stops.length())
                 for (i in positions.indices) {
                     val stop = stops.getJSONObject(i)
-                    positions[i] = coordinate(stop.getString("offset"))
+                    positions[i] =
+                        stop.optString("offset").takeIf { it.isNotBlank() }?.let(::coordinate) ?: 0f
                     colors[i] =
                         color(
                             stop.getString("stop-color"),

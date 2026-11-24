@@ -220,7 +220,7 @@ class PanelReorderTest {
         windows.value = listOf(WindowItem("w0", "One", blocks))
         show(page = 1)
         val list = row(appString(R.string.reorder_panes))
-        begin(list, "Pane Pane 0")
+        begin(list, appString(R.string.a11y_pane_title, "Pane 0"))
         val bounds = list.fetchSemanticsNode().boundsInRoot
         list.performTouchInput { moveTo(Offset(bounds.width / 2, bounds.height - 2f), 200) }
         ui.mainClock.advanceTimeBy(3000)
@@ -240,9 +240,8 @@ class PanelReorderTest {
             row(appString(R.string.a11y_pane_title, "Pane A"))
                 .fetchSemanticsNode()
                 .config[SemanticsActions.CustomActions]
-                .filter { it.label.startsWith("Move ") }
         ui.runOnIdle {
-            assertEquals(listOf("Move down"), first.map { it.label })
+            assertEquals(listOf(appString(R.string.move_down)), first.map { it.label })
             assertTrue(first.single().action())
         }
         ui.runOnIdle {

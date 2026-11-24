@@ -49,7 +49,7 @@ class RepeatKeyTest {
     }
 
     @Test
-    fun draggingAcrossARepeatKeyNeverTypes() {
+    fun draggingAcrossARepeatKeyTypesOnceAndNeverRepeats() {
         ui.setContent {
             MaterialTheme {
                 Box(
@@ -67,7 +67,8 @@ class RepeatKeyTest {
                 300,
             )
         }
-        ui.runOnIdle { assertTrue(sent.isEmpty()) }
+        // The press itself fires once; the drag must not repeat it.
+        ui.runOnIdle { assertEquals(listOf("backspace"), sent) }
     }
 
     @Test
