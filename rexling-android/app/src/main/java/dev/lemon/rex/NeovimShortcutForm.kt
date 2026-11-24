@@ -73,6 +73,7 @@ internal fun NeovimShortcutForm(
     var ctrl by remember { mutableStateOf(false) }
     var alt by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val nameWithoutEquals = stringResource(R.string.neovim_name_without_equals)
     val keyboard = LocalSoftwareKeyboardController.current
     fun record(token: String, control: Boolean = ctrl, meta: Boolean = alt) {
         val value =
@@ -101,9 +102,7 @@ internal fun NeovimShortcutForm(
         runCatching {
             NeovimShortcuts.parse(NeovimShortcuts.editorText(listOf(entry))).single().also { parsed
                 ->
-                require(parsed == entry) {
-                    "Give this shortcut a name without ' = ' to preserve its keys."
-                }
+                require(parsed == entry) { nameWithoutEquals }
             }
         }
             .onSuccess {

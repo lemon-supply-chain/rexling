@@ -221,7 +221,10 @@ class NeovimShortcutUiTest {
             ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
                 .assertIsDisplayed()
         }
-        ui.onNodeWithContentDescription(appString(R.string.close_shortcuts)).performClick()
+        val closeDescription =
+            if (layout == NeovimShortcutLayout.GRID) appString(R.string.close_shortcuts)
+            else appString(R.string.a11y_close_shortcuts_named, "Neovim")
+        ui.onNodeWithContentDescription(closeDescription).performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertDoesNotExist()
         ui.runOnIdle { assertEquals(2, sent) }
@@ -325,6 +328,7 @@ class NeovimShortcutUiTest {
         ui.onNodeWithText(appString(R.string.press_keys)).performTextInput("lg")
         ui.onNodeWithText(appString(R.string.session_name_optional)).performTextInput("LazyGit")
         ui.onNodeWithText(appString(R.string.done)).performScrollTo().performClick()
+        ui.waitForIdle()
         ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertTrue(closed)
@@ -776,7 +780,7 @@ class NeovimShortcutUiTest {
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_pages_format, "Neovim"))
             .performTouchInput { swipeUp() }
         ui.onNodeWithText("2/2").assertIsDisplayed()
-        val center = nativeBounds("Back to all shortcuts")
+        val center = nativeBounds(appString(R.string.a11y_back_to_all_shortcuts))
         val action = nativeBounds(appString(R.string.a11y_shortcut_entry, "Neovim", "Action 9"))
         val before = nativeBounds(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
         nativeDrag(
