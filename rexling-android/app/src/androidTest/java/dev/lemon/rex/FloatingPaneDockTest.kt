@@ -60,24 +60,37 @@ class FloatingPaneDockTest {
                 .outputStream()
                 .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        ui.onNodeWithContentDescription("Open floating pane: Editor").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Editor"))
+            .assertDoesNotExist()
         ui.onNodeWithText("Editor · ~/Dev/rexling").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Floating panes").assertIsNotSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes))
+            .assertIsNotSelected()
         val anchor =
-            ui.onNodeWithContentDescription("Floating panes").fetchSemanticsNode().boundsInRoot
-        ui.onNodeWithContentDescription("Floating panes").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes)).performClick()
         ui.onNodeWithText("Editor · ~/Dev/rexling").assertIsDisplayed()
         ui.runOnIdle { assertTrue(capturing) }
         ui.onNodeWithText("Logs · ~/Dev/logs").assertIsDisplayed()
         assertEquals(
             anchor,
-            ui.onNodeWithContentDescription("Floating panes").fetchSemanticsNode().boundsInRoot,
+            ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes))
+                .fetchSemanticsNode()
+                .boundsInRoot,
         )
-        ui.onNodeWithContentDescription("Open floating pane: Editor").performClick()
-        ui.onNodeWithContentDescription("Minimize floating pane: Editor").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Floating panes").assertIsSelected()
-        ui.onNodeWithContentDescription("Floating panes").performClick()
-        ui.onNodeWithContentDescription("Minimize floating pane: Editor").assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Editor"))
+            .performClick()
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_minimize_floating_pane_named, "Editor"),
+            )
+            .assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes)).assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes)).performClick()
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_minimize_floating_pane_named, "Editor"),
+            )
+            .assertIsSelected()
         ui.onRoot().captureToImage().asAndroidBitmap().let { bitmap ->
             File(
                     InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
@@ -86,20 +99,26 @@ class FloatingPaneDockTest {
                 .outputStream()
                 .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        ui.onNodeWithContentDescription("Open floating pane: Logs").performClick()
-        ui.onNodeWithContentDescription("Floating panes").performClick()
-        ui.onNodeWithContentDescription("Minimize floating pane: Logs")
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Logs"))
+            .performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes)).performClick()
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_minimize_floating_pane_named, "Logs"),
+            )
             .assertIsSelected()
             .performClick()
-        ui.onNodeWithContentDescription("Floating panes").performClick()
-        ui.onNodeWithContentDescription("Open floating pane: Editor").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Open floating pane: Logs").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Editor"))
+            .assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Logs"))
+            .assertIsDisplayed()
         ui.runOnIdle {
             assertNull(active.value)
             assertEquals(1, minimized)
         }
-        ui.onNodeWithContentDescription("Floating panes").performClick()
-        ui.onNodeWithContentDescription("Open floating pane: Editor").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Editor"))
+            .assertDoesNotExist()
         ui.mainClock.advanceTimeBy(200)
         ui.runOnIdle { assertFalse(capturing) }
     }
@@ -127,10 +146,16 @@ class FloatingPaneDockTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription("Floating panes").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Open floating pane: Editor").performClick()
-        ui.onNodeWithContentDescription("Minimize floating pane: Editor").performClick()
-        ui.onNodeWithContentDescription("Open floating pane: Editor").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_floating_panes))
+            .assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Editor"))
+            .performClick()
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_minimize_floating_pane_named, "Editor"),
+            )
+            .performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Editor"))
+            .assertIsDisplayed()
         ui.runOnIdle {
             assertNull(active.value)
             assertEquals(1, minimized)

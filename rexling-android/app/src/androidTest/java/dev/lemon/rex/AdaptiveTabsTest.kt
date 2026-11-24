@@ -77,7 +77,12 @@ class AdaptiveTabsTest {
     }
 
     private fun tab(index: Int) =
-        ui.onNode(hasContentDescription("Tab ${names.value[index]},", substring = true))
+        ui.onNode(
+            hasContentDescription(
+                appString(R.string.a11y_tab, names.value[index], "").trimEnd(),
+                substring = true,
+            ),
+        )
 
     private fun bounds(index: Int) = tab(index).fetchSemanticsNode().boundsInRoot
 
@@ -110,7 +115,10 @@ class AdaptiveTabsTest {
         }
         ui.onNodeWithText("Claude").assertDoesNotExist()
         val dock = ui.onNodeWithTag("Test dock").fetchSemanticsNode().boundsInRoot
-        val eye = ui.onNodeWithContentDescription("Activity").fetchSemanticsNode().boundsInRoot
+        val eye =
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot
         assertTrue(eye.right <= dock.right)
         capture("four-tabs-light")
     }

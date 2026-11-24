@@ -91,14 +91,14 @@ class ImageUploadOverlayTest {
         settle()
         val anchor = right()
         val actionAnchor =
-            ui.onNodeWithContentDescription("Cancel file upload")
+            ui.onNodeWithContentDescription(appString(R.string.a11y_cancel_file_upload))
                 .fetchSemanticsNode()
                 .boundsInRoot
                 .right
-        ui.onNodeWithText("Preparing file").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.upload_preparing)).assertIsDisplayed()
         ui.runOnIdle { state.value = state.value.copy(phase = ImagePhase.UPLOADING, progress = 0f) }
         settle()
-        ui.onNodeWithText("Uploading file").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.upload_uploading)).assertIsDisplayed()
         ui.onNodeWithContentDescription("0%").assertDoesNotExist()
         for (isDark in listOf(true, false)) {
             ui.runOnIdle {
@@ -115,9 +115,10 @@ class ImageUploadOverlayTest {
             assertEquals(anchor, right(), .5f)
             ui.runOnIdle { state.value = state.value.copy(phase = ImagePhase.FINISHING) }
             settle()
-            ui.onNodeWithText("Finishing upload").assertIsDisplayed()
+            ui.onNodeWithText(appString(R.string.upload_finishing)).assertIsDisplayed()
             assertEquals(anchor, right(), .5f)
-            ui.onNodeWithContentDescription("Cancel file upload").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_cancel_file_upload))
+                .performClick()
             ui.runOnIdle {
                 state.value =
                     state.value.copy(
@@ -128,21 +129,22 @@ class ImageUploadOverlayTest {
                 retryable.value = false
             }
             settle()
-            ui.onNodeWithText("Retry").assertDoesNotExist()
+            ui.onNodeWithText(appString(R.string.label_retry)).assertDoesNotExist()
             assertEquals(anchor, right(), .5f)
             assertEquals(
                 actionAnchor,
-                ui.onNodeWithContentDescription("Dismiss upload error")
+                ui.onNodeWithContentDescription(appString(R.string.a11y_dismiss_upload_error))
                     .fetchSemanticsNode()
                     .boundsInRoot
                     .right,
                 .5f,
             )
             capture("upload-pill-error-${if(isDark) "dark" else "light"}.png")
-            ui.onNodeWithContentDescription("Dismiss upload error").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_dismiss_upload_error))
+                .performClick()
             ui.runOnIdle { retryable.value = true }
             settle()
-            ui.onNodeWithText("Retry").performClick()
+            ui.onNodeWithText(appString(R.string.label_retry)).performClick()
         }
         ui.runOnIdle {
             assertEquals(4, canceled)
@@ -150,8 +152,9 @@ class ImageUploadOverlayTest {
         }
         ui.runOnIdle { state.value = state.value.copy(phase = ImagePhase.SUCCESS, progress = 1f) }
         settle()
-        ui.onNodeWithText("File uploaded").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Cancel file upload").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.upload_uploaded)).assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_cancel_file_upload))
+            .assertDoesNotExist()
         assertEquals(anchor, right(), .5f)
         capture("upload-pill-success.png")
         if (InstrumentationRegistry.getArguments().getString("uploadAnimationCapture") == "true") {

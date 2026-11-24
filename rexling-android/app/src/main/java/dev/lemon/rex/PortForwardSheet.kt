@@ -289,7 +289,9 @@ internal fun PortForwardSheet(
                                                         as ClipboardManager)
                                                     .setPrimaryClip(
                                                         ClipData.newPlainText(
-                                                            "Forwarded URL",
+                                                            context.getString(
+                                                                R.string.forwarded_link,
+                                                            ),
                                                             item.url,
                                                         ),
                                                     )

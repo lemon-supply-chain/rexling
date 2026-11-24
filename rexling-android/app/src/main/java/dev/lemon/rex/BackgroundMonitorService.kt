@@ -67,11 +67,11 @@ class BackgroundMonitorService : Service() {
         notifications.createNotificationChannel(
             NotificationChannel(
                     BackgroundAlerts.MONITOR_CHANNEL,
-                    "Background monitoring",
+                    getString(R.string.notification_monitor_channel),
                     NotificationManager.IMPORTANCE_LOW,
                 )
                 .apply {
-                    description = "Keeps your connected servers available for attention alerts"
+                    description = getString(R.string.notification_monitor_channel_desc)
                     setShowBadge(false)
                     setSound(null, null)
                 },
@@ -79,12 +79,10 @@ class BackgroundMonitorService : Service() {
         notifications.createNotificationChannel(
             NotificationChannel(
                     BackgroundAlerts.ATTENTION_CHANNEL,
-                    "Task updates",
+                    getString(R.string.notification_task_channel),
                     NotificationManager.IMPORTANCE_HIGH,
                 )
-                .apply {
-                    description = "A task finishes, needs input, approval, sign-in, or fails"
-                },
+                .apply { description = getString(R.string.notification_task_channel_desc) },
         )
         preferences.registerOnSharedPreferenceChangeListener(listener)
         val filter =
@@ -305,7 +303,7 @@ class BackgroundMonitorService : Service() {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-        val title = "${record.stateLabel} · ${record.label.ifBlank {record.program.label}}"
+        val title = "${record.stateLabel(this)} · ${record.label.ifBlank {record.program.label}}"
         val text =
             listOf(profile.label, record.sessionLabel.ifBlank { record.session })
                 .joinToString(" · ")
@@ -313,8 +311,10 @@ class BackgroundMonitorService : Service() {
             Notification.Builder(this, BackgroundAlerts.ATTENTION_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(
-                    if (record.state == ActivityState.DONE) "Rexling task finished"
-                    else "Rexling needs your attention",
+                    getString(
+                        if (record.state == ActivityState.DONE) R.string.notification_task_finished
+                        else R.string.notification_needs_attention,
+                    ),
                 )
                 .build()
         val notification =
@@ -392,13 +392,15 @@ class BackgroundMonitorService : Service() {
             )
         return Notification.Builder(this, BackgroundAlerts.MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Rexling · $title")
+            .setContentTitle(getString(R.string.notification_service_title, title))
             .setContentText(getString(R.string.notification_service_text))
             .setContentIntent(open)
             .setOngoing(true)
             .setShowWhen(false)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(Notification.Action.Builder(null, "Stop", stop).build())
+            .addAction(
+                Notification.Action.Builder(null, getString(R.string.action_stop), stop).build(),
+            )
             .build()
     }
 

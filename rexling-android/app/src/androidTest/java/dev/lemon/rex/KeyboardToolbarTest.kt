@@ -30,7 +30,7 @@ class KeyboardToolbarTest {
         drag("Available button: Backspace", "Toolbar slot 7: Enter")
         ui.onNodeWithContentDescription("Toolbar slot 7: Backspace").assertExists()
         ui.onNodeWithContentDescription("Available button: Enter").assertExists()
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(7, saved!!.size)
             assertEquals(ToolbarKey.PASTE, saved!!.first())
@@ -48,7 +48,7 @@ class KeyboardToolbarTest {
                 KeyboardToolbarSheet(ToolbarLayout.defaults, { saved = it }, {})
             }
         }
-        ui.onNodeWithText("Remove selected").performClick()
+        ui.onNodeWithText(appString(R.string.remove_selected)).performClick()
         ui.onNodeWithContentDescription("Available button: Paste").performClick()
         val actions =
             ui.onNodeWithContentDescription("Toolbar slot 7: Paste")
@@ -63,7 +63,7 @@ class KeyboardToolbarTest {
             cancel()
         }
         ui.onNodeWithContentDescription("Toolbar slot 1: Ctrl").assertExists()
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(7, saved!!.size)
             assertEquals(ToolbarKey.PASTE, saved!![5])
@@ -78,16 +78,24 @@ class KeyboardToolbarTest {
                 KeyboardToolbarSheet(ToolbarLayout.defaults, {}, { closed = true })
             }
         }
-        val initial = ui.onNodeWithText("Keyboard toolbar").fetchSemanticsNode().boundsInRoot.top
-        val palette = ui.onNodeWithContentDescription("Available toolbar buttons")
+        val initial =
+            ui.onNodeWithText(appString(R.string.keyboard_toolbar))
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .top
+        val palette =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_available_toolbar_buttons))
         repeat(3) {
             palette.performTouchInput { swipeDown(durationMillis = 150) }
-            ui.onNodeWithText("Keyboard toolbar").assertIsDisplayed()
+            ui.onNodeWithText(appString(R.string.keyboard_toolbar)).assertIsDisplayed()
             ui.runOnIdle { assertFalse(closed) }
             assertEquals(
                 "Palette overscroll must not move its drawer",
                 initial,
-                ui.onNodeWithText("Keyboard toolbar").fetchSemanticsNode().boundsInRoot.top,
+                ui.onNodeWithText(appString(R.string.keyboard_toolbar))
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+                    .top,
                 1f,
             )
         }
@@ -98,10 +106,13 @@ class KeyboardToolbarTest {
         ui.runOnIdle { assertFalse(closed) }
         assertEquals(
             initial,
-            ui.onNodeWithText("Keyboard toolbar").fetchSemanticsNode().boundsInRoot.top,
+            ui.onNodeWithText(appString(R.string.keyboard_toolbar))
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .top,
             1f,
         )
-        ui.onNodeWithContentDescription("Close keyboard toolbar").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.close_keyboard_toolbar)).performClick()
         ui.runOnIdle { assertTrue(closed) }
     }
 
@@ -117,7 +128,7 @@ class KeyboardToolbarTest {
         ui.runOnIdle { assertEquals(0, dismissals) }
         androidx.test.espresso.Espresso.pressBack()
         ui.runOnIdle { assertEquals(1, dismissals) }
-        ui.onNodeWithText("Keyboard toolbar").performTouchInput {
+        ui.onNodeWithText(appString(R.string.keyboard_toolbar)).performTouchInput {
             click(androidx.compose.ui.geometry.Offset(center.x, -100f))
         }
         ui.runOnIdle { assertEquals(2, dismissals) }
@@ -178,16 +189,16 @@ class KeyboardToolbarTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription("Paste").performClick()
-        ui.onNodeWithContentDescription("Enter").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.paste)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.enter_section)).performClick()
         ui.onNodeWithContentDescription("Ctrl+C").performClick()
         ui.runOnIdle {
             assertEquals(1, pasted)
             assertEquals(listOf("enter", "ctrl-c"), sent)
             layout.value = emptyList()
         }
-        ui.onNodeWithContentDescription("Hide keyboard").performClick()
-        ui.onNodeWithContentDescription("Show extra keys").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys)).performClick()
         ui.onNodeWithContentDescription("Function key F1").assertIsDisplayed()
         ui.runOnIdle { assertEquals(1, keyboard) }
     }

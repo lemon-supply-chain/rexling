@@ -149,7 +149,7 @@ class SshKeysTest {
                         .compress(Bitmap.CompressFormat.PNG, 100, it)
                 }
             ui.onNodeWithText("Old name").performClick()
-            ui.onNodeWithText("Name").performTextReplacement("New name")
+            ui.onNodeWithText(appString(R.string.name)).performTextReplacement("New name")
             ui.onNodeWithText("Save", useUnmergedTree = true).performClick()
             ui.waitUntil(5000) {
                 NetworkSettings.sshKeys.value.any { it.id == id && it.name == "New name" }

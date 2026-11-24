@@ -87,13 +87,13 @@ class TabPaneSwitcherTest {
     @Test
     fun tappingATabOrPaneOpensItDirectly() {
         show()
-        row("Tab Project").assertIsSelected()
+        row(appString(R.string.a11y_tab_title, "Project")).assertIsSelected()
         ui.onNodeWithText("Open tab").assertDoesNotExist()
         capture("tabs-light")
         row("Tab Review changes").performTouchInput { click() }
-        ui.onNodeWithText("Panes").performClick()
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
         row("Pane Plan next steps").assertIsSelected()
-        row("Pane fish").performTouchInput { click() }
+        row(appString(R.string.a11y_pane_title, "fish")).performTouchInput { click() }
         ui.onNodeWithText("Open pane").assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("tab:w2", "pane:a"), calls) }
     }
@@ -101,7 +101,7 @@ class TabPaneSwitcherTest {
     @Test
     fun horizontalSwipesRevealOneRowAtATimeAndKeepTheSection() {
         show(dark = true)
-        row("Tab Project").swipeForSwitcherActions()
+        row(appString(R.string.a11y_tab_title, "Project")).swipeForSwitcherActions()
         action("Rename tab").assertIsDisplayed()
         if (
             ui.onAllNodesWithContentDescription("Tab Review changes")
@@ -119,23 +119,23 @@ class TabPaneSwitcherTest {
         )
         row("Tab Review changes").performTouchInput { swipeRight() }
         action("Rename tab").assertDoesNotExist()
-        ui.onNodeWithText("New tab").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).assertIsDisplayed()
         ui.runOnIdle { assertTrue(calls.isEmpty()) }
     }
 
     @Test
     fun closeAndSplitActionsUseTheSwipedRow() {
         show()
-        ui.onNodeWithText("New tab").performClick()
-        row("Tab Project").swipeForSwitcherActions()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).performClick()
+        row(appString(R.string.a11y_tab_title, "Project")).swipeForSwitcherActions()
         action("Close tab").performTouchInput { click() }
-        ui.onNodeWithText("Panes").performClick()
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
         row("Pane Plan next steps").swipeForSwitcherActions()
         action("Split right").performTouchInput { click() }
         row("Pane nvim").swipeForSwitcherActions()
         capture("pane-actions")
         action("Split below").performTouchInput { click() }
-        row("Pane fish").swipeForSwitcherActions()
+        row(appString(R.string.a11y_pane_title, "fish")).swipeForSwitcherActions()
         action("Close pane").performTouchInput { click() }
         ui.runOnIdle {
             assertEquals(
@@ -167,11 +167,15 @@ class TabPaneSwitcherTest {
     @Test
     fun busyStateDisablesTerminalActionsButAllowsBrowsingSections() {
         show(enabled = false)
-        row("Tab Project").assertIsNotEnabled().swipeForSwitcherActions()
+        row(appString(R.string.a11y_tab_title, "Project"))
+            .assertIsNotEnabled()
+            .swipeForSwitcherActions()
         action("Close tab").assertDoesNotExist()
-        ui.onNodeWithText("New tab").assertIsNotEnabled()
-        ui.onNodeWithText("Panes").performClick()
-        row("Pane fish").assertIsNotEnabled().swipeForSwitcherActions()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
+        row(appString(R.string.a11y_pane_title, "fish"))
+            .assertIsNotEnabled()
+            .swipeForSwitcherActions()
         action("Split right").assertDoesNotExist()
         ui.runOnIdle { assertTrue(calls.isEmpty()) }
     }
@@ -179,10 +183,10 @@ class TabPaneSwitcherTest {
     @Test
     fun emptySessionOffersANewTabButCannotAddAnUnanchoredPane() {
         show(empty = true)
-        ui.onNodeWithText("No tabs yet").assertIsDisplayed()
-        ui.onNodeWithText("New tab").performClick()
-        ui.onNodeWithText("Panes").performClick()
-        ui.onNodeWithText("No panes yet").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.no_tabs_yet)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).performClick()
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
+        ui.onNodeWithText(appString(R.string.no_panes_yet)).assertIsDisplayed()
         action("Split below").assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("new-tab"), calls) }
     }
@@ -198,10 +202,10 @@ class TabPaneSwitcherTest {
             )
             .assertIsDisplayed()
         capture("panes-dark")
-        ui.onNodeWithText("Show map").performClick()
+        ui.onNodeWithText(appString(R.string.show_map)).performClick()
         row("Pane layout").assertIsDisplayed()
         row("Layout pane nvim").performClick()
-        ui.onNodeWithText("Hide map").performClick()
+        ui.onNodeWithText(appString(R.string.hide_map)).performClick()
         row("Pane layout").assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("pane:d"), calls) }
     }
@@ -209,10 +213,10 @@ class TabPaneSwitcherTest {
     @Test
     fun unavailableGeometryStillAllowsSplittingTheSwipedPane() {
         show(initialPage = 1, withoutLayout = true, selectedBlock = "stale-pane")
-        ui.onNodeWithText("Show map").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.show_map)).assertDoesNotExist()
         row("Pane layout").assertDoesNotExist()
         ui.onNodeWithTag("Pane position: a", useUnmergedTree = true).assertDoesNotExist()
-        row("Pane fish").swipeForSwitcherActions()
+        row(appString(R.string.a11y_pane_title, "fish")).swipeForSwitcherActions()
         action("Split below").performClick()
         ui.runOnIdle { assertEquals(listOf("new-pane:a:vertical"), calls) }
     }

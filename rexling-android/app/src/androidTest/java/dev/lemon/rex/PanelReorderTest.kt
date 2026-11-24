@@ -188,7 +188,7 @@ class PanelReorderTest {
     @Test
     fun mapLongPressAndDisabledListCannotReorder() {
         show(page = 1)
-        ui.onNodeWithText("Show map").performClick()
+        ui.onNodeWithText(appString(R.string.show_map)).performClick()
         val map = row("Pane layout")
         ui.mainClock.autoAdvance = false
         map.performTouchInput { down(center) }

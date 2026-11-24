@@ -42,7 +42,8 @@ class CustomControlShortcutsTest {
         ui.runOnIdle { assertEquals(listOf("\u0000l"), sent) }
         open()
         ui.runOnIdle { target.value = "pane-b" }
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle { assertEquals(1, sent.size) }
     }
 
@@ -69,7 +70,7 @@ class CustomControlShortcutsTest {
             }
         }
         open()
-        ui.onNodeWithContentDescription("Next Ctrl shortcuts page").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_next_ctrl_page)).performClick()
         ui.onNodeWithText("2/2").assertIsDisplayed()
         ui.onNodeWithContentDescription("Control shortcut Key 13").performClick()
         ui.runOnIdle { assertEquals(listOf("n"), sent) }
@@ -93,17 +94,17 @@ class CustomControlShortcutsTest {
             }
         }
         capture("list")
-        ui.onNodeWithText("Add shortcut").performClick()
+        ui.onNodeWithText(appString(R.string.add_shortcut)).performClick()
         ui.onNodeWithText("Space", substring = false).performClick()
-        ui.onNodeWithText("Press keys").performTextInput("l")
+        ui.onNodeWithText(appString(R.string.press_keys)).performTextInput("l")
         ui.onNodeWithText("Ctrl+Space").assertExists()
         capture("recorder")
-        ui.onNodeWithText("Name (optional)").performTextInput("Workspace")
-        ui.onNodeWithText("Done").performScrollTo().performClick()
-        ui.onNodeWithContentDescription("Ctrl shortcut list")
+        ui.onNodeWithText(appString(R.string.session_name_optional)).performTextInput("Workspace")
+        ui.onNodeWithText(appString(R.string.done)).performScrollTo().performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_ctrl_shortcut_list))
             .performScrollToNode(hasContentDescription("Edit Ctrl shortcut Workspace"))
         ui.onNodeWithContentDescription("Edit Ctrl shortcut Workspace").assertIsDisplayed()
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertTrue(closed)
             assertEquals("\u0000l", ControlShortcutConfig.decode(saved!!.last().keys))
@@ -127,13 +128,13 @@ class CustomControlShortcutsTest {
             }
         }
         ui.onNodeWithContentDescription("Edit Ctrl shortcut ^C").performClick()
-        ui.onNodeWithText("Clear").performClick()
-        ui.onNodeWithText("Press keys").performTextInput("ab")
+        ui.onNodeWithText(appString(R.string.clear)).performClick()
+        ui.onNodeWithText(appString(R.string.press_keys)).performTextInput("ab")
         ui.onNodeWithText("Ctrl+A").assertExists()
         ui.onNodeWithText("B", substring = false).assertExists()
-        ui.onNodeWithText("Undo").performClick()
+        ui.onNodeWithText(appString(R.string.undo)).performClick()
         ui.onNodeWithText("B", substring = false).assertDoesNotExist()
-        ui.onNodeWithText("Press keys").performImeAction()
+        ui.onNodeWithText(appString(R.string.press_keys)).performImeAction()
         ui.onAllNodesWithText("Enter", substring = false).assertCountEquals(2)
         ui.onNodeWithText("Cancel", substring = false).performScrollTo().performClick()
         val from =
@@ -151,7 +152,7 @@ class CustomControlShortcutsTest {
             up()
         }
         ui.onNodeWithContentDescription("Remove Ctrl shortcut ^Z").performClick()
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle { assertEquals(listOf("d", "c"), saved!!.map { it.keys }) }
     }
 
@@ -171,7 +172,7 @@ class CustomControlShortcutsTest {
     }
 
     private fun open() {
-        ui.onNodeWithContentDescription("Control").performSemanticsAction(
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performSemanticsAction(
             SemanticsActions.OnLongClick,
         ) {
             it()

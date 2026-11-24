@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -113,12 +114,12 @@ internal fun NeovimShortcutsSheet(
     if (options) {
         SettingsDrawer(
             stringResource(R.string.shortcut_menu),
-            "Close Neovim menu settings",
+            stringResource(R.string.a11y_close_neovim_menu),
             { options = false },
             hazeState,
             onBack = { options = false },
             swipeToDismiss = false,
-            backDescription = "Back to Neovim shortcuts",
+            backDescription = stringResource(R.string.back_to_neovim_shortcuts),
         ) {
             Column(
                 Modifier.fillMaxWidth()
@@ -171,7 +172,7 @@ internal fun NeovimShortcutsSheet(
         hazeState,
         onBack = if (current != null) ({ groupId = null }) else null,
         swipeToDismiss = false,
-        backDescription = "Back to Neovim shortcuts",
+        backDescription = stringResource(R.string.back_to_neovim_shortcuts),
     ) {
         Column(
             Modifier.fillMaxWidth()
@@ -250,13 +251,14 @@ internal fun NeovimShortcutsSheet(
                     Text(stringResource(R.string.add_shortcut), style = SettingsType.detail)
                 }
             }
+            val shortcutListDescription = stringResource(R.string.a11y_neovim_shortcut_list)
             LazyColumn(
                 state = list,
                 modifier =
                     Modifier.fillMaxWidth()
                         .weight(1f, fill = false)
                         .heightIn(min = 120.dp, max = 380.dp)
-                        .semantics { contentDescription = "Neovim shortcut list" }
+                        .semantics { contentDescription = shortcutListDescription }
                         .pointerInput(groupId) {
                             detectTabDrag(
                                 start = { position ->
@@ -316,6 +318,9 @@ internal fun NeovimShortcutsSheet(
             ) {
                 if (current == null)
                     item(key = "ungrouped-heading") {
+                        val ungroupedDescription = stringResource(R.string.a11y_ungrouped_shortcuts)
+                        val expandedDescription = stringResource(R.string.a11y_state_expanded)
+                        val collapsedDescription = stringResource(R.string.a11y_state_collapsed)
                         Row(
                             Modifier.fillMaxWidth()
                                 .heightIn(min = 36.dp)
@@ -324,15 +329,19 @@ internal fun NeovimShortcutsSheet(
                                     ungroupedExpanded = !ungroupedExpanded
                                 }
                                 .semantics {
-                                    contentDescription = "Ungrouped shortcuts"
+                                    contentDescription = ungroupedDescription
                                     stateDescription =
-                                        if (ungroupedExpanded) "Expanded" else "Collapsed"
+                                        if (ungroupedExpanded) expandedDescription
+                                        else collapsedDescription
                                 }
                                 .padding(horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "Ungrouped · ${nodes.count {it.group==null}}",
+                                stringResource(
+                                    R.string.ungrouped_count,
+                                    nodes.count { it.group == null },
+                                ),
                                 Modifier.weight(1f),
                                 style = SettingsType.section,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -347,7 +356,7 @@ internal fun NeovimShortcutsSheet(
                         }
                         if (ungroupedExpanded && nodes.none { it.group == null })
                             Text(
-                                "Shortcuts here appear directly on the menu.",
+                                stringResource(R.string.shortcuts_appear_directly),
                                 Modifier.padding(start = 4.dp, bottom = 8.dp),
                                 style = SettingsType.detail,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -356,7 +365,7 @@ internal fun NeovimShortcutsSheet(
                 if (rows.isEmpty() && current != null)
                     item {
                         Text(
-                            "Add a shortcut to this group.",
+                            stringResource(R.string.add_shortcut_to_group),
                             Modifier.padding(12.dp),
                             style = SettingsType.detail,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -379,6 +388,9 @@ internal fun NeovimShortcutsSheet(
                     item(key = row.id) {
                         val title =
                             if (row.group) row.node.group.orEmpty() else row.shortcut!!.label
+                        val rowDescription =
+                            if (row.group) stringResource(R.string.a11y_open_neovim_group, title)
+                            else stringResource(R.string.a11y_edit_neovim_shortcut, title)
                         Row(
                             Modifier.fillMaxWidth()
                                 .graphicsLayer { translationY = drag.translation(row.id, list) }
@@ -400,11 +412,7 @@ internal fun NeovimShortcutsSheet(
                                         editing = true
                                     }
                                 }
-                                .semantics {
-                                    contentDescription =
-                                        if (row.group) "Open Neovim group $title"
-                                        else "Edit Neovim shortcut $title"
-                                }
+                                .semantics { contentDescription = rowDescription }
                                 .padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -420,21 +428,29 @@ internal fun NeovimShortcutsSheet(
                                 )
                                 if (row.group)
                                     Text(
-                                        "${row.node.shortcuts.size} shortcuts",
+                                        pluralStringResource(
+                                            R.plurals.shortcut_count,
+                                            row.node.shortcuts.size,
+                                            row.node.shortcuts.size,
+                                        ),
                                         style = SettingsType.detail,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 else NeovimShortcutChips(row.shortcut!!.keys)
                             }
                             if (row.group)
-                                ChromeButton(ChromeIcon.EDIT, "Rename Neovim group $title") {
+                                ChromeButton(
+                                    ChromeIcon.EDIT,
+                                    stringResource(R.string.a11y_rename_neovim_group, title),
+                                ) {
                                     renameId = row.node.id
                                     groupDialog = true
                                 }
                             ChromeButton(
                                 ChromeIcon.CLOSE,
-                                if (row.group) "Ungroup Neovim group $title"
-                                else "Remove Neovim shortcut $title",
+                                if (row.group)
+                                    stringResource(R.string.a11y_ungroup_neovim_group, title)
+                                else stringResource(R.string.a11y_remove_neovim_shortcut, title),
                             ) {
                                 runCatching {
                                         if (row.group)

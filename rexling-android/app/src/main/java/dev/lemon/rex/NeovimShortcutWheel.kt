@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -531,6 +532,10 @@ private fun NeovimShortcutWheel(
     name: String,
     onChoose: (NeovimShortcut) -> Unit,
 ) {
+    val reopenDescription = stringResource(R.string.a11y_reopen_shortcuts, name)
+    val closeDescription = stringResource(R.string.a11y_close_shortcuts_named, name)
+    val backDescription = stringResource(R.string.a11y_back_to_all_shortcuts)
+    val noCommandDescription = stringResource(R.string.no_command_selected)
     val context = androidx.compose.ui.platform.LocalContext.current
     val choose by rememberUpdatedState(onChoose)
     val config = LocalViewConfiguration.current
@@ -920,13 +925,13 @@ private fun NeovimShortcutWheel(
                         .graphicsLayer { alpha = (reveal.value * 6f).coerceIn(0f, 1f) }
                         .semantics {
                             contentDescription =
-                                if (!wheel.open) "Reopen $name shortcuts"
-                                else if (wheel.group.isEmpty()) "Close $name shortcuts"
-                                else "Back to all shortcuts"
+                                if (!wheel.open) reopenDescription
+                                else if (wheel.group.isEmpty()) closeDescription
+                                else backDescription
                             role = Role.Button
                             stateDescription =
                                 wheel.visible.getOrNull(wheel.highlighted)?.label
-                                    ?: "No command selected"
+                                    ?: noCommandDescription
                             onClick {
                                 if (wheel.open) wheel.center() else wheel.show()
                                 true

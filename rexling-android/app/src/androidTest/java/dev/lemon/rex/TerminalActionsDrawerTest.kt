@@ -76,17 +76,23 @@ class TerminalActionsDrawerTest {
 
         ui.onNodeWithText("nvim").assertIsDisplayed()
         ui.onNodeWithText("74 × 45").assertIsDisplayed()
-        ui.onNodeWithText("Paste").assertIsNotEnabled()
-        ui.onNodeWithText("Attach file").assertIsDisplayed().assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.paste)).assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.attach_file)).assertIsDisplayed().assertIsNotEnabled()
         val theme =
-            ui.onNodeWithText("Light theme").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            ui.onNodeWithText(appString(R.string.light_theme))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
         val copy =
-            ui.onNodeWithText("Copy viewport").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            ui.onNodeWithText(appString(R.string.copy_viewport))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
         assertTrue(theme.left >= copy.right)
-        ui.onNodeWithText("Close pane").performScrollTo().assertIsDisplayed()
-        ui.onNodeWithContentDescription("Close terminal menu").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Preferences").assertIsDisplayed()
-        ui.onNodeWithText("Close pane").performClick()
+        ui.onNodeWithText(appString(R.string.close_pane)).performScrollTo().assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.close_terminal_menu)).assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.preferences)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.close_pane)).performClick()
         ui.runOnIdle { assertEquals(listOf("dismiss", "close pane"), events) }
     }
 }

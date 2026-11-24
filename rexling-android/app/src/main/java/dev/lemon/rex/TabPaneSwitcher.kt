@@ -24,6 +24,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,8 +44,8 @@ internal class SwitcherSessions(
 
 private enum class SwitcherPage(val labelRes: Int, val fallback: String) {
     SESSIONS(R.string.sessions, "Sessions"),
-    TABS(0, "Tabs"),
-    PANES(0, "Panes"),
+    TABS(R.string.section_tabs, "Tabs"),
+    PANES(R.string.section_panes, "Panes"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -246,19 +247,21 @@ internal fun TabPaneSwitcher(
                                 Modifier.zIndex(if (drag.id == id) 1f else 0f).graphicsLayer {
                                     translationY = drag.translation(id, list)
                                 }
+                            val moveUpLabel = stringResource(R.string.move_up)
+                            val moveDownLabel = stringResource(R.string.move_down)
                             fun rowActions(id: String): List<CustomAccessibilityAction> =
                                 if (enabled)
                                     buildList {
                                         val index = ids.indexOf(id)
                                         if (index > 0)
                                             add(
-                                                CustomAccessibilityAction("Move up") {
+                                                CustomAccessibilityAction(moveUpLabel) {
                                                     moveBy(id, -1)
                                                 },
                                             )
                                         if (index >= 0 && index < ids.lastIndex)
                                             add(
-                                                CustomAccessibilityAction("Move down") {
+                                                CustomAccessibilityAction(moveDownLabel) {
                                                     moveBy(id, 1)
                                                 },
                                             )
@@ -308,7 +311,11 @@ internal fun TabPaneSwitcher(
                                             }
                                         else Spacer(Modifier.weight(1f))
                                         if (tabs)
-                                            SwitcherAddButton("New tab", canCreateTab, onNewTab)
+                                            SwitcherAddButton(
+                                                stringResource(R.string.label_new_tab),
+                                                canCreateTab,
+                                                onNewTab,
+                                            )
                                         else if (hasLayout)
                                             FilterChip(
                                                 selected = showLayout,
@@ -318,7 +325,9 @@ internal fun TabPaneSwitcher(
                                                 },
                                                 label = {
                                                     Text(
-                                                        if (showLayout) "Hide map" else "Show map",
+                                                        if (showLayout)
+                                                            stringResource(R.string.hide_map)
+                                                        else stringResource(R.string.show_map),
                                                         style = SettingsType.detail,
                                                     )
                                                 },
@@ -333,14 +342,15 @@ internal fun TabPaneSwitcher(
                                                 modifier = Modifier.height(40.dp),
                                             )
                                     }
+                                val reorderDescription =
+                                    stringResource(
+                                        if (tabs) R.string.reorder_tabs else R.string.reorder_panes,
+                                    )
                                 LazyColumn(
                                     Modifier.fillMaxWidth()
                                         .weight(1f)
                                         .selectableGroup()
-                                        .semantics {
-                                            contentDescription =
-                                                if (tabs) "Reorder tabs" else "Reorder panes"
-                                        }
+                                        .semantics { contentDescription = reorderDescription }
                                         .pointerInput(
                                             enabled,
                                             ids,
@@ -391,8 +401,8 @@ internal fun TabPaneSwitcher(
                                         if (windows.isEmpty())
                                             item {
                                                 SwitcherEmpty(
-                                                    "No tabs yet",
-                                                    "Create a tab to start a terminal.",
+                                                    stringResource(R.string.no_tabs_yet),
+                                                    stringResource(R.string.create_tab_hint),
                                                 )
                                             }
                                         val displayed =
@@ -410,11 +420,16 @@ internal fun TabPaneSwitcher(
                                                 }
                                             val title = tabTitle(tab)
                                             val count =
-                                                "${tab.blocks.size} pane${if(tab.blocks.size==1) "" else "s"}"
+                                                pluralStringResource(
+                                                    R.plurals.pane_count,
+                                                    tab.blocks.size,
+                                                    tab.blocks.size,
+                                                )
                                             val directory = directories[block?.id].orEmpty()
                                             val subtitle =
                                                 listOfNotNull(
-                                                        if (tab.id == selectedWindow) "Viewing"
+                                                        if (tab.id == selectedWindow)
+                                                            stringResource(R.string.viewing)
                                                         else null,
                                                         count,
                                                         directory.takeIf { it.isNotBlank() },
@@ -426,7 +441,7 @@ internal fun TabPaneSwitcher(
                                                 icons,
                                                 focus,
                                                 tab.id == selectedWindow,
-                                                "Tab $title",
+                                                stringResource(R.string.a11y_tab_title, title),
                                                 enabled,
                                                 enabled && tab.blocks.isNotEmpty(),
                                                 { onTab(tab.id) },
@@ -445,7 +460,7 @@ internal fun TabPaneSwitcher(
                                                 { reveal(tab.id, it) },
                                                 listOf(
                                                     SwitcherRowAction(
-                                                        "Rename tab",
+                                                        stringResource(R.string.label_rename_tab),
                                                         ChromeIcon.EDIT,
                                                     ) {
                                                         rename =
@@ -457,7 +472,7 @@ internal fun TabPaneSwitcher(
                                                             )
                                                     },
                                                     SwitcherRowAction(
-                                                        "Close tab",
+                                                        stringResource(R.string.close_tab),
                                                         ChromeIcon.CLOSE,
                                                         destructive = true,
                                                     ) {
@@ -470,8 +485,8 @@ internal fun TabPaneSwitcher(
                                         if (panes.isEmpty())
                                             item {
                                                 SwitcherEmpty(
-                                                    "No panes yet",
-                                                    "Choose a tab or create a new one.",
+                                                    stringResource(R.string.no_panes_yet),
+                                                    stringResource(R.string.choose_tab_hint),
                                                 )
                                             }
                                         else if (hasLayout && showLayout)
@@ -503,9 +518,13 @@ internal fun TabPaneSwitcher(
                                             val placement = placements[block.id]
                                             val subtitle =
                                                 listOfNotNull(
-                                                        if (block.id == selectedBlock) "Viewing"
+                                                        if (block.id == selectedBlock)
+                                                            stringResource(R.string.viewing)
                                                         else null,
-                                                        if (placement?.floating == true) "Floating"
+                                                        if (placement?.floating == true)
+                                                            stringResource(
+                                                                R.string.a11y_state_floating,
+                                                            )
                                                         else null,
                                                         directories[block.id].orEmpty().ifBlank {
                                                             program.label
@@ -518,7 +537,7 @@ internal fun TabPaneSwitcher(
                                                 listOf(program),
                                                 0,
                                                 block.id == selectedBlock,
-                                                "Pane $title",
+                                                stringResource(R.string.a11y_pane_title, title),
                                                 enabled,
                                                 enabled,
                                                 {
@@ -564,7 +583,9 @@ internal fun TabPaneSwitcher(
                                                     )
                                                     add(
                                                         SwitcherRowAction(
-                                                            "Rename pane",
+                                                            stringResource(
+                                                                R.string.label_rename_pane,
+                                                            ),
                                                             ChromeIcon.EDIT,
                                                         ) {
                                                             rename =
@@ -579,7 +600,9 @@ internal fun TabPaneSwitcher(
                                                     if (placement?.floating == true) {
                                                         add(
                                                             SwitcherRowAction(
-                                                                "Dock pane",
+                                                                stringResource(
+                                                                    R.string.label_dock_pane,
+                                                                ),
                                                                 ChromeIcon.SPLIT,
                                                                 enabled = tiledCount > 0,
                                                             ) {
@@ -589,7 +612,9 @@ internal fun TabPaneSwitcher(
                                                     } else if (placement != null) {
                                                         add(
                                                             SwitcherRowAction(
-                                                                "Float pane",
+                                                                stringResource(
+                                                                    R.string.label_float_pane,
+                                                                ),
                                                                 ChromeIcon.FLOAT,
                                                                 enabled = tiledCount > 1,
                                                             ) {
@@ -602,7 +627,7 @@ internal fun TabPaneSwitcher(
                                                     }
                                                     add(
                                                         SwitcherRowAction(
-                                                            "Close pane",
+                                                            stringResource(R.string.close_pane),
                                                             ChromeIcon.CLOSE,
                                                             destructive = true,
                                                         ) {
@@ -694,6 +719,7 @@ private fun SwitcherItem(
     trailing: @Composable () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    val selectedLabel = stringResource(R.string.a11y_state_selected)
     SwitcherSwipeRow(revealed, onReveal, actions, enabled, modifier) {
         Row(
             Modifier.fillMaxWidth()
@@ -702,7 +728,7 @@ private fun SwitcherItem(
                 .selectable(active, enabled = canOpen, role = Role.RadioButton, onClick = onSelect)
                 .semantics {
                     contentDescription = description
-                    stateDescription = if (active) "Selected" else ""
+                    stateDescription = if (active) selectedLabel else ""
                     customActions =
                         if (enabled)
                             reorderActions +

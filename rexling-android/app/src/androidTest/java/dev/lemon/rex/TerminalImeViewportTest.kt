@@ -107,7 +107,7 @@ class TerminalImeViewportTest {
                 }
             }
             ui.waitForIdle()
-            ui.onNodeWithContentDescription("Focus pane").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_focus_pane)).performClick()
             ui.waitForIdle()
             val original = ui.runOnIdle {
                 val bottom = views.getValue("b")
@@ -123,7 +123,7 @@ class TerminalImeViewportTest {
             for (inset in listOf(0, 19, 53, 99, 151, 223, 267, 101, 0)) {
                 ui.runOnIdle { covered = inset }
                 ui.waitForIdle()
-                ui.onNodeWithContentDescription("Focus pane").performClick()
+                ui.onNodeWithContentDescription(appString(R.string.a11y_focus_pane)).performClick()
                 ui.waitForIdle()
                 ui.runOnIdle {
                     for ((id, pair) in original) {

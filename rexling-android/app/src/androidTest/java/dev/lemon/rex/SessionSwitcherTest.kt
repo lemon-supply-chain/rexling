@@ -115,7 +115,7 @@ class SessionSwitcherTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription("Session strip").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip)).assertDoesNotExist()
         ui.onNodeWithText("Rexling development").assertIsDisplayed()
         ui.onNodeWithText("Ubuntu server").assertIsDisplayed()
         capture("sessions-compact-dark.png")
@@ -155,11 +155,11 @@ class SessionSwitcherTest {
             }
         }
         capture("sessions-compact-light.png")
-        ui.onNodeWithText("New session").performClick()
+        ui.onNodeWithText(appString(R.string.new_session)).performClick()
         ui.onNodeWithText("ShipPDF").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Rename session").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.rename_session)).performClick()
         ui.onNode(hasSetTextAction() and hasText("ShipPDF")).performTextReplacement("New project")
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(1, created)
             assertEquals(0, selected)
@@ -175,8 +175,8 @@ class SessionSwitcherTest {
                 SessionsDrawer(emptyList(), "", "", { _, _ -> false }, {}, {}, { created++ })
             }
         }
-        ui.onNodeWithText("No sessions yet").assertIsDisplayed()
-        ui.onNodeWithText("New session").assertIsEnabled().performClick()
+        ui.onNodeWithText(appString(R.string.no_sessions_yet)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.new_session)).assertIsEnabled().performClick()
         ui.runOnIdle { assertEquals(1, created) }
     }
 
@@ -199,15 +199,17 @@ class SessionSwitcherTest {
         }
         fun requestClose() {
             ui.onNodeWithText("ShipPDF").swipeForSwitcherActions()
-            ui.onNodeWithContentDescription("Close session").performTouchInput { click() }
-            ui.onNodeWithText("Close session?").assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.close_session)).performTouchInput {
+                click()
+            }
+            ui.onNodeWithText(appString(R.string.close_session_title)).assertIsDisplayed()
         }
         requestClose()
         ui.runOnIdle { assertTrue(closed.isEmpty()) }
-        ui.onNodeWithText("Cancel").performClick()
+        ui.onNodeWithText(appString(R.string.cancel)).performClick()
         ui.runOnIdle { assertTrue(closed.isEmpty()) }
         requestClose()
-        ui.onNodeWithText("Close session").performClick()
+        ui.onNodeWithText(appString(R.string.close_session)).performClick()
         ui.runOnIdle { assertEquals(listOf(targets[1].key), closed) }
     }
 
@@ -270,7 +272,7 @@ class SessionSwitcherTest {
                 )
             }
         }
-        ui.onNodeWithText("All panes").performClick()
+        ui.onNodeWithText(appString(R.string.all_panes)).performClick()
         ui.onNodeWithText("Shulhi MBP").assertIsDisplayed()
         ui.onNodeWithText("Local task").assertIsDisplayed()
         ui.onNode(hasSetTextAction()).performTextReplacement("infra/builds")
@@ -281,7 +283,7 @@ class SessionSwitcherTest {
             assertEquals(remote, opened)
             assertNotEquals(local.key, remote.key)
         }
-        ui.onNodeWithContentDescription("Back to sessions").performClick()
-        ui.onNodeWithText("All panes").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_back_to_sessions)).performClick()
+        ui.onNodeWithText(appString(R.string.all_panes)).assertIsDisplayed()
     }
 }

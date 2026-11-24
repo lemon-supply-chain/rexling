@@ -55,7 +55,7 @@ class ActivityCatalogTest {
                 ),
             )!!
         assertEquals("Title", parsed.title)
-        assertEquals("Approval", parsed.stateLabel)
+        assertEquals(R.string.activity_kind_approval, parsed.stateLabelRes)
         assertNull(parsed.progress)
         assertEquals(0L, parsed.timestamp)
     }

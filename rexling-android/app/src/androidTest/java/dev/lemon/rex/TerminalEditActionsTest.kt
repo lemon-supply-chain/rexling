@@ -84,15 +84,17 @@ class TerminalEditActionsTest {
     @Test
     fun tabAndPaneRenameActionsNeverOpenTheTerminal() {
         show(0)
-        ui.onNodeWithContentDescription("Tab Project").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Rename tab").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tab_title, "Project"))
+            .swipeForSwitcherActions()
+        ui.onNodeWithContentDescription(appString(R.string.label_rename_tab)).performClick()
         ui.onNode(hasSetTextAction()).performTextReplacement("Release")
-        ui.onNodeWithText("Save").performClick()
-        ui.onNodeWithText("Panes").performClick()
-        ui.onNodeWithContentDescription("Pane fish").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Rename pane").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_title, "fish"))
+            .swipeForSwitcherActions()
+        ui.onNodeWithContentDescription(appString(R.string.label_rename_pane)).performClick()
         ui.onNode(hasSetTextAction()).performTextReplacement("Console")
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(listOf("rename-tab:w:Release", "rename-pane:w:a:Console"), calls)
         }
@@ -101,29 +103,37 @@ class TerminalEditActionsTest {
     @Test
     fun dockingChoosesTheTargetAndSideWhileFloatingKeepsOneTiledPane() {
         show(1)
-        ui.onNodeWithContentDescription("Pane Floating task").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Dock pane").performClick()
-        ui.onNodeWithContentDescription("Close dock pane").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_title, "Floating task"))
+            .swipeForSwitcherActions()
+        ui.onNodeWithContentDescription(appString(R.string.label_dock_pane)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.close_dock_pane)).assertIsDisplayed()
         ui.onNodeWithContentDescription("Close tab and pane switcher").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Close dock pane").performClick()
-        ui.onNodeWithContentDescription("Pane Floating task").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Dock pane").performClick()
-        val map = ui.onNodeWithContentDescription("Pane layout").fetchSemanticsNode().boundsInRoot
+        ui.onNodeWithContentDescription(appString(R.string.close_dock_pane)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_title, "Floating task"))
+            .swipeForSwitcherActions()
+        ui.onNodeWithContentDescription(appString(R.string.label_dock_pane)).performClick()
+        val map =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_pane_layout))
+                .fetchSemanticsNode()
+                .boundsInRoot
         val drawer = ui.onNodeWithTag("Frosted overlay").fetchSemanticsNode().boundsInRoot
         assertEquals(4f / 3f, map.width / map.height, .01f)
         assertEquals(drawer.center.x, map.center.x, 1f)
         assertTrue(map.width < drawer.width)
         ui.onNodeWithContentDescription("Layout pane Floating task").assertDoesNotExist()
-        ui.onNodeWithText("Dock right").assertIsDisplayed().performClick()
-        ui.onNodeWithContentDescription("Close dock pane").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Pane Floating task").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Dock pane").performClick()
+        ui.onNodeWithText(appString(R.string.dock_right)).assertIsDisplayed().performClick()
+        ui.onNodeWithContentDescription(appString(R.string.close_dock_pane)).assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_title, "Floating task"))
+            .swipeForSwitcherActions()
+        ui.onNodeWithContentDescription(appString(R.string.label_dock_pane)).performClick()
         ui.onNodeWithContentDescription("Layout pane Agent task").performClick().assertIsSelected()
-        ui.onNodeWithText("Dock below").assertIsDisplayed().performClick()
-        ui.onNodeWithContentDescription("Pane Agent task").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Float pane").performClick()
-        ui.onNodeWithContentDescription("Pane fish").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Float pane").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.dock_below)).assertIsDisplayed().performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_title, "Agent task"))
+            .swipeForSwitcherActions()
+        ui.onNodeWithContentDescription(appString(R.string.label_float_pane)).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_title, "fish"))
+            .swipeForSwitcherActions()
+        ui.onNodeWithContentDescription(appString(R.string.label_float_pane)).assertIsNotEnabled()
         ui.runOnIdle {
             assertEquals(listOf("dock:w:f:a:RIGHT", "dock:w:f:b:BELOW", "float:w:b"), calls)
         }
@@ -149,14 +159,14 @@ class TerminalEditActionsTest {
                 }
             }
         }
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.onNode(hasSetTextAction()).assertTextContains("My pane")
         ui.runOnIdle {
             assertEquals(0, closed)
             accept = true
         }
         ui.onNode(hasSetTextAction()).performTextClearance()
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals("", value)
             assertEquals(1, closed)

@@ -1,6 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- The app window follows the theme. Android 12+ draws the same blue as the animated paper. -->
     <color name="launch_canvas">#f3f4f9</color>
+    <!-- Window background when the stored in-app appearance is dark on a light device. -->
+    <color name="window_canvas_dark">#090c11</color>
     <color name="launch_paper">#4E8BFF</color>
     <style name="Theme.Rex" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/launch_canvas</item>

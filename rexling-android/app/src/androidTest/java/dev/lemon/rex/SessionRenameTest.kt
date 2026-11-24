@@ -41,7 +41,9 @@ class SessionRenameTest {
             }
         }
         ui.onNodeWithText("old name").swipeForSwitcherActions()
-        ui.onNodeWithContentDescription("Rename session").performTouchInput { click() }
+        ui.onNodeWithContentDescription(appString(R.string.rename_session)).performTouchInput {
+            click()
+        }
         ui.runOnIdle {
             assertEquals(1, renamed)
             assertEquals(0, selected)
@@ -54,14 +56,14 @@ class SessionRenameTest {
         var saved = ""
         ui.setContent { MaterialTheme { SessionRenameDialog(target, true, { saved = it }, {}) } }
         ui.onNode(hasSetTextAction()).assertTextContains("old name")
-        ui.onNodeWithText("Save").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.save)).assertIsNotEnabled()
         ui.onNode(hasSetTextAction()).performTextReplacement("   ")
-        ui.onNodeWithText("Save").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.save)).assertIsNotEnabled()
         ui.onNode(hasSetTextAction()).performTextReplacement("🦀".repeat(129))
-        ui.onNodeWithText("Use at most 128 characters").assertIsDisplayed()
-        ui.onNodeWithText("Save").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.session_name_too_long)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.save)).assertIsNotEnabled()
         ui.onNode(hasSetTextAction()).performTextReplacement("  Coding λ  ")
-        ui.onNodeWithText("Save").performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle { assertEquals("Coding λ", saved) }
     }
 
@@ -73,7 +75,7 @@ class SessionRenameTest {
             MaterialTheme { SessionRenameDialog(target, true, { saved++ }, { cancelled++ }) }
         }
         ui.onNode(hasSetTextAction()).performTextReplacement("changed")
-        ui.onNodeWithText("Cancel").performClick()
+        ui.onNodeWithText(appString(R.string.cancel)).performClick()
         ui.runOnIdle {
             assertEquals(0, saved)
             assertEquals(1, cancelled)

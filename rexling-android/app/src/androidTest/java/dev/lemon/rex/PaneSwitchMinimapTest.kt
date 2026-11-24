@@ -41,7 +41,7 @@ class PaneSwitchMinimapTest {
                 PaneSwitchMinimap(layout, active.value, Modifier.size(112.dp, 72.dp))
             }
         }
-        val node = ui.onNodeWithContentDescription("Pane switch layout")
+        val node = ui.onNodeWithContentDescription(appString(R.string.a11y_pane_switch_layout))
         for (isDark in listOf(false, true)) {
             ui.runOnIdle {
                 dark.value = isDark

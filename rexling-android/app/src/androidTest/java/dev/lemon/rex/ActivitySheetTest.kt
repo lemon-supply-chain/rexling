@@ -71,8 +71,8 @@ class ActivitySheetTest {
         ui.onNodeWithText("Linux").assertIsDisplayed()
         ui.onNodeWithText("Mac").assertIsDisplayed()
         capture("activity-compact-light.png")
-        ui.onNodeWithContentDescription("Refresh activity").assertIsEnabled()
-        ui.onNodeWithText("Needs you").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.refresh_activity)).assertIsEnabled()
+        ui.onNodeWithText(appString(R.string.filter_attention)).performClick()
         ui.onNodeWithText("Building").assertDoesNotExist()
         ui.onNodeWithContentDescription("Review, Approval, Session s2, Mac").performClick()
         ui.runOnIdle {
@@ -91,15 +91,20 @@ class ActivitySheetTest {
             }
         }
         val pane =
-            ui.onNodeWithContentDescription("Tabs and panes").fetchSemanticsNode().boundsInRoot
-        val eye = ui.onNodeWithContentDescription("Activity").fetchSemanticsNode().boundsInRoot
+            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs_and_panes))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val eye =
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot
         assertTrue(eye.left >= pane.right)
-        ui.onNodeWithContentDescription("Tabs and panes").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs_and_panes)).performClick()
         ui.runOnIdle { assertEquals(listOf("switcher"), calls) }
         ui.onNodeWithText("Switch pane").assertDoesNotExist()
         ui.onNodeWithText("New pane").assertDoesNotExist()
-        ui.onNodeWithText("New tab").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Activity").performClick()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.activity)).performClick()
         ui.runOnIdle { assertEquals("activity", calls.last()) }
     }
 
@@ -211,11 +216,11 @@ class ActivitySheetTest {
                     "Finished",
                 ),
             )
-        ui.onNodeWithText("Seen").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.a11y_state_seen)).assertDoesNotExist()
         capture("activity-finished-alignment-dark.png")
         ui.onNodeWithContentDescription("Mark Review seen").performClick()
-        ui.onNodeWithText("Seen").assertDoesNotExist()
-        ui.onNodeWithText("Mark seen").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.a11y_state_seen)).assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.mark_seen)).assertIsNotEnabled()
         ui.onNodeWithContentDescription(rowDescription)
             .assert(
                 SemanticsMatcher.expectValue(
@@ -363,7 +368,7 @@ class ActivitySheetTest {
             .assertCountEquals(0)
         assertEquals(before, ui.onNodeWithText("Review").fetchSemanticsNode().boundsInRoot)
         ui.runOnIdle { items.value = emptyList() }
-        ui.onNodeWithText("Checking activity…").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.activity_checking)).assertIsDisplayed()
     }
 
     @Test
@@ -383,7 +388,7 @@ class ActivitySheetTest {
         }
         ui.onNodeWithText("Approval needed").assertIsDisplayed()
         ui.onNodeWithText("Finished build").assertDoesNotExist()
-        ui.onNodeWithText("All").performClick()
+        ui.onNodeWithText(appString(R.string.filter_all)).performClick()
         ui.onNodeWithText("Approval needed").assertIsDisplayed()
         ui.onNodeWithText("Finished build").assertIsDisplayed()
     }
@@ -397,7 +402,10 @@ class ActivitySheetTest {
                 TerminalActions(true, true, {}, {}, attentionCount = count.intValue)
             }
         }
-        val eye = ui.onNodeWithContentDescription("Activity").fetchSemanticsNode().boundsInRoot
+        val eye =
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot
         val dot =
             ui.onNodeWithTag("Activity unread dot", useUnmergedTree = true)
                 .fetchSemanticsNode()
@@ -418,7 +426,7 @@ class ActivitySheetTest {
         ui.runOnIdle { dark.value = true }
         ui.waitForIdle()
         eyeCapture("activity-eye-reference-dark.png")
-        ui.onNodeWithContentDescription("Activity")
+        ui.onNodeWithContentDescription(appString(R.string.activity))
             .assert(
                 SemanticsMatcher.expectValue(
                     androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
@@ -429,7 +437,9 @@ class ActivitySheetTest {
         ui.onNodeWithTag("Activity unread dot", useUnmergedTree = true).assertDoesNotExist()
         assertEquals(
             eye,
-            ui.onNodeWithContentDescription("Activity").fetchSemanticsNode().boundsInRoot,
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot,
         )
     }
 }

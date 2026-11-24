@@ -82,7 +82,7 @@ class TerminalProgressUiTest {
             }
         }
         ui.onNodeWithText("40%", substring = true).assertIsDisplayed()
-        ui.onNodeWithText("Mark seen").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.mark_seen)).assertIsNotEnabled()
         capture("progress-activity-dark.png")
     }
 }

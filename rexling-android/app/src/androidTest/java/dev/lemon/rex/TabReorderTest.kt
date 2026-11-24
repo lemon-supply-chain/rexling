@@ -51,7 +51,8 @@ class TabReorderTest {
         }
     }
 
-    private fun tab(id: String) = ui.onNodeWithContentDescription("Tab $id, Terminal")
+    private fun tab(id: String) =
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tab, id, "Terminal"))
 
     @Test
     fun holdingAndReleasingKeepsCloseAndMoveOptions() {
@@ -62,9 +63,9 @@ class TabReorderTest {
         ui.waitForIdle()
         tab("One").performTouchInput { up() }
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithText("Close tab").assertExists()
-        ui.onNodeWithText("Move left").assertIsNotEnabled()
-        ui.onNodeWithText("Move right").performClick()
+        ui.onNodeWithText(appString(R.string.close_tab)).assertExists()
+        ui.onNodeWithText(appString(R.string.move_left)).assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.move_right)).performClick()
         ui.runOnIdle {
             assertEquals(listOf("Two", "One", "Three", "Four", "Five", "Six"), order.value)
             assertEquals(listOf("One" to "Three"), moves)
@@ -72,7 +73,7 @@ class TabReorderTest {
         }
         tab("One").assertIsSelected()
         tab("One").performSemanticsAction(SemanticsActions.OnLongClick) { it() }
-        ui.onNodeWithText("Close tab").performClick()
+        ui.onNodeWithText(appString(R.string.close_tab)).performClick()
         ui.runOnIdle { assertEquals(listOf("One"), closed) }
     }
 
@@ -99,7 +100,7 @@ class TabReorderTest {
             assertTrue(selections.isEmpty())
         }
         tab("One").assertIsSelected()
-        ui.onNodeWithText("Close tab").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.close_tab)).assertDoesNotExist()
     }
 
     @Test
@@ -121,7 +122,7 @@ class TabReorderTest {
             assertTrue(moves.isEmpty())
             assertEquals("One", order.value.first())
         }
-        ui.onNodeWithText("Close tab").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.close_tab)).assertDoesNotExist()
     }
 
     @Test
@@ -161,7 +162,7 @@ class TabReorderTest {
         }
         ui.mainClock.advanceTimeByFrame()
         ui.runOnIdle { assertTrue(moves.isEmpty()) }
-        ui.onNodeWithText("Close tab").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.close_tab)).assertDoesNotExist()
     }
 
     @Test

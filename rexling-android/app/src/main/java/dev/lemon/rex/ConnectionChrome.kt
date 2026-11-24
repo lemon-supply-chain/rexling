@@ -16,14 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-internal fun connectionMessage(phase: String, network: Boolean?): String? =
-    when {
-        phase !in listOf("connecting", "reconnecting", "error") -> null
-        network == false -> "Waiting for network · input paused"
-        phase == "connecting" -> "Connecting…"
-        else -> "Reconnecting · input paused"
-    }
-
 @Composable
 internal fun connectionNoticeText(
     phase: String,

@@ -32,20 +32,25 @@ class SettingsScreensTest {
         for (isDark in listOf(false, true)) {
             ui.runOnIdle { dark = isDark }
             var layout: androidx.compose.ui.text.TextLayoutResult? = null
-            ui.onNodeWithContentDescription("Close preferences").assertIsDisplayed()
-            ui.onNodeWithText("Preferences").assertIsDisplayed().performSemanticsAction(
-                androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult,
-            ) { action ->
-                val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-                action(results)
-                layout = results.first()
-            }
+            ui.onNodeWithContentDescription(appString(R.string.close_preferences))
+                .assertIsDisplayed()
+            ui.onNodeWithText(appString(R.string.preferences))
+                .assertIsDisplayed()
+                .performSemanticsAction(
+                    androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult,
+                ) { action ->
+                    val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                    action(results)
+                    layout = results.first()
+                }
             val luminance = layout!!.layoutInput.style.color.luminance()
             assertTrue(
                 "Preference header must contrast with its background: dark=$isDark luminance=$luminance",
                 if (isDark) luminance > .5f else luminance < .3f,
             )
-            ui.onNodeWithText("Background alerts").performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText(appString(R.string.background_alerts))
+                .performScrollTo()
+                .assertIsDisplayed()
             ui.onNodeWithText("Portside").assertDoesNotExist()
             capture("preferences", isDark)
         }

@@ -115,24 +115,28 @@ class PaneChromeTest {
         ui.mainClock.autoAdvance = false
     }
 
-    private fun badge() = ui.onNodeWithContentDescription("Pane switch indicator")
+    private fun badge() =
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_switch_indicator))
 
     @Test
     fun badgeNeverDisappearsOrChangesPaneAcrossTheAnimationHandoff() {
         carousel()
         badge().assertDoesNotExist()
-        ui.onNodeWithContentDescription("Pane switch layout").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_switch_layout))
+            .assertDoesNotExist()
         val dx = -terminal.width * .55f
         ui.runOnIdle { terminal.onPaneDrag?.invoke(dx, true) }
         ui.mainClock.advanceTimeByFrame()
         badge()
             .assertExists()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "b"))
-        ui.onNodeWithContentDescription("Pane switch layout")
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_switch_layout))
             .assertExists()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "b"))
         val map =
-            ui.onNodeWithContentDescription("Pane switch layout").fetchSemanticsNode().boundsInRoot
+            ui.onNodeWithContentDescription(appString(R.string.a11y_pane_switch_layout))
+                .fetchSemanticsNode()
+                .boundsInRoot
         val caption = ui.onNodeWithText("codex").fetchSemanticsNode().boundsInRoot
         assertTrue("Caption must sit below the minimap", caption.top >= map.bottom)
         badge().captureToImage().asAndroidBitmap().let { bitmap ->
@@ -226,16 +230,19 @@ class PaneChromeTest {
         ui.mainClock.advanceTimeBy(500)
         badge().assertDoesNotExist()
         ui.runOnIdle { assertTrue(selected.isEmpty()) }
-        ui.onNodeWithContentDescription("Pane position indicator").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_position_indicator))
+            .assertDoesNotExist()
     }
 
     @Test
     fun oneFixedIndicatorAndProgramAnchorStayPutThroughoutASwipe() {
         carousel()
-        val fixed = ui.onNodeWithContentDescription("Pane position indicator")
+        val fixed =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_pane_position_indicator))
         val before = fixed.fetchSemanticsNode().boundsInRoot
         val dimensions = terminal.width to terminal.height
-        ui.onAllNodesWithContentDescription("Pane position indicator").assertCountEquals(1)
+        ui.onAllNodesWithContentDescription(appString(R.string.a11y_pane_position_indicator))
+            .assertCountEquals(1)
         val next = -terminal.width * .4f
         ui.runOnIdle { terminal.onPaneDrag?.invoke(next, true) }
         ui.mainClock.advanceTimeByFrame()
@@ -254,14 +261,16 @@ class PaneChromeTest {
         ui.onAllNodes(hasContentDescription("Switch pane", substring = true)).assertCountEquals(0)
         ui.runOnIdle { terminal.onPaneDragEnd?.invoke(-next, 0f) }
         ui.mainClock.advanceTimeBy(300)
-        ui.onAllNodesWithContentDescription("Pane position indicator").assertCountEquals(1)
+        ui.onAllNodesWithContentDescription(appString(R.string.a11y_pane_position_indicator))
+            .assertCountEquals(1)
         assertEquals(before, fixed.fetchSemanticsNode().boundsInRoot)
     }
 
     @Test
     fun theFixedIndicatorStillOpensPaneSelection() {
         carousel()
-        ui.onNodeWithContentDescription("Pane position indicator").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_pane_position_indicator))
+            .performClick()
         ui.runOnIdle { assertEquals(1, opened) }
     }
 
@@ -270,7 +279,8 @@ class PaneChromeTest {
         carousel(history = true)
         ui.runOnIdle { terminal.onPaneDrag?.invoke(-terminal.width * .4f, true) }
         ui.mainClock.advanceTimeByFrame()
-        val latest = ui.onNodeWithText("↓ Latest").fetchSemanticsNode().boundsInRoot
+        val latest =
+            ui.onNodeWithText(appString(R.string.label_latest)).fetchSemanticsNode().boundsInRoot
         val program = badge().fetchSemanticsNode().boundsInRoot
         assertTrue("$latest overlaps $program", latest.bottom <= program.top)
     }
@@ -284,7 +294,9 @@ class PaneChromeTest {
         ui.runOnIdle { terminal.onPaneDrag?.invoke(-terminal.width * .4f, true) }
         ui.mainClock.advanceTimeByFrame()
         val map =
-            ui.onNodeWithContentDescription("Pane switch layout").fetchSemanticsNode().boundsInRoot
+            ui.onNodeWithContentDescription(appString(R.string.a11y_pane_switch_layout))
+                .fetchSemanticsNode()
+                .boundsInRoot
         val title = ui.onNodeWithText("Investigate sync").fetchSemanticsNode().boundsInRoot
         val directory = ui.onNodeWithText("~/Dev/rexling").fetchSemanticsNode().boundsInRoot
         assertTrue(title.top >= map.bottom)
@@ -320,7 +332,9 @@ class PaneChromeTest {
         }
         assertEquals(0.sp, text!!.layoutInput.style.letterSpacing)
         assertEquals(12.sp, text!!.layoutInput.style.fontSize)
-        val image = ui.onNodeWithContentDescription("Pane switch caption").captureToImage()
+        val image =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_pane_switch_caption))
+                .captureToImage()
         val pixels = image.toPixelMap()
         val density =
             InstrumentationRegistry.getInstrumentation()
@@ -402,7 +416,10 @@ class PaneChromeTest {
         }
         fun check(width: androidx.compose.ui.unit.Dp, mode: String) {
             ui.onNodeWithContentDescription("Tabs").assertWidthIsEqualTo(width)
-            ui.onNodeWithContentDescription("Tab PDF preview, Codex", substring = true)
+            ui.onNodeWithContentDescription(
+                    appString(R.string.a11y_tab, "PDF preview", "Codex"),
+                    substring = true,
+                )
                 .assertIsDisplayed()
                 .assertIsSelected()
             ui.onNodeWithTag("Tab unread dot tab", useUnmergedTree = true).assertIsDisplayed()
@@ -421,7 +438,7 @@ class PaneChromeTest {
                 .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
         check(144.dp, "titles")
-        ui.onNodeWithContentDescription("Show icons only").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).performClick()
         check(48.dp, "icons")
         ui.runOnIdle {
             assertEquals(List(2) { listOf("keyboard", "switcher", "activity") }.flatten(), actions)

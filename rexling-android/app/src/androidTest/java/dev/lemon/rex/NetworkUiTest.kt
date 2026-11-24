@@ -47,13 +47,13 @@ class NetworkUiTest {
             compose.runOnIdle {
                 clipboard.setPrimaryClip(ClipData.newPlainText("Test SSH key", key))
             }
-            compose.onNodeWithText("Paste new key").performClick()
-            compose.onNodeWithText("Private key").assertIsDisplayed()
-            compose.onNodeWithText("Cancel").performClick()
+            compose.onNodeWithText(appString(R.string.paste_new_key)).performClick()
+            compose.onNodeWithText(appString(R.string.private_key)).assertIsDisplayed()
+            compose.onNodeWithText(appString(R.string.cancel)).performClick()
             assertFalse(NetworkSettings.hasKey(endpoint))
-            compose.onNodeWithText("Paste new key").performClick()
-            compose.onNodeWithText("Key name").performTextInput("Pasted test key")
-            compose.onNodeWithText("Save key").assertIsEnabled().performClick()
+            compose.onNodeWithText(appString(R.string.paste_new_key)).performClick()
+            compose.onNodeWithText(appString(R.string.key_name)).performTextInput("Pasted test key")
+            compose.onNodeWithText(appString(R.string.save_key)).assertIsEnabled().performClick()
             compose.waitUntil(timeoutMillis = 10000) { selected != null }
             compose.onNodeWithText("Pasted test key").assertIsDisplayed()
             assertFalse(
@@ -82,16 +82,18 @@ class NetworkUiTest {
         compose.setContent { MaterialTheme { Column { SshKeyEditor(selected) { selected = it } } } }
         try {
             compose.runOnIdle { clipboard.clearPrimaryClip() }
-            compose.onNodeWithText("Paste new key").performClick()
-            compose.onNodeWithText("Save key").assertIsNotEnabled()
-            compose.onNodeWithText("Key name").performTextInput("Invalid key")
-            compose.onNodeWithText("Private key").performTextInput("not a private key")
-            compose.onNodeWithText("Save key").performClick()
+            compose.onNodeWithText(appString(R.string.paste_new_key)).performClick()
+            compose.onNodeWithText(appString(R.string.save_key)).assertIsNotEnabled()
+            compose.onNodeWithText(appString(R.string.key_name)).performTextInput("Invalid key")
+            compose
+                .onNodeWithText(appString(R.string.private_key))
+                .performTextInput("not a private key")
+            compose.onNodeWithText(appString(R.string.save_key)).performClick()
             compose.waitUntil(timeoutMillis = 10000) {
                 compose.onAllNodesWithText("ssh: no key found").fetchSemanticsNodes().isNotEmpty()
             }
             assertFalse(NetworkSettings.hasKey("ssh://invalid-paste@127.0.0.1:2222"))
-            compose.onNodeWithText("Cancel").performClick()
+            compose.onNodeWithText(appString(R.string.cancel)).performClick()
         } finally {
             compose.runOnIdle {
                 if (previous != null) clipboard.setPrimaryClip(previous)
@@ -103,9 +105,9 @@ class NetworkUiTest {
     @Test
     fun networkSettingsExposeOptionalTailscaleAndControlServer() {
         compose.setContent { MaterialTheme { NetworkSheet {} } }
-        compose.onNodeWithText("Built-in Tailscale").assertIsDisplayed()
-        compose.onNodeWithText("Control server (optional)").assertIsDisplayed()
-        compose.onNodeWithText("Apply").assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.builtin_tailscale)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.control_server_optional)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.apply)).assertIsDisplayed()
         compose.waitForIdle()
         InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().let { bitmap ->
             File(
@@ -122,14 +124,17 @@ class NetworkUiTest {
     @Test
     fun serverEditorOffersPerServerNetworkAndSetup() {
         compose.setContent { MaterialTheme { ServerEditor(null, {}, { _, _, _ -> null }) } }
-        compose.onNodeWithText("Connection network").assertDoesNotExist()
-        compose.onNodeWithText("Server URL").performTextInput("https://shipyard")
-        compose.onNodeWithText("Phone network / VPN").performScrollTo().performClick()
-        compose.onNodeWithText("Built-in Tailscale").performClick()
-        compose.onNodeWithText("Set up / sign in").assertIsDisplayed()
-        compose.onNodeWithText("Built-in Tailscale").performClick()
-        compose.onNodeWithText("Phone network / VPN").performClick()
-        compose.onNodeWithText("Use this phone’s network and existing VPN.").assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.connection_network)).assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.server_url)).performTextInput("https://shipyard")
+        compose
+            .onNodeWithText(appString(R.string.network_route_system))
+            .performScrollTo()
+            .performClick()
+        compose.onNodeWithText(appString(R.string.builtin_tailscale)).performClick()
+        compose.onNodeWithText(appString(R.string.setup_or_signin)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.builtin_tailscale)).performClick()
+        compose.onNodeWithText(appString(R.string.network_route_system)).performClick()
+        compose.onNodeWithText(appString(R.string.system_route_desc)).assertIsDisplayed()
     }
 
     @Test
@@ -148,7 +153,7 @@ class NetworkUiTest {
                 )
             }
         }
-        compose.onNodeWithText("Sign-in required").assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.tailscale_needs_login)).assertIsDisplayed()
         compose.onNodeWithText("NeedsLogin").assertDoesNotExist()
         compose.onNodeWithText("Sign in").performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
@@ -161,7 +166,7 @@ class NetworkUiTest {
         compose.setContent { MaterialTheme { TailscaleStatusCard(state, false, onSignIn = {}) } }
         compose.onNodeWithText("Sign in").assertIsDisplayed()
         compose.runOnIdle { state = "Running" }
-        compose.onNodeWithText("Connected").assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.status_connected)).assertIsDisplayed()
         compose.onNodeWithTag("Tailscale sign out button").assertIsDisplayed()
         compose.onNodeWithText("Sign in").assertDoesNotExist()
         compose.onNodeWithText("Sign in again").assertDoesNotExist()
@@ -171,10 +176,10 @@ class NetworkUiTest {
     fun emptyServerStateOpensAddServerInsteadOfQuickTailscaleSetup() {
         var added = 0
         compose.setContent { MaterialTheme { EmptyServerContent { added++ } } }
-        compose.onNodeWithText("Welcome to Rexling").assertIsDisplayed()
-        compose.onNodeWithText("Rex server URL").assertDoesNotExist()
-        compose.onNodeWithText("Connect over Tailscale").assertDoesNotExist()
-        compose.onNodeWithText("Add server").performClick()
+        compose.onNodeWithText(appString(R.string.welcome_title)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.rex_server_url)).assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.connect_over_tailscale)).assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.add_server_title)).performClick()
         compose.runOnIdle { assertEquals(1, added) }
     }
 
@@ -202,8 +207,8 @@ class NetworkUiTest {
         }
         for (value in listOf(false, true)) {
             compose.runOnIdle { dark = value }
-            compose.onNodeWithText("Connected").assertIsDisplayed()
-            compose.onNodeWithText("Active connections").assertIsDisplayed()
+            compose.onNodeWithText(appString(R.string.status_connected)).assertIsDisplayed()
+            compose.onNodeWithText(appString(R.string.active_connections)).assertIsDisplayed()
             compose.onNodeWithText("shipyard-rex").assertIsDisplayed()
             compose.onNodeWithText("Direct").assertIsDisplayed()
             compose.onNodeWithText("Sign in").assertDoesNotExist()
@@ -228,9 +233,9 @@ class NetworkUiTest {
                 }
             }
         }
-        compose.onNodeWithText("Phone network / VPN").assertIsDisplayed()
-        compose.onNodeWithText("Connected").assertIsDisplayed()
-        compose.onNodeWithText("Not set up").assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.network_route_system)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.status_connected)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.tailscale_off)).assertIsDisplayed()
         compose.onNodeWithText("Starting…").assertDoesNotExist()
     }
 
@@ -244,10 +249,10 @@ class NetworkUiTest {
                 else TailscaleStatusCard("Off", false, onSignIn = {})
             }
         }
-        compose.onNodeWithText("Continue in browser").assertIsDisplayed()
-        compose.onNodeWithText("Cancel sign-in").performClick()
-        compose.onNodeWithText("Continue in browser").assertDoesNotExist()
-        compose.onNodeWithText("Not set up").assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.continue_in_browser)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.cancel_sign_in)).performClick()
+        compose.onNodeWithText(appString(R.string.continue_in_browser)).assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.tailscale_off)).assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, continued) }
     }
 
@@ -262,8 +267,11 @@ class NetworkUiTest {
                 )
             }
         }
-        compose.onNodeWithText("Import new key").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("No key").assertIsDisplayed()
+        compose
+            .onNodeWithText(appString(R.string.import_new_key))
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.no_key)).assertIsDisplayed()
         compose.waitForIdle()
         InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().let { bitmap ->
             File(

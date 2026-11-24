@@ -34,14 +34,14 @@ class ConnectionChromeTest {
         ui.mainClock.autoAdvance = false
         ui.mainClock.advanceTimeBy(450)
         ui.onNodeWithText("Sized by another client · 67×25").assertIsDisplayed()
-        ui.onNodeWithText("Take over").performClick()
+        ui.onNodeWithText(appString(R.string.take_over)).performClick()
         ui.runOnIdle {
             assertTrue(capture)
             assertEquals(1, takes)
             other.value = false
         }
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithText("Take over").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.take_over)).assertDoesNotExist()
         ui.runOnIdle { assertFalse(capture) }
     }
 
@@ -53,7 +53,7 @@ class ConnectionChromeTest {
         ui.mainClock.advanceTimeBy(100)
         ui.runOnIdle { other.value = false }
         ui.mainClock.advanceTimeBy(1000)
-        ui.onNodeWithText("Take over").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.take_over)).assertDoesNotExist()
     }
 
     @Test
@@ -63,11 +63,11 @@ class ConnectionChromeTest {
         ui.setContent {
             MaterialTheme { ConnectionNotice("reconnecting", online.value, { retries++ }) }
         }
-        ui.onNodeWithText("Waiting for network · input paused").assertIsDisplayed()
-        ui.onNodeWithText("Retry now").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.waiting_network_input_paused)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.retry_now)).assertIsNotEnabled()
         ui.runOnIdle { online.value = true }
-        ui.onNodeWithText("Reconnecting · input paused").assertIsDisplayed()
-        ui.onNodeWithText("Retry now").performClick()
+        ui.onNodeWithText(appString(R.string.reconnecting_input_paused)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.retry_now)).performClick()
         ui.runOnIdle { assertEquals(1, retries) }
     }
 
@@ -77,9 +77,9 @@ class ConnectionChromeTest {
         ui.setContent { MaterialTheme { ReadyNotice(1, owned.value, true) } }
         ui.mainClock.autoAdvance = false
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithText("Ready to type").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.ready_to_type)).assertIsDisplayed()
         ui.runOnIdle { owned.value = false }
         ui.mainClock.advanceTimeBy(2000)
-        ui.onNodeWithText("Ready to type").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.ready_to_type)).assertDoesNotExist()
     }
 }

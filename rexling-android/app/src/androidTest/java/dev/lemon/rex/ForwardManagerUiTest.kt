@@ -63,7 +63,8 @@ class ForwardManagerUiTest {
                 ui.onNodeWithContentDescription("Remove forward to 127.0.0.1:5173")
                     .getUnclippedBoundsInRoot()
             val copy =
-                ui.onNodeWithContentDescription("Copy forwarded URL").getUnclippedBoundsInRoot()
+                ui.onNodeWithContentDescription(appString(R.string.a11y_copy_forwarded_url))
+                    .getUnclippedBoundsInRoot()
             assertEquals("URL aligns with port", port.left.value, url.left.value, .5f)
             assertEquals(
                 "Copy aligns under remove",
@@ -71,9 +72,9 @@ class ForwardManagerUiTest {
                 (copy.left.value + copy.right.value) / 2,
                 .5f,
             )
-            ui.onNodeWithContentDescription("Start").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.start_forward)).performClick()
             ui.runOnIdle { assertEquals("a", started) }
-            ui.onNodeWithContentDescription("Stop").assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.stop_forward)).assertIsDisplayed()
         } finally {
             ui.runOnIdle {
                 PortForwards.items.clear()

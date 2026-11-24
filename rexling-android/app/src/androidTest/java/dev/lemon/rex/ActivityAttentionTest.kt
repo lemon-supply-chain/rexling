@@ -59,7 +59,7 @@ class ActivityAttentionTest {
             ui.waitUntil(20000) {
                 model.activeClient.state.value.connected && model.attentionCount > 0
             }
-            val eye = ui.onNodeWithContentDescription("Activity")
+            val eye = ui.onNodeWithContentDescription(appString(R.string.activity))
             eye.assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.StateDescription,

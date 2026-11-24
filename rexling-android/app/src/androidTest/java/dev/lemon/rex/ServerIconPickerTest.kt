@@ -26,7 +26,8 @@ class ServerIconPickerTest {
             }
         }
         ServerIcon.entries.forEach { icon ->
-            ui.onNodeWithContentDescription("Choose server icon").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_choose_server_icon))
+                .performClick()
             if (icon == ServerIcon.GLOBE) {
                 ui.onNode(isPopup()).captureToImage().asAndroidBitmap().let { bitmap ->
                     File(
@@ -57,13 +58,13 @@ class ServerIconPickerTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription("Choose server icon").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_choose_server_icon)).performClick()
         ui.onNode(hasText("MacBook") and hasAnyAncestor(isPopup())).performClick()
         ui.runOnIdle {
             assertNull(saved)
             assertEquals(0, closed)
         }
-        ui.onNodeWithText("Save & connect").performClick()
+        ui.onNodeWithText(appString(R.string.save_and_connect)).performClick()
         ui.runOnIdle {
             assertEquals(Triple(server.label, server.endpoint, ServerIcon.MACBOOK), saved)
             assertEquals(1, closed)

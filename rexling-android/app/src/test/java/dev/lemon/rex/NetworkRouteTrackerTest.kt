@@ -36,8 +36,5 @@ class NetworkRouteTrackerTest {
         val next = tracker.update(NetworkRoute("wifi", 1, true))!!
         assertTrue(next.retry)
         assertFalse(next.reroute)
-        assertNull(connectionMessage("connected", true))
-        assertTrue(connectionMessage("reconnecting", false)!!.contains("Waiting for network"))
-        assertTrue(connectionMessage("reconnecting", true)!!.contains("input paused"))
     }
 }

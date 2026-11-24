@@ -35,7 +35,7 @@ class ExperimentalPreferenceTest {
         }
         val toggle = ui.onNode(hasText("Codex title attention") and isToggleable())
         toggle.performScrollTo().assertIsOff().performClick().assertIsOn()
-        ui.onNodeWithText("Experimental").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.section_experimental)).assertIsDisplayed()
         ui.onNodeWithText(
                 "Use Codex’s explicit Action Required title when its status stays Working. Depends on Codex’s title format.",
             )

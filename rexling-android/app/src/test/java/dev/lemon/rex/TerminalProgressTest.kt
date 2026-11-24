@@ -35,7 +35,7 @@ class TerminalProgressTest {
                 ),
             )!!
         assertFalse(record.notifiable)
-        assertEquals("Failed", record.stateLabel)
+        assertEquals(R.string.a11y_state_failed, record.stateLabelRes)
         assertFalse(record.context.contains("osc9-progress"))
         assertEquals(0, ActivityFocusPolicy.unread(listOf(record)) { false })
         assertTrue(record.copy(progressOnly = false).notifiable)

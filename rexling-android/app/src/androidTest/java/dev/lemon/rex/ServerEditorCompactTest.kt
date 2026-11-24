@@ -43,15 +43,22 @@ class ServerEditorCompactTest {
             for (value in listOf(false, true)) {
                 ui.runOnIdle { dark = value }
                 ui.onNodeWithText("Remove").assertIsDisplayed()
-                ui.onNodeWithText("Save & connect").assertIsDisplayed()
-                val file = ui.onNodeWithText("Import file").fetchSemanticsNode().boundsInRoot
-                val paste = ui.onNodeWithText("Paste key").fetchSemanticsNode().boundsInRoot
+                ui.onNodeWithText(appString(R.string.save_and_connect)).assertIsDisplayed()
+                val file =
+                    ui.onNodeWithText(appString(R.string.import_file))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                val paste =
+                    ui.onNodeWithText(appString(R.string.paste_key))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
                 val remove = ui.onNodeWithText("Remove").fetchSemanticsNode().boundsInRoot
                 assertEquals(file.center.y, paste.center.y, 2f)
                 assertEquals(file.center.y, remove.center.y, 2f)
                 assertTrue(paste.left >= file.right)
                 assertTrue(remove.left >= paste.right)
-                ui.onNodeWithContentDescription("Choose server icon").assertIsDisplayed()
+                ui.onNodeWithContentDescription(appString(R.string.a11y_choose_server_icon))
+                    .assertIsDisplayed()
                 val instrumentation = InstrumentationRegistry.getInstrumentation()
                 ui.waitForIdle()
                 instrumentation.waitForIdleSync()

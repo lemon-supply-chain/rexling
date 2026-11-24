@@ -1,14 +1,16 @@
 package dev.lemon.rex
 
+import android.content.Context
+import androidx.annotation.StringRes
 import java.time.Instant
 import org.json.JSONObject
 
-enum class ActivityState(val wire: String, val label: String, val priority: Int) {
-    BLOCKED("blocked", "Needs you", 0),
-    ERROR("error", "Failed", 1),
-    DONE("done", "Finished", 3),
-    WORKING("working", "Working", 2),
-    IDLE("idle", "Idle", 4),
+enum class ActivityState(@StringRes val labelRes: Int, val wire: String, val priority: Int) {
+    BLOCKED(R.string.filter_attention, "blocked", 0),
+    ERROR(R.string.a11y_state_failed, "error", 1),
+    DONE(R.string.filter_finished, "done", 3),
+    WORKING(R.string.a11y_state_working, "working", 2),
+    IDLE(R.string.a11y_state_idle, "idle", 4),
 }
 
 internal val ActivityState.notifiable: Boolean
@@ -55,17 +57,22 @@ data class ActivityRecord(
                 .joinToString(" · ")
 
     val timestamp: Long = runCatching { Instant.parse(updated).toEpochMilli() }.getOrDefault(0)
-    val stateLabel: String
+    @get:StringRes
+    val stateLabelRes: Int
         get() =
-            if (progressOnly && terminalProgress != null) terminalProgress.label
-            else if (state == ActivityState.BLOCKED)
+            if (state == ActivityState.BLOCKED)
                 when (kind) {
-                    "permission" -> "Approval"
-                    "question" -> "Question"
-                    "auth" -> "Sign in"
-                    else -> state.label
+                    "permission" -> R.string.activity_kind_approval
+                    "question" -> R.string.activity_kind_question
+                    "auth" -> R.string.activity_kind_sign_in
+                    else -> state.labelRes
                 }
-            else state.label
+            else state.labelRes
+
+    /** State text for the sheet and notifications; progress-only rows keep their model label. */
+    fun stateLabel(context: Context): String =
+        if (progressOnly && terminalProgress != null) terminalProgress.label
+        else context.getString(stateLabelRes)
 
     companion object {
         private val generatedWindow = Regex("(?i)window(?:[ \t_-]+)[0-9a-f]{6,}(?:-[0-9a-f]+)*")
@@ -130,11 +137,11 @@ internal data class ActivitySource(
 
 internal data class ActivityTarget(val server: ServerProfile, val record: ActivityRecord)
 
-internal enum class ActivityFilter(val label: String) {
-    ALL("All"),
-    ATTENTION("Needs you"),
-    WORKING("Working"),
-    FINISHED("Finished"),
+internal enum class ActivityFilter {
+    ALL,
+    ATTENTION,
+    WORKING,
+    FINISHED,
 }
 
 internal object ActivityCatalog {

@@ -84,7 +84,8 @@ class HeaderLineLayoutTest {
             val original = initial.width to initial.height
             val base = baseline(ui.onNodeWithText(title.value))
             val cwd = bounds(ui.onNodeWithText(directory.value))
-            val strip = bounds(ui.onNodeWithContentDescription("Session strip"))
+            val strip =
+                bounds(ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip)))
             val root = bounds(ui.onNodeWithTag("header"))
             for (value in titles.drop(1)) {
                 ui.runOnIdle { title.value = value }
@@ -93,7 +94,11 @@ class HeaderLineLayoutTest {
                 assertEquals(value, original, line.width to line.height)
                 assertEquals(value, base, baseline(ui.onNodeWithText(value)), .6f)
                 assertEquals(value, cwd, bounds(ui.onNodeWithText(directory.value)))
-                assertEquals(value, strip, bounds(ui.onNodeWithContentDescription("Session strip")))
+                assertEquals(
+                    value,
+                    strip,
+                    bounds(ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip))),
+                )
                 assertEquals(value, root, bounds(ui.onNodeWithTag("header")))
             }
         }
@@ -106,15 +111,21 @@ class HeaderLineLayoutTest {
         val scale = mutableFloatStateOf(1f)
         header(title, directory, scale)
         val original = bounds(ui.onNodeWithText(title.value))
-        val strip = bounds(ui.onNodeWithContentDescription("Session strip"))
+        val strip = bounds(ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip)))
         val root = bounds(ui.onNodeWithTag("header"))
         ui.runOnIdle { directory.value = "" }
         assertEquals(original, bounds(ui.onNodeWithText(title.value)))
-        assertEquals(strip, bounds(ui.onNodeWithContentDescription("Session strip")))
+        assertEquals(
+            strip,
+            bounds(ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip))),
+        )
         assertEquals(root, bounds(ui.onNodeWithTag("header")))
         ui.runOnIdle { directory.value = "~/Another/directory" }
         assertEquals(original, bounds(ui.onNodeWithText(title.value)))
-        assertEquals(strip, bounds(ui.onNodeWithContentDescription("Session strip")))
+        assertEquals(
+            strip,
+            bounds(ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip))),
+        )
         assertEquals(root, bounds(ui.onNodeWithTag("header")))
     }
 }

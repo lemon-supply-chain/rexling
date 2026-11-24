@@ -30,7 +30,7 @@ class AboutSheetTest {
         ui.onNodeWithText(info.version).assertIsDisplayed()
         ui.onNodeWithText("${info.number} · ${info.type}").assertIsDisplayed()
         ui.onNodeWithText(info.commit).assertIsDisplayed()
-        ui.onNodeWithText("Copy build info").performClick()
+        ui.onNodeWithText(appString(R.string.copy_build_info)).performClick()
         ui.runOnIdle {
             assertTrue(copied.startsWith("Rexling "))
             assertTrue(copied.contains(info.version))
@@ -60,7 +60,9 @@ class AboutSheetTest {
                 links,
             )
         }
-        ui.onNodeWithContentDescription("Close about").performScrollTo().performClick()
+        ui.onNodeWithContentDescription(appString(R.string.close_about))
+            .performScrollTo()
+            .performClick()
         ui.runOnIdle { assertTrue(closed) }
     }
 }

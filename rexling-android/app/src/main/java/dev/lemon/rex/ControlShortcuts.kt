@@ -82,6 +82,8 @@ internal fun ControlDockKey(
     val padding = with(density) { 8.dp.toPx() }
     val gap = with(density) { 4.dp.toPx() }
     val configuration = LocalViewConfiguration.current
+    val controlLabel = stringResource(R.string.a11y_control)
+    val controlShortcutsLabel = stringResource(R.string.a11y_control_shortcuts)
     val haptics = LocalHapticFeedback.current
     fun dismiss() {
         visible = false
@@ -146,7 +148,7 @@ internal fun ControlDockKey(
                 else MaterialTheme.colorScheme.surfaceVariant,
             )
             .semantics {
-                contentDescription = "Control"
+                contentDescription = controlLabel
                 this.selected = active
                 role = Role.Button
                 if (enabled) {
@@ -154,7 +156,7 @@ internal fun ControlDockKey(
                         if (visible) closeFromTrigger() else toggle()
                         true
                     }
-                    onLongClick(label = "Control shortcuts") {
+                    onLongClick(label = controlShortcutsLabel) {
                         visible = true
                         true
                     }
@@ -282,7 +284,7 @@ internal fun ControlDockKey(
                 }
                 SpeechBubble(
                     provider,
-                    Modifier.width(244.dp).semantics { contentDescription = "Control shortcuts" },
+                    Modifier.width(244.dp).semantics { contentDescription = controlShortcutsLabel },
                     shadowElevation = 0.dp,
                 ) {
                     Column(

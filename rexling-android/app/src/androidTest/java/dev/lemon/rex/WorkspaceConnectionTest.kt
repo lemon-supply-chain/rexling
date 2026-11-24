@@ -57,8 +57,9 @@ class WorkspaceConnectionTest {
                             ),
                         )
                         .assertIsDisplayed()
-                    ui.onNodeWithText("Connect over Tailscale").assertDoesNotExist()
-                    ui.onNodeWithText("Rex server URL").assertDoesNotExist()
+                    ui.onNodeWithText(appString(R.string.connect_over_tailscale))
+                        .assertDoesNotExist()
+                    ui.onNodeWithText(appString(R.string.rex_server_url)).assertDoesNotExist()
                     assertNotNull(
                         "Saved connection should start automatically",
                         server.takeRequest(5, TimeUnit.SECONDS),
@@ -66,7 +67,7 @@ class WorkspaceConnectionTest {
                 }
                 preferences.edit().remove("connected_servers").commit()
                 ActivityScenario.launch(MainActivity::class.java).use {
-                    ui.onNodeWithText("Rex server URL").assertIsDisplayed()
+                    ui.onNodeWithText(appString(R.string.rex_server_url)).assertIsDisplayed()
                 }
             } finally {
                 preferences.edit().clear().commit()

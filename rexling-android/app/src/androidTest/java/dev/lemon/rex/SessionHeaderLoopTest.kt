@@ -68,7 +68,7 @@ class SessionHeaderLoopTest {
     @Test
     fun sessionStripWrapsBothWaysAndSendsOneSelectionPerSwipe() {
         header(sessions, "mac:c", onSelect = {})
-        val strip = ui.onNodeWithContentDescription("Session strip")
+        val strip = ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip))
         strip.performTouchInput { swipeLeft() }
         ui.waitForIdle()
         ui.runOnIdle { assertEquals(listOf("linux:a"), selections) }
@@ -91,7 +91,7 @@ class SessionHeaderLoopTest {
     @Test
     fun twoSessionsWrapBothWays() {
         header(sessions.take(2), "linux:a", onSelect = {})
-        val strip = ui.onNodeWithContentDescription("Session strip")
+        val strip = ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip))
         repeat(4) {
             strip.performTouchInput { if (it % 2 == 0) swipeRight() else swipeLeft() }
             ui.waitForIdle()
@@ -128,7 +128,9 @@ class SessionHeaderLoopTest {
             current.value = "linux:a"
         }
         ui.waitForIdle()
-        ui.onNodeWithContentDescription("Session strip").performTouchInput { swipeRight() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip)).performTouchInput {
+            swipeRight()
+        }
         ui.waitForIdle()
         ui.runOnIdle {
             assertTrue(selections.isEmpty())
@@ -136,13 +138,13 @@ class SessionHeaderLoopTest {
             current.value = ""
         }
         ui.waitForIdle()
-        ui.onNodeWithText("Sessions").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.sessions)).assertIsDisplayed()
     }
 
     @Test
     fun iconSwipesSwitchSessionsVerticallyAndLoopAcrossServers() {
         header(sessions, "mac:c", onSelect = {})
-        val icon = ui.onNodeWithContentDescription("Session program icon")
+        val icon = ui.onNodeWithContentDescription(appString(R.string.a11y_session_program_icon))
         icon.performTouchInput { swipeUp() }
         ui.waitForIdle()
         icon.performTouchInput { swipeDown() }
@@ -157,14 +159,15 @@ class SessionHeaderLoopTest {
     @Test
     fun iconSwipesDoNothingWhenSessionNavigationIsDisabled() {
         header(sessions, "mac:c", enabled = false, onSelect = {})
-        ui.onNodeWithContentDescription("Session program icon").performTouchInput { swipeUp() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_session_program_icon))
+            .performTouchInput { swipeUp() }
         ui.runOnIdle { assertTrue(selections.isEmpty()) }
     }
 
     @Test
     fun iconFollowsTheFingerAndSpringsBackOnCancelWithoutMovingTheTitle() {
         header(sessions, "mac:c", onSelect = {})
-        val icon = ui.onNodeWithContentDescription("Session program icon")
+        val icon = ui.onNodeWithContentDescription(appString(R.string.a11y_session_program_icon))
         val graphic = ui.onNodeWithContentDescription("fish, 3 panes", useUnmergedTree = true)
         val before = graphic.fetchSemanticsNode().boundsInRoot
         val title = ui.onNodeWithText("Investigate Rex protocol").fetchSemanticsNode().boundsInRoot

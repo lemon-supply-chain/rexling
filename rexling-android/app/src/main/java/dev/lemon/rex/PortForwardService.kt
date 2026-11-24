@@ -21,7 +21,11 @@ class PortForwardService : Service() {
     override fun onCreate() {
         super.onCreate()
         notifications.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Port forwarding", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(
+                    CHANNEL,
+                    getString(R.string.port_forwarding),
+                    NotificationManager.IMPORTANCE_LOW,
+                )
                 .apply {
                     setShowBadge(false)
                     setSound(null, null)
@@ -133,7 +137,7 @@ class PortForwardService : Service() {
             workers[id] = Worker(handle, job, item.generation)
             ongoing()
         } catch (e: Exception) {
-            PortForwards.notice = e.message ?: "Could not start port forwarding"
+            PortForwards.notice = e.message ?: getString(R.string.port_forward_start_failed)
             PortForwards.items
                 .firstOrNull { it.id == intent.getStringExtra("id") }
                 ?.let {
@@ -163,11 +167,20 @@ class PortForwardService : Service() {
             )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Rexling port forwarding")
-            .setContentText("${workers.size} forwards · tap Rexling to manage")
+            .setContentTitle(getString(R.string.port_forward_service_title))
+            .setContentText(
+                resources.getQuantityString(
+                    R.plurals.port_forward_running,
+                    workers.size,
+                    workers.size,
+                ),
+            )
             .setContentIntent(open)
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "Stop all", stop).build())
+            .addAction(
+                Notification.Action.Builder(null, getString(R.string.action_stop_all), stop)
+                    .build(),
+            )
             .build()
     }
 

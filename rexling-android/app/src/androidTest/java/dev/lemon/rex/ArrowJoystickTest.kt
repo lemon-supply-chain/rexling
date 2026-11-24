@@ -57,14 +57,15 @@ class ArrowJoystickTest {
     fun neutralHoldAndTapNeverSendAKey() {
         fixture()
         ui.mainClock.autoAdvance = false
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput { down(center) }
         ui.mainClock.advanceTimeBy(800)
-        ui.onNodeWithContentDescription("Arrow joystick").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick)).assertIsDisplayed()
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
         key.performTouchInput { up() }
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Arrow joystick").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
+            .assertDoesNotExist()
         key.performTouchInput { click() }
         ui.mainClock.advanceTimeByFrame()
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
@@ -74,7 +75,7 @@ class ArrowJoystickTest {
     fun directionSendsImmediatelyRepeatsPausesInNeutralAndStopsOnRelease() {
         fixture()
         ui.mainClock.autoAdvance = false
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput {
             down(center)
             moveTo(center + Offset(-40f, 0f))
@@ -103,14 +104,15 @@ class ArrowJoystickTest {
         val ended = sent.size
         ui.mainClock.advanceTimeBy(500)
         ui.runOnIdle { assertEquals(ended, sent.size) }
-        ui.onNodeWithContentDescription("Arrow joystick").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
+            .assertDoesNotExist()
     }
 
     @Test
     fun returningFromUpWithSmallOvershootStaysNeutral() {
         fixture()
         ui.mainClock.autoAdvance = false
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput {
             down(center)
             moveTo(center + Offset(0f, -40.dp.toPx()))
@@ -136,7 +138,7 @@ class ArrowJoystickTest {
     fun changingDirectionCancelsThePreviousRepeatAndCancellationStopsEverything() {
         fixture()
         ui.mainClock.autoAdvance = false
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput {
             down(center)
             moveTo(center + Offset(0f, -40f))
@@ -152,14 +154,15 @@ class ArrowJoystickTest {
         val ended = sent.size
         ui.mainClock.advanceTimeBy(500)
         ui.runOnIdle { assertEquals(ended, sent.size) }
-        ui.onNodeWithContentDescription("Arrow joystick").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
+            .assertDoesNotExist()
     }
 
     @Test
     fun rightDragCannotStartAnAncestorSwipe() {
         var parentMotion = 0f
         fixture(parentDrag = { parentMotion += it })
-        ui.onNodeWithContentDescription("Arrow keys").performTouchInput {
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performTouchInput {
             down(center)
             moveTo(center + Offset(130f, 0f))
             up()
@@ -175,7 +178,7 @@ class ArrowJoystickTest {
         val enabled = mutableStateOf(true)
         fixture(enabled)
         ui.mainClock.autoAdvance = false
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput {
             down(center)
             moveTo(center + Offset(40f, 0f))
@@ -186,60 +189,70 @@ class ArrowJoystickTest {
         val stopped = sent.size
         ui.mainClock.advanceTimeBy(500)
         ui.runOnIdle { assertEquals(stopped, sent.size) }
-        ui.onNodeWithContentDescription("Arrow joystick").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
+            .assertDoesNotExist()
         key.assertIsNotEnabled().performTouchInput { up() }
     }
 
     @Test
     fun doubleTapOpensAndSingleTapClosesTheOriginalPopup() {
         fixture()
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput { doubleClick() }
-        ui.onNodeWithContentDescription("Arrow key popup").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Arrow joystick").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
+            .assertDoesNotExist()
         repeat(2) { ui.onNodeWithContentDescription("Left arrow").performTouchInput { click() } }
         ui.runOnIdle { assertEquals(listOf("one:left", "one:left"), sent) }
-        ui.onNodeWithContentDescription("Arrow key popup").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertIsDisplayed()
         key.performTouchInput { click() }
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
         ui.runOnIdle { assertEquals(2, sent.size) }
     }
 
     @Test
     fun draggingWithThePopupOpenReturnsToJoystickWithoutAnAccidentalTap() {
         fixture()
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput { doubleClick() }
         key.performTouchInput {
             down(center)
             moveTo(center + Offset(40f, 0f))
         }
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Arrow joystick").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick)).assertIsDisplayed()
         key.performTouchInput {
             up()
             advanceEventTime(100)
             click()
         }
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("one:right"), sent) }
     }
 
     @Test
     fun classicModeUsesSingleTapAndNeverSteers() {
         fixture(joystick = mutableStateOf(false))
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput { click() }
-        ui.onNodeWithContentDescription("Arrow key popup").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertIsDisplayed()
         ui.onNodeWithContentDescription("Down arrow").performTouchInput { click() }
         ui.runOnIdle { assertEquals(listOf("one:down"), sent) }
         key.performTouchInput { click() }
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
         key.performTouchInput {
             down(center)
             moveTo(center + Offset(80f, 0f))
         }
-        ui.onNodeWithContentDescription("Arrow joystick").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
+            .assertDoesNotExist()
         key.performTouchInput { up() }
         ui.runOnIdle { assertEquals(listOf("one:down"), sent) }
     }
@@ -250,15 +263,18 @@ class ArrowJoystickTest {
         val enabled = mutableStateOf(true)
         val joystick = mutableStateOf(true)
         fixture(enabled, target, joystick = joystick)
-        val key = ui.onNodeWithContentDescription("Arrow keys")
+        val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput { doubleClick() }
         ui.runOnIdle { target.value = "two" }
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
         key.performTouchInput { doubleClick() }
         ui.runOnIdle { joystick.value = false }
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
         key.performTouchInput { click() }
-        ui.onNodeWithContentDescription("Arrow key popup").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertIsDisplayed()
         ui.mainClock.autoAdvance = false
         ui.onNodeWithContentDescription("Right arrow").performTouchInput { down(center) }
         ui.mainClock.advanceTimeBy(650)
@@ -269,7 +285,8 @@ class ArrowJoystickTest {
         ui.mainClock.advanceTimeByFrame()
         val stopped = sent.size
         ui.mainClock.advanceTimeBy(600)
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertEquals(stopped, sent.size)
             assertTrue(sent.all { it == "two:right" })
@@ -280,10 +297,15 @@ class ArrowJoystickTest {
     fun heldPageDownUsesSlowerRepeatAndStopsOnPaneChange() {
         val target = mutableStateOf("one")
         fixture(target = target)
-        ui.onNodeWithContentDescription("Arrow keys").performTouchInput { doubleClick() }
-        ui.onNodeWithContentDescription("Arrow key popup").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performTouchInput {
+            doubleClick()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertIsDisplayed()
         ui.mainClock.autoAdvance = false
-        ui.onNodeWithContentDescription("Page down").performTouchInput { down(center) }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_page_down)).performTouchInput {
+            down(center)
+        }
         ui.mainClock.advanceTimeBy((holdDelay - 32).coerceAtLeast(1))
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
         ui.mainClock.advanceTimeBy(64)
@@ -296,7 +318,8 @@ class ArrowJoystickTest {
         ui.mainClock.advanceTimeByFrame()
         val stopped = sent.size
         ui.mainClock.advanceTimeBy(500)
-        ui.onNodeWithContentDescription("Arrow key popup").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertEquals(stopped, sent.size)
             assertTrue(sent.all { it == "one:pagedown" })
@@ -307,7 +330,7 @@ class ArrowJoystickTest {
     fun eachDirectionIsAvailableAsAnAccessibilityAction() {
         fixture()
         val actions =
-            ui.onNodeWithContentDescription("Arrow keys")
+            ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
                 .fetchSemanticsNode()
                 .config[SemanticsActions.CustomActions]
         assertEquals(

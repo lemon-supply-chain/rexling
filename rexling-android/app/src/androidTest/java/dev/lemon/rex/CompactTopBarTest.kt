@@ -64,7 +64,7 @@ class CompactTopBarTest {
                 }
             }
         }
-        val collapseBtn = ui.onNodeWithContentDescription("Collapse top app bar")
+        val collapseBtn = ui.onNodeWithContentDescription(appString(R.string.a11y_collapse_top_bar))
         collapseBtn.assertIsDisplayed()
         collapseBtn.performClick()
         ui.runOnIdle { assertEquals(1, collapseCalls) }

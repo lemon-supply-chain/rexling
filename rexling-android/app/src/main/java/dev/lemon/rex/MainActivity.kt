@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
                         android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                         android.content.res.Configuration.UI_MODE_NIGHT_YES
             }
-        return if (dark) 0xff090c11.toInt() else 0xfff3f4f9.toInt()
+        return getColor(if (dark) R.color.window_canvas_dark else R.color.launch_canvas)
     }
 
     private fun consumeAlert(intent: Intent?) {
@@ -333,7 +333,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             if (granted) action?.invoke()
             else {
                 denied?.invoke()
-                model.images.notice = "Allow local network access to upload images to Rex."
+                model.images.notice = context.getString(R.string.notice_local_network_upload)
             }
         }
     DisposableEffect(Unit) {
@@ -370,7 +370,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         pasteTerminalClipboard(context, { uri -> imageCommit(uri, {}) }, client::paste)
     }
         .getOrElse {
-            model.images.notice = "Could not read the clipboard image. Try Attach file instead."
+            model.images.notice = context.getString(R.string.notice_clipboard_image_failed)
             false
         }
     val photoPicker =
@@ -382,7 +382,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     fun chooseImage() {
         val target = model.imageTarget()
         if (target == null) {
-            model.images.notice = "Take control of a pane before attaching a file."
+            model.images.notice = context.getString(R.string.notice_take_control_first)
             return
         }
         model.pendingImageTarget = target
@@ -400,7 +400,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     fun chooseFile() {
         val target = model.imageTarget()
         if (target == null) {
-            model.images.notice = "Take control of a pane before attaching a file."
+            model.images.notice = context.getString(R.string.notice_take_control_first)
             return
         }
         model.pendingImageTarget = target
@@ -1012,7 +1012,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             )
                                         } else
                                             PortForwards.notice =
-                                                "Wait for this pane to connect before forwarding its link."
+                                                context.getString(
+                                                    R.string.notice_wait_before_forward,
+                                                )
                                     }
                                 }
                                 val captureTerminal =
@@ -1328,7 +1330,10 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     ) {
                         client.terminal.value?.let { screen ->
                             (getClipboard(context) as ClipboardManager).setPrimaryClip(
-                                ClipData.newPlainText("Rex terminal", screen.plainText()),
+                                ClipData.newPlainText(
+                                    context.getString(R.string.clip_rex_terminal),
+                                    screen.plainText(),
+                                ),
                             )
                         }
                     },

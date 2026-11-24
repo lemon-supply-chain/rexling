@@ -34,7 +34,7 @@ class LanguageSheetTest {
             }
         }
 
-        ui.onNodeWithText("Language").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.language)).assertIsDisplayed()
         ui.onNodeWithText("System default").assertIsDisplayed()
         ui.onNodeWithText("English").assertIsDisplayed()
         ui.onNodeWithText("简体中文").assertIsDisplayed()
@@ -45,7 +45,7 @@ class LanguageSheetTest {
         ui.onNodeWithText("简体中文").performClick()
         ui.runOnIdle { assertEquals("zh", selected.value) }
 
-        ui.onNodeWithContentDescription("Close language settings").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.close_language)).performClick()
         ui.runOnIdle { assertEquals(1, closeCalls) }
     }
 }

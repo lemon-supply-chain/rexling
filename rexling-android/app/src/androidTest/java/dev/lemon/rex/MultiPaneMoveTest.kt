@@ -116,9 +116,9 @@ class MultiPaneMoveTest {
                 val workspace =
                     ui.onNodeWithTag("Tiled workspace").fetchSemanticsNode().boundsInRoot
                 val (left, upper, lower) =
-                    ui.onAllNodesWithContentDescription("Focus pane").fetchSemanticsNodes().map {
-                        it.boundsInRoot
-                    }
+                    ui.onAllNodesWithContentDescription(appString(R.string.a11y_focus_pane))
+                        .fetchSemanticsNodes()
+                        .map { it.boundsInRoot }
                 assertEquals(gutter, upper.left - left.right - 2 * paneBorder, 2f)
                 assertEquals(gutter, lower.top - upper.bottom - 2 * paneBorder, 2f)
                 assertEquals(outer, left.top - workspace.top - paneBorder, 2f)
@@ -128,9 +128,10 @@ class MultiPaneMoveTest {
                 assertEquals(gutter, sidebarGap - paneBorder, 2f)
             }
             val columns =
-                ui.onNodeWithContentDescription("Resize panes side by side")
+                ui.onNodeWithContentDescription(appString(R.string.a11y_resize_panes_side_by_side))
                     .assertWidthIsEqualTo(24.dp)
-            ui.onNodeWithContentDescription("Resize stacked panes").assertHeightIsEqualTo(24.dp)
+            ui.onNodeWithContentDescription(appString(R.string.a11y_resize_stacked_panes))
+                .assertHeightIsEqualTo(24.dp)
             val before = columns.fetchSemanticsNode().boundsInRoot.center.x
             columns.performTouchInput {
                 val from = center + Offset(8.dp.toPx(), 0f)
@@ -294,8 +295,10 @@ class MultiPaneMoveTest {
                 }
             }
             ui.onNodeWithTag("Floating terminal pane").assertDoesNotExist()
-            ui.onNodeWithContentDescription("Open floating pane: Logs").performClick()
-            ui.onAllNodesWithContentDescription("Focus pane").assertCountEquals(2)
+            ui.onNodeWithContentDescription(appString(R.string.a11y_open_floating_pane, "Logs"))
+                .performClick()
+            ui.onAllNodesWithContentDescription(appString(R.string.a11y_focus_pane))
+                .assertCountEquals(2)
             val overlay =
                 ui.onNodeWithTag("Floating terminal pane")
                     .assertIsDisplayed()
@@ -306,7 +309,8 @@ class MultiPaneMoveTest {
             assertEquals(.5f, overlay.height / workspace.height, .025f)
             assertEquals(workspace.center.x, overlay.center.x, 2f)
             assertEquals(workspace.center.y, overlay.center.y, 2f)
-            ui.onAllNodesWithContentDescription("Focus pane")[1].performClick()
+            ui.onAllNodesWithContentDescription(appString(R.string.a11y_focus_pane))[1]
+                .performClick()
             ui.runOnIdle { assertEquals("right", focused.value) }
             assertEquals(
                 overlay,
@@ -320,16 +324,18 @@ class MultiPaneMoveTest {
                 ui.onNode(hasContentDescription("Pane actions, top left") and floatingCorner)
                     .performClick()
             revealCorner()
-            ui.onNodeWithContentDescription("Move floating pane").performTouchInput {
-                swipe(center, center + androidx.compose.ui.geometry.Offset(48f, 28f))
-            }
+            ui.onNodeWithContentDescription(appString(R.string.a11y_move_floating_pane))
+                .performTouchInput {
+                    swipe(center, center + androidx.compose.ui.geometry.Offset(48f, 28f))
+                }
             ui.runOnIdle {
                 assertTrue(adjustments.single().x > .25f)
                 assertEquals(.5f, adjustments.single().width, .01f)
             }
-            ui.onNodeWithContentDescription("Resize floating pane").performTouchInput {
-                swipe(center, center + androidx.compose.ui.geometry.Offset(64f, 52f))
-            }
+            ui.onNodeWithContentDescription(appString(R.string.a11y_resize_floating_pane))
+                .performTouchInput {
+                    swipe(center, center + androidx.compose.ui.geometry.Offset(64f, 52f))
+                }
             ui.runOnIdle {
                 assertTrue(
                     "Move and resize should each commit once: $adjustments",
@@ -340,18 +346,23 @@ class MultiPaneMoveTest {
                     adjustments.last().width > .5f && adjustments.last().height > .5f,
                 )
             }
-            ui.onNodeWithContentDescription("More pane actions").performClick()
-            ui.onNodeWithText("Split right").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_more_pane_actions))
+                .performClick()
+            ui.onNodeWithText(appString(R.string.split_right)).performClick()
             revealCorner()
-            ui.onNodeWithContentDescription("More pane actions").performClick()
-            ui.onNodeWithText("Dock pane").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_more_pane_actions))
+                .performClick()
+            ui.onNodeWithText(appString(R.string.label_dock_pane)).performClick()
             revealCorner()
-            ui.onNodeWithContentDescription("More pane actions").performClick()
-            ui.onNodeWithText("Minimize floating pane").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_more_pane_actions))
+                .performClick()
+            ui.onNodeWithText(appString(R.string.a11y_minimize_floating_pane)).performClick()
             ui.onNodeWithTag("Floating terminal pane").assertDoesNotExist()
-            ui.onAllNodesWithContentDescription("Pane actions, top left")[1].performClick()
-            ui.onNodeWithContentDescription("More pane actions").performClick()
-            ui.onNodeWithText("Float pane").performClick()
+            ui.onAllNodesWithContentDescription(appString(R.string.a11y_pane_actions_top_left))[1]
+                .performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_more_pane_actions))
+                .performClick()
+            ui.onNodeWithText(appString(R.string.label_float_pane)).performClick()
             ui.runOnIdle {
                 assertEquals("right", focused.value)
                 assertEquals(
@@ -412,13 +423,19 @@ class MultiPaneMoveTest {
                     }
                 }
             }
-            ui.onAllNodesWithContentDescription("Pane actions, top left")[0].performClick()
-            val grip = ui.onNodeWithContentDescription("Move pane").assertIsDisplayed()
-            val zoom = ui.onNodeWithContentDescription("Zoom pane").assertIsDisplayed()
+            ui.onAllNodesWithContentDescription(appString(R.string.a11y_pane_actions_top_left))[0]
+                .performClick()
+            val grip =
+                ui.onNodeWithContentDescription(appString(R.string.a11y_move_pane))
+                    .assertIsDisplayed()
+            val zoom =
+                ui.onNodeWithContentDescription(appString(R.string.zoom_pane)).assertIsDisplayed()
             val start = grip.fetchSemanticsNode().boundsInRoot
             assertTrue(start.right < zoom.fetchSemanticsNode().boundsInRoot.left)
             val target =
-                ui.onNodeWithContentDescription("Focus pane").fetchSemanticsNode().boundsInRoot
+                ui.onNodeWithContentDescription(appString(R.string.a11y_focus_pane))
+                    .fetchSemanticsNode()
+                    .boundsInRoot
             fun destination(x: Float, y: Float) =
                 target.topLeft + Offset(target.width * x, target.height * y) - start.topLeft
             grip.performTouchInput {
@@ -437,18 +454,27 @@ class MultiPaneMoveTest {
                 )
             positions.forEachIndexed { index, (_, end) ->
                 if (index > 0)
-                    ui.onAllNodesWithContentDescription("Pane actions, top left")[0].performClick()
+                    ui.onAllNodesWithContentDescription(
+                            appString(R.string.a11y_pane_actions_top_left),
+                        )[0]
+                        .performClick()
                 grip.performTouchInput { swipe(center, end, durationMillis = 300) }
             }
             ui.runOnIdle {
                 assertEquals(positions.map { Triple("left", "right", it.first) }, drops)
             }
-            ui.onAllNodesWithContentDescription("Pane actions")[1].performClick()
-            ui.onNodeWithContentDescription("Move pane").assertIsDisplayed()
-            ui.onNodeWithContentDescription("Zoom pane").assertIsDisplayed()
-            ui.onNodeWithContentDescription("Split right").assertIsDisplayed().performClick()
-            ui.onAllNodesWithContentDescription("Pane actions")[1].performClick()
-            ui.onNodeWithContentDescription("Split below").assertIsDisplayed().performClick()
+            ui.onAllNodesWithContentDescription(appString(R.string.a11y_pane_actions))[1]
+                .performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_move_pane)).assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.zoom_pane)).assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.split_right))
+                .assertIsDisplayed()
+                .performClick()
+            ui.onAllNodesWithContentDescription(appString(R.string.a11y_pane_actions))[1]
+                .performClick()
+            ui.onNodeWithContentDescription(appString(R.string.split_below))
+                .assertIsDisplayed()
+                .performClick()
             ui.runOnIdle {
                 assertEquals(listOf("right" to PaneSplit.RIGHT, "right" to PaneSplit.BELOW), splits)
             }

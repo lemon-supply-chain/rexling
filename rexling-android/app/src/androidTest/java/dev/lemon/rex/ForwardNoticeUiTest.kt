@@ -33,12 +33,16 @@ class ForwardNoticeUiTest {
                     }
                 }
             }
-            ui.onNodeWithContentDescription("Open forwarded link").assertIsDisplayed()
-            ui.onNodeWithContentDescription("Copy forwarded link").assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_open_forwarded_link))
+                .assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_copy_forwarded_link))
+                .assertIsDisplayed()
             val bounds =
-                ui.onNodeWithContentDescription("Open forwarded link").getUnclippedBoundsInRoot()
+                ui.onNodeWithContentDescription(appString(R.string.a11y_open_forwarded_link))
+                    .getUnclippedBoundsInRoot()
             val open =
-                ui.onNodeWithContentDescription("Copy forwarded link").getUnclippedBoundsInRoot()
+                ui.onNodeWithContentDescription(appString(R.string.a11y_copy_forwarded_link))
+                    .getUnclippedBoundsInRoot()
             assertTrue(
                 "Notice fits in two compact rows",
                 open.bottom.value - bounds.top.value < 72f,
@@ -51,7 +55,8 @@ class ForwardNoticeUiTest {
                     .takeScreenshot()
                     .compress(Bitmap.CompressFormat.PNG, 100, it)
             }
-            ui.onNodeWithContentDescription("Dismiss forwarding notice").performClick()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_dismiss_forwarding_notice))
+                .performClick()
             ui.runOnIdle { assertNull(PortForwards.linkNotice) }
         } finally {
             ui.runOnIdle { PortForwards.linkNotice = original }

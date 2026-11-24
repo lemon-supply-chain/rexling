@@ -799,10 +799,22 @@ private fun PaneCornerActions(
                 },
             )
             onFloat?.let {
-                add(PaneCornerAction(ChromeIcon.FLOAT, stringResource(R.string.float_pane), it))
+                add(
+                    PaneCornerAction(
+                        ChromeIcon.FLOAT,
+                        stringResource(R.string.label_float_pane),
+                        it,
+                    ),
+                )
             }
             onDock?.let {
-                add(PaneCornerAction(ChromeIcon.FLOAT, stringResource(R.string.dock_pane), it))
+                add(
+                    PaneCornerAction(
+                        ChromeIcon.FLOAT,
+                        stringResource(R.string.label_dock_pane),
+                        it,
+                    ),
+                )
             }
         }
         add(

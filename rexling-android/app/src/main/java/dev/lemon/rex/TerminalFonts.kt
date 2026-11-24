@@ -36,9 +36,9 @@ class TerminalFonts(
         get() = faces[3]
 
     /**
-     * Android 9 cannot synthesize a weight or slant from a single font file, while
-     * the API 29+ fallback family applies the requested [FontStyle]. Callers fake
-     * bold and slant while this is true.
+     * Android 9 cannot synthesize a weight or slant from a single font file, while the API 29+
+     * fallback family applies the requested [FontStyle]. Callers fake bold and slant while this is
+     * true.
      */
     val syntheticStyles: Boolean
         get() = !(compositeFallback && Build.VERSION.SDK_INT >= 29)

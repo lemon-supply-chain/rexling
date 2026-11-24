@@ -434,8 +434,7 @@ class TerminalView(context: Context) : View(context) {
         isFocusable = true
         isFocusableInTouchMode = true
         isLongClickable = true
-        contentDescription =
-            "Terminal output. Tap web links to open them. Tap mouse-enabled applications to click. Tap elsewhere to take control and type. Long press to select and copy text."
+        contentDescription = context.getString(R.string.a11y_terminal_output)
         metrics()
     }
 
@@ -1151,9 +1150,9 @@ class TerminalView(context: Context) : View(context) {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "No app can open this web link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.link_no_app_open, Toast.LENGTH_SHORT).show()
         } catch (_: SecurityException) {
-            Toast.makeText(context, "Could not open this web link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.link_open_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1163,12 +1162,13 @@ class TerminalView(context: Context) : View(context) {
             Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, safe)
         try {
             context.startActivity(
-                Intent.createChooser(send, "Share link").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent.createChooser(send, context.getString(R.string.share_link))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "No app can share this link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.link_no_app_share, Toast.LENGTH_SHORT).show()
         } catch (_: SecurityException) {
-            Toast.makeText(context, "Could not share this link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.link_share_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1178,7 +1178,9 @@ class TerminalView(context: Context) : View(context) {
             TerminalLinkAction.OPEN -> onOpenLink(url)
             TerminalLinkAction.COPY_ADDRESS ->
                 (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                    .setPrimaryClip(ClipData.newPlainText("Web link", url))
+                    .setPrimaryClip(
+                        ClipData.newPlainText(context.getString(R.string.a11y_web_link), url),
+                    )
             TerminalLinkAction.SHARE -> onShareLink(url)
         }
         clearSelection()
@@ -1514,7 +1516,7 @@ class TerminalView(context: Context) : View(context) {
                                 .add(0, 0x524502, 3, "Copy link address")
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                             menu
-                                .add(0, 0x524503, 4, "Share link")
+                                .add(0, 0x524503, 4, context.getString(R.string.share_link))
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                         }
                         return true
@@ -1535,7 +1537,7 @@ class TerminalView(context: Context) : View(context) {
                                         as ClipboardManager)
                                     .setPrimaryClip(
                                         ClipData.newPlainText(
-                                            "Terminal selection",
+                                            context.getString(R.string.a11y_terminal_selection),
                                             selection?.text().orEmpty(),
                                         ),
                                     )

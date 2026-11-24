@@ -41,7 +41,7 @@ class AppearanceSheetTest {
                 )
             }
         }
-        ui.onNodeWithText("Dark theme").performClick()
+        ui.onNodeWithText(appString(R.string.dark_theme)).performClick()
         ui.onNodeWithContentDescription("Theme Rexling Default").assertIsSelected()
         ui.onNodeWithContentDescription("Theme Abyssal Trench").performClick()
         ui.runOnIdle {
@@ -56,9 +56,9 @@ class AppearanceSheetTest {
         ui.setContent {
             MaterialTheme { FontSizeDialog(size.intValue, { size.intValue = it }, onClose = {}) }
         }
-        ui.onNodeWithContentDescription("Increase font size").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_increase_font_size)).performClick()
         ui.onNodeWithText("11 sp").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Decrease font size").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_decrease_font_size)).performClick()
         ui.onNodeWithText("10 sp").assertIsDisplayed()
         ui.onNodeWithContentDescription("Font size").performSemanticsAction(
             androidx.compose.ui.semantics.SemanticsActions.SetProgress,
@@ -156,9 +156,9 @@ class AppearanceSheetTest {
     fun quickMenuSwitchUsesCurrentAppearanceAndSupportsBothDirections() {
         val dark = mutableStateOf(false)
         ui.setContent { MaterialTheme { QuickThemeMenuItem(dark.value) { dark.value = it } } }
-        ui.onNodeWithText("Toggle Dark theme").performClick()
+        ui.onNodeWithText(appString(R.string.toggle_dark_theme)).performClick()
         ui.runOnIdle { assertTrue(dark.value) }
-        ui.onNodeWithText("Toggle Light theme").performClick()
+        ui.onNodeWithText(appString(R.string.toggle_light_theme)).performClick()
         ui.runOnIdle { assertFalse(dark.value) }
     }
 
@@ -181,17 +181,21 @@ class AppearanceSheetTest {
                 )
             }
         }
-        ui.onNodeWithText("Hold").performScrollTo().assertIsSelected()
-        ui.onNodeWithText("Double tap").performClick().assertIsSelected()
+        ui.onNodeWithText(appString(R.string.ctrl_gesture_hold))
+            .performScrollTo()
+            .assertIsSelected()
+        ui.onNodeWithText(appString(R.string.ctrl_gesture_double_tap))
+            .performClick()
+            .assertIsSelected()
         ui.runOnIdle { assertEquals(ControlShortcutGesture.DOUBLE_TAP, gesture.value) }
-        ui.onNodeWithText("Hold").performClick().assertIsSelected()
+        ui.onNodeWithText(appString(R.string.ctrl_gesture_hold)).performClick().assertIsSelected()
         ui.runOnIdle { assertEquals(ControlShortcutGesture.HOLD, gesture.value) }
-        ui.onNodeWithText("Use joystick for arrows")
+        ui.onNodeWithText(appString(R.string.use_joystick))
             .performScrollTo()
             .assertIsOn()
             .performClick()
             .assertIsOff()
-        ui.onNodeWithText("Tap for arrow buttons").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.use_joystick_detail_off)).assertIsDisplayed()
         ui.runOnIdle { assertFalse(joystick.value) }
     }
 
@@ -217,7 +221,7 @@ class AppearanceSheetTest {
         for (id in listOf("abyssal-trench", "alpine-milk")) {
             ui.runOnIdle { selected.value = themes.first { it.id == id } }
             ui.waitForIdle()
-            ui.onNodeWithText("Appearance").assertIsDisplayed()
+            ui.onNodeWithText(appString(R.string.appearance)).assertIsDisplayed()
             File(app.cacheDir, "theme-$id.png").outputStream().use {
                 InstrumentationRegistry.getInstrumentation()
                     .uiAutomation

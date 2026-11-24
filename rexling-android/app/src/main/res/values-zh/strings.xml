@@ -11,7 +11,6 @@
     <string name="disconnect">断开连接</string>
     <string name="delete">删除</string>
     <string name="edit">编辑</string>
-    <string name="hide">隐藏</string>
     <string name="create">创建</string>
     <string name="icon">图标</string>
     <string name="name">名称</string>
@@ -29,7 +28,6 @@
     <string name="copy_viewport">复制视口</string>
     <string name="paste">粘贴</string>
     <string name="image">图片</string>
-    <string name="attach_image">附加图片</string>
     <string name="terminal_actions">终端操作</string>
     <string name="single_pane">单窗格</string>
     <string name="multiple_panes">多窗格</string>
@@ -59,7 +57,6 @@
 
     <!-- Session Drawer & Actions -->
     <string name="sessions">会话</string>
-    <string name="close_sessions">关闭会话列表</string>
     <string name="find_session">搜索会话…</string>
     <string name="no_sessions_yet">暂无会话</string>
     <string name="no_matching_sessions">无匹配会话</string>
@@ -347,18 +344,11 @@
     <string name="apply">应用</string>
     <string name="applying">正在应用…</string>
     <string name="ssh_key">SSH 密钥</string>
-    <string name="ssh_key_saved">已安全保存在此手机上</string>
-    <string name="ssh_key_optional">对于 Tailscale SSH 为可选。</string>
     <string name="import_file">导入文件</string>
     <string name="paste_key">粘贴密钥</string>
-    <string name="paste_ssh_key">粘贴 SSH 密钥</string>
-    <string name="import_ssh_key">导入 SSH 密钥</string>
-    <string name="ssh_key_encrypted_hint">密钥将在此手机上加密保存。如果密钥受保护，请输入其密码短语。</string>
     <string name="private_key">私钥</string>
     <string name="private_key_lines_hint">需包含 BEGIN 和 END 标记行。</string>
     <string name="passphrase_optional">密码短语（可选）</string>
-    <string name="importing">正在导入…</string>
-    <string name="import_action">导入</string>
     <string name="trust_ssh_host">信任此 SSH 主机？</string>
     <string name="ssh_host_key_changed">SSH 主机密钥已变更</string>
     <string name="trust_host_verify_hint">在信任前请先与主机核对此指纹。</string>
@@ -403,7 +393,6 @@
     <string name="network_route_system">手机网络 / VPN</string>
     <string name="network_route_builtin">内置 Tailscale</string>
     <string name="predictive_echo_summary">在本地预测键入字符及输入响应</string>
-    <string name="remove">移除</string>
     <string name="saving">保存中…</string>
     <string name="close_servers">关闭服务器</string>
     <string name="welcome_title">欢迎使用 Rexling</string>
@@ -465,15 +454,8 @@
     <string name="a11y_state_neutral">居中</string>
     <string name="a11y_control">Ctrl</string>
     <string name="a11y_control_shortcuts">Ctrl 快捷键</string>
-    <string name="a11y_control_letter">Ctrl %1$s</string>
-    <string name="a11y_tab_and_pane_pages">标签与分屏页面</string>
-    <string name="label_layout_unavailable">布局不可用</string>
     <string name="label_float_pane">浮动分屏</string>
-    <string name="label_keep_one_docked">此标签至少保留一个停靠分屏</string>
-    <string name="label_open_tab">打开的标签</string>
     <string name="label_new_tab">新建标签</string>
-    <string name="label_open_pane">打开的分屏</string>
-    <string name="label_new_pane">新建分屏</string>
     <string name="label_latest">↓ 最新</string>
     <string name="key_home">Home</string>
     <string name="key_page_up">PgUp</string>
@@ -523,8 +505,6 @@
     <string name="label_phone_port_unavailable">手机端口 %1$d 不可用</string>
     <string name="label_port_owner_desc">%1$s 正在此端口转发 %2$s。请选择其他端口，或停用该转发后复用此端口。</string>
     <string name="label_port_busy_desc">该端口已被保留或被其他应用占用。Rexling 可以选择一个可用的手机端口。</string>
-    <string name="label_prev_command_short">上一条</string>
-    <string name="label_next_command_short">下一条</string>
     <string name="label_notification">通知</string>
     <string name="label_ok">确定</string>
     <string name="file_upload">文件上传</string>
@@ -547,9 +527,7 @@
     <string name="a11y_previous_shortcut_page">上一页快捷方式</string>
     <string name="a11y_back_to_all_shortcuts">返回全部快捷方式</string>
     <string name="label_dock_pane">停靠分屏</string>
-    <string name="label_place_beside">放置在旁边</string>
     <string name="label_layout_changed">布局已变化，请检查后重试。</string>
-    <string name="label_dock">停靠</string>
     <string name="label_previous_host_format">上一次：%1$s</string>
     <string name="notification_service_text">任务完成与需要关注的提醒</string>
     <string name="label_rename_tab">重命名标签</string>
@@ -675,8 +653,6 @@
     <string name="a11y_resize_stacked_panes">调整上下窗格高度</string>
     <string name="a11y_move_floating_pane">移动浮动窗格</string>
     <string name="a11y_resize_floating_pane">调整浮动窗格大小</string>
-    <string name="float_pane">设为浮动</string>
-    <string name="dock_pane">停靠窗格</string>
     <string name="zoom_pane">放大窗格</string>
     <string name="restore_pane_layout">恢复窗格布局</string>
     <string name="a11y_minimize_floating_pane">最小化浮动窗格</string>
@@ -703,4 +679,68 @@
     <string name="split_below">向下分屏</string>
     <string name="ssh_key_rename_failed">无法重命名密钥</string>
     <string name="ssh_key_delete_failed">无法删除密钥</string>
+    <string name="show_map">显示布局图</string>
+    <string name="hide_map">隐藏布局图</string>
+    <string name="reorder_tabs">调整标签顺序</string>
+    <string name="reorder_panes">调整窗格顺序</string>
+    <string name="no_tabs_yet">还没有标签</string>
+    <string name="create_tab_hint">新建标签以开始一个终端。</string>
+    <string name="no_panes_yet">还没有窗格</string>
+    <string name="choose_tab_hint">选择一个标签或新建一个。</string>
+    <string name="viewing">正在查看</string>
+    <string name="a11y_tab_title">标签 %1$s</string>
+    <string name="a11y_pane_title">窗格 %1$s</string>
+    <plurals name="pane_count">
+        <item quantity="other">%1$d 个窗格</item>
+    </plurals>
+    <string name="a11y_close_neovim_menu">关闭 Neovim 菜单设置</string>
+    <string name="back_to_neovim_shortcuts">返回 Neovim 快捷键</string>
+    <string name="a11y_neovim_shortcut_list">Neovim 快捷键列表</string>
+    <string name="a11y_ungrouped_shortcuts">未分组快捷键</string>
+    <string name="ungrouped_count">未分组 · %1$d</string>
+    <string name="shortcuts_appear_directly">此处的快捷键会直接显示在菜单上。</string>
+    <string name="add_shortcut_to_group">向此分组添加快捷键。</string>
+    <string name="a11y_open_neovim_group">打开 Neovim 分组 %1$s</string>
+    <string name="a11y_edit_neovim_shortcut">编辑 Neovim 快捷键 %1$s</string>
+    <string name="a11y_rename_neovim_group">重命名 Neovim 分组 %1$s</string>
+    <string name="a11y_ungroup_neovim_group">取消分组 %1$s</string>
+    <string name="a11y_remove_neovim_shortcut">删除 Neovim 快捷键 %1$s</string>
+    <string name="a11y_reopen_shortcuts">重新打开 %1$s 快捷键</string>
+    <string name="a11y_close_shortcuts_named">关闭 %1$s 快捷键</string>
+    <string name="no_command_selected">未选择命令</string>
+    <plurals name="shortcut_count">
+        <item quantity="other">%1$d 个快捷键</item>
+    </plurals>
+    <string name="a11y_terminal_output">终端输出。点击网页链接可打开；点击支持鼠标的程序可单击；点击其他位置可获取控制并输入；长按可选择并复制文本。</string>
+    <string name="link_no_app_open">没有应用可以打开此网页链接</string>
+    <string name="link_open_failed">无法打开此网页链接</string>
+    <string name="link_no_app_share">没有应用可以分享此链接</string>
+    <string name="link_share_failed">无法分享此链接</string>
+    <string name="share_link">分享链接</string>
+    <string name="a11y_web_link">网页链接</string>
+    <string name="a11y_terminal_selection">终端选区</string>
+    <string name="a11y_countdown">倒计时</string>
+    <string name="notification_monitor_channel">后台监控</string>
+    <string name="notification_monitor_channel_desc">保持已连接的服务器可用，以便发送关注提醒</string>
+    <string name="notification_task_channel">任务更新</string>
+    <string name="notification_task_channel_desc">任务完成、需要输入、等待批准、需要登录或失败时提醒</string>
+    <string name="notification_task_finished">Rexling 任务已完成</string>
+    <string name="notification_needs_attention">Rexling 需要你处理</string>
+    <string name="notification_service_title">Rexling · %1$s</string>
+    <string name="action_stop">停止</string>
+    <string name="port_forward_service_title">Rexling 端口转发</string>
+    <string name="port_forward_start_failed">无法启动端口转发</string>
+    <string name="action_stop_all">全部停止</string>
+    <plurals name="port_forward_running">
+        <item quantity="other">%1$d 个转发 · 点按 Rexling 管理</item>
+    </plurals>
+    <string name="notice_local_network_upload">允许访问本地网络，以将图片上传到 Rex。</string>
+    <string name="notice_clipboard_image_failed">无法读取剪贴板图片。请改用“附加文件”。</string>
+    <string name="notice_take_control_first">请先获取窗格控制再附加文件。</string>
+    <string name="notice_wait_before_forward">等此窗格连接后再转发它的链接。</string>
+    <string name="clip_rex_terminal">Rex 终端</string>
+    <string name="activity_kind_approval">等待批准</string>
+    <string name="activity_kind_question">等待回答</string>
+    <string name="activity_kind_sign_in">需要登录</string>
+    <string name="a11y_state_failed">失败</string>
 </resources>

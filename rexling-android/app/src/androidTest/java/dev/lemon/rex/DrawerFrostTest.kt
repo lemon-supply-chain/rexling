@@ -211,13 +211,15 @@ class DrawerFrostTest {
             // The content must move with the sheet, outside any pre-offset clip.
             when (kind) {
                 0 -> {
-                    ui.onNodeWithText("Activity").assertIsDisplayed()
+                    ui.onNodeWithText(appString(R.string.activity)).assertIsDisplayed()
                     ui.onNodeWithText("Review changes").assertIsDisplayed()
                 }
                 1 -> ui.onNodeWithText("Development").assertIsDisplayed()
-                2 -> ui.onNodeWithContentDescription("Tab Project").assertIsDisplayed()
-                3 -> ui.onNodeWithText("Preferences").assertIsDisplayed()
-                4 -> ui.onNodeWithText("Dock pane").assertIsDisplayed()
+                2 ->
+                    ui.onNodeWithContentDescription(appString(R.string.a11y_tab_title, "Project"))
+                        .assertIsDisplayed()
+                3 -> ui.onNodeWithText(appString(R.string.preferences)).assertIsDisplayed()
+                4 -> ui.onNodeWithText(appString(R.string.label_dock_pane)).assertIsDisplayed()
             }
             if (isDark && kind in 0..1) {
                 var text: androidx.compose.ui.text.TextLayoutResult? = null

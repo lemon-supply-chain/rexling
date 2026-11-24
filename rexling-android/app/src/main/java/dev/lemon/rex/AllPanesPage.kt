@@ -214,7 +214,11 @@ private fun PaneCatalogRow(target: PaneCatalogTarget, current: Boolean, onOpen: 
                 )
         }
         target.activity?.let { status ->
-            Text(status.label, style = SettingsType.detail, color = colors.onSurfaceVariant)
+            Text(
+                stringResource(status.labelRes),
+                style = SettingsType.detail,
+                color = colors.onSurfaceVariant,
+            )
         }
         if (current) ChromeSymbol(ChromeIcon.CHECK, Modifier.size(16.dp), colors.onPrimaryContainer)
     }

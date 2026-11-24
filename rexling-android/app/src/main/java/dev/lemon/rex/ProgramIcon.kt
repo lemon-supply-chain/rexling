@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlin.math.cos
@@ -85,7 +86,10 @@ internal fun CountdownIcon(
             angle
         } else 0f
 
-    Canvas(modifier.semantics { contentDescription = progress?.description ?: "Countdown" }) {
+    val countdownDescription = stringResource(R.string.a11y_countdown)
+    Canvas(
+        modifier.semantics { contentDescription = progress?.description ?: countdownDescription },
+    ) {
         val u = size.minDimension / 24f
         val cx = size.width / 2f
         val cy = size.height / 2f

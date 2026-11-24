@@ -20,8 +20,9 @@ class TerminalControlButtonTest {
             MaterialTheme { OwnershipMenuItem(controlled, true) { controlled = !controlled } }
         }
         ui.onNodeWithText("Take control").performClick()
-        ui.onNodeWithText("Release control").assertIsDisplayed().performClick()
+        ui.onNodeWithText(appString(R.string.release_control)).assertIsDisplayed().performClick()
         ui.onNodeWithText("Take control").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Take terminal control").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_take_terminal_control))
+            .assertDoesNotExist()
     }
 }

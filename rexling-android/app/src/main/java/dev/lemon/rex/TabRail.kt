@@ -32,21 +32,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal enum class TabBarPosition(
-    @androidx.annotation.StringRes val labelRes: Int,
-    val label: String,
-) {
-    BOTTOM(R.string.tab_position_bottom, "Bottom"),
-    LEFT(R.string.tab_position_left, "Left"),
-    RIGHT(R.string.tab_position_right, "Right"),
+internal enum class TabBarPosition(@androidx.annotation.StringRes val labelRes: Int) {
+    BOTTOM(R.string.tab_position_bottom),
+    LEFT(R.string.tab_position_left),
+    RIGHT(R.string.tab_position_right),
 }
 
-internal enum class TabRailStyle(
-    @androidx.annotation.StringRes val labelRes: Int,
-    val label: String,
-) {
-    ICONS(R.string.tab_rail_style_icons, "Icons"),
-    TITLES(R.string.tab_rail_style_titles, "Icons and titles"),
+internal enum class TabRailStyle(@androidx.annotation.StringRes val labelRes: Int) {
+    ICONS(R.string.tab_rail_style_icons),
+    TITLES(R.string.tab_rail_style_titles),
 }
 
 /**
@@ -84,31 +78,11 @@ internal data class TabBarLayout(
 internal enum class TabWidthClass(
     @androidx.annotation.StringRes val titleRes: Int,
     @androidx.annotation.StringRes val detailRes: Int,
-    val title: String,
-    val detail: String,
     val key: String,
 ) {
-    NARROW(
-        R.string.tab_width_narrow,
-        R.string.tab_width_narrow_detail,
-        "Narrow",
-        "Under 440dp: phones, and a split half of the upright inner screen",
-        "tab_layout_narrow",
-    ),
-    MEDIUM(
-        R.string.tab_width_medium,
-        R.string.tab_width_medium_detail,
-        "Medium",
-        "440–760dp: the cover screen, a split half held sideways, and the upright inner screen",
-        "tab_layout_medium",
-    ),
-    WIDE(
-        R.string.tab_width_wide,
-        R.string.tab_width_wide_detail,
-        "Wide",
-        "760dp and wider: the inner screen held sideways",
-        "tab_layout_wide",
-    );
+    NARROW(R.string.tab_width_narrow, R.string.tab_width_narrow_detail, "tab_layout_narrow"),
+    MEDIUM(R.string.tab_width_medium, R.string.tab_width_medium_detail, "tab_layout_medium"),
+    WIDE(R.string.tab_width_wide, R.string.tab_width_wide_detail, "tab_layout_wide");
 
     companion object {
         fun of(widthDp: Int): TabWidthClass =

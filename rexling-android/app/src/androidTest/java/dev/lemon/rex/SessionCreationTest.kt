@@ -38,25 +38,25 @@ class SessionCreationTest {
         }
         ui.onNodeWithText("On Shulhi MBP").assertIsDisplayed()
         ui.onNode(hasSetTextAction()).performTextInput("New project")
-        ui.onNodeWithText("Create").performClick()
+        ui.onNodeWithText(appString(R.string.create)).performClick()
         ui.onNode(hasSetTextAction()).assertTextContains("New project")
         ui.runOnIdle {
             assertEquals(listOf("New project"), names)
             assertEquals(0, dismissed)
             enabled.value = false
         }
-        ui.onNodeWithText("Create").assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.create)).assertIsNotEnabled()
         ui.runOnIdle {
             enabled.value = true
             accepted = true
         }
         ui.onNode(hasSetTextAction()).performTextClearance()
-        ui.onNodeWithText("Create").performClick()
+        ui.onNodeWithText(appString(R.string.create)).performClick()
         ui.runOnIdle {
             assertEquals(listOf("New project", ""), names)
             assertEquals(1, dismissed)
         }
-        ui.onNodeWithText("New session").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.new_session)).assertDoesNotExist()
     }
 
     @Test
@@ -68,7 +68,7 @@ class SessionCreationTest {
             }
         }
         ui.onNodeWithText("Start a session on Ubuntu.").assertIsDisplayed()
-        ui.onNodeWithText("New session").assertIsEnabled().performClick()
+        ui.onNodeWithText(appString(R.string.new_session)).assertIsEnabled().performClick()
         ui.runOnIdle { assertEquals(1, requested) }
     }
 }

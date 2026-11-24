@@ -137,7 +137,7 @@ class PaneLayoutMapTest {
             )
         show(dark = true)
         capture("floating-shown-dark")
-        ui.onNodeWithContentDescription("Hide floating panes").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_hide_floating_panes)).performClick()
         pane("Code").assertDoesNotExist()
         pane("Plan").assertDoesNotExist()
         ui.runOnIdle {
@@ -147,7 +147,7 @@ class PaneLayoutMapTest {
         pane("fish").performTouchInput { click(center) }.assertIsSelected()
         ui.runOnIdle { assertEquals(listOf("a"), calls) }
         capture("floating-hidden-dark")
-        ui.onNodeWithContentDescription("Show floating panes").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_show_floating_panes)).performClick()
         pane("Plan").performTouchInput { click(center) }.assertIsSelected()
         ui.runOnIdle { assertEquals(listOf("a", "c"), calls) }
     }
@@ -163,7 +163,7 @@ class PaneLayoutMapTest {
                     ),
             )
         show(enabled = false)
-        ui.onNodeWithContentDescription("Hide floating panes").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_hide_floating_panes)).performClick()
         ui.runOnIdle {
             window.value =
                 window.value.copy(
@@ -176,7 +176,7 @@ class PaneLayoutMapTest {
         }
         pane("Code").assertDoesNotExist()
         pane("fish").assertIsNotEnabled()
-        ui.onNodeWithContentDescription("Show floating panes").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_show_floating_panes)).performClick()
         pane("Code").assertIsNotEnabled()
         ui.runOnIdle { assertTrue(calls.isEmpty()) }
     }

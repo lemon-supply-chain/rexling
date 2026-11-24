@@ -55,9 +55,13 @@ class StartupTabsTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription("Tab Loading…, Loading…").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tab, "Loading…", "Loading…"))
+            .assertDoesNotExist()
         ui.onNodeWithContentDescription("Tabs").assertDoesNotExist()
-        val actions = ui.onNodeWithContentDescription("Activity").fetchSemanticsNode().boundsInRoot
+        val actions =
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot
         ui.onAllNodes(hasContentDescription("shell", substring = true)).assertCountEquals(0)
         ui.onAllNodes(hasText("window-123abc", substring = true)).assertCountEquals(0)
         ui.runOnIdle {
@@ -66,19 +70,29 @@ class StartupTabsTest {
             chrome.value = cache.present(fresh)
             ready.value = true
         }
-        ui.onNodeWithContentDescription("Tab Investigate protocol, Codex").assertIsDisplayed()
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_tab, "Investigate protocol", "Codex"),
+            )
+            .assertIsDisplayed()
         ui.onAllNodes(hasText("Loading…")).assertCountEquals(0)
         assertEquals(
             actions,
-            ui.onNodeWithContentDescription("Activity").fetchSemanticsNode().boundsInRoot,
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot,
         )
         ui.runOnIdle { ready.value = false }
-        ui.onNodeWithContentDescription("Tab Investigate protocol, Codex").assertIsDisplayed()
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_tab, "Investigate protocol", "Codex"),
+            )
+            .assertIsDisplayed()
         ui.runOnIdle { session.value = "another-session" }
         ui.onNodeWithContentDescription("Tabs").assertDoesNotExist()
         assertEquals(
             actions,
-            ui.onNodeWithContentDescription("Activity").fetchSemanticsNode().boundsInRoot,
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot,
         )
     }
 

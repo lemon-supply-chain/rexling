@@ -97,9 +97,12 @@ class ControlShortcutsTest {
     @Test
     fun tapStillTogglesCtrlWithoutOpeningThePopup() {
         fixture()
-        ui.onNodeWithContentDescription("Control").performTouchInput { click() }
-        ui.onNodeWithContentDescription("Control").assertIsSelected()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            click()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertEquals(1, toggles)
             assertTrue(sent.isEmpty())
@@ -116,14 +119,16 @@ class ControlShortcutsTest {
         ui.mainClock.advanceTimeBy(650)
         repeat(3) { ui.mainClock.advanceTimeByFrame() }
         ui.waitForIdle()
-        ui.onNodeWithContentDescription("Control shortcuts").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertIsDisplayed()
         val target = bounds("Control W")
         touch(MotionEvent.ACTION_MOVE, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
         ui.onNodeWithContentDescription("Control W").assertIsSelected()
         touch(MotionEvent.ACTION_UP, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertEquals(listOf("w"), sent)
             assertEquals(0, toggles)
@@ -146,7 +151,8 @@ class ControlShortcutsTest {
         ui.onNodeWithContentDescription("Control J").assertIsSelected()
         touch(MotionEvent.ACTION_UP, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertEquals(listOf("j"), sent)
             assertEquals(0, toggles)
@@ -180,7 +186,7 @@ class ControlShortcutsTest {
     private fun capture(name: String) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         File(context.cacheDir, "control-bubble-$name.png").outputStream().use {
-            ui.onNodeWithContentDescription("Control shortcuts")
+            ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
                 .captureToImage()
                 .asAndroidBitmap()
                 .compress(Bitmap.CompressFormat.PNG, 100, it)
@@ -197,10 +203,12 @@ class ControlShortcutsTest {
         ui.mainClock.advanceTimeBy(650)
         repeat(3) { ui.mainClock.advanceTimeByFrame() }
         ui.waitForIdle()
-        ui.onNodeWithContentDescription("Control shortcuts").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertIsDisplayed()
         touch(MotionEvent.ACTION_UP, start.exactCenterX(), start.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertTrue(sent.isEmpty())
             assertEquals(0, toggles)
@@ -223,7 +231,8 @@ class ControlShortcutsTest {
         ui.onNodeWithContentDescription("Control ]").assertIsSelected()
         touch(MotionEvent.ACTION_UP, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertEquals(listOf("]"), sent)
             assertEquals(29, TerminalInput.modified(sent.single(), true, false).single().code)
@@ -253,7 +262,8 @@ class ControlShortcutsTest {
         ui.mainClock.advanceTimeByFrame()
         touch(MotionEvent.ACTION_UP, x, last.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertTrue(sent.isEmpty())
             assertEquals(0, toggles)
@@ -263,10 +273,11 @@ class ControlShortcutsTest {
     @Test
     fun readOnlyCtrlCannotOpenOrSendShortcuts() {
         fixture(enabled = false)
-        ui.onNodeWithContentDescription("Control").assertIsNotEnabled().performTouchInput {
-            longClick()
-        }
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control))
+            .assertIsNotEnabled()
+            .performTouchInput { longClick() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle {
             assertTrue(sent.isEmpty())
             assertEquals(0, toggles)
@@ -276,38 +287,51 @@ class ControlShortcutsTest {
     @Test
     fun doubleTapOpensPersistentPopupWithoutLeavingCtrlLatchedAndCanSendAShortcut() {
         fixture(gesture = ControlShortcutGesture.DOUBLE_TAP)
-        ui.onNodeWithContentDescription("Control").performTouchInput { doubleClick() }
-        ui.onNodeWithContentDescription("Control shortcuts").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Control").assertIsNotSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            doubleClick()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsNotSelected()
         capture("above")
         ui.onNodeWithContentDescription("Control J").performClick()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("j"), sent) }
     }
 
     @Test
     fun doubleTapModeStillTogglesCtrlImmediatelyOnASingleTap() {
         fixture(gesture = ControlShortcutGesture.DOUBLE_TAP)
-        ui.onNodeWithContentDescription("Control").performTouchInput { click() }
-        ui.onNodeWithContentDescription("Control").assertIsSelected()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            click()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle { assertEquals(1, toggles) }
     }
 
     @Test
     fun doubleTapModeDoesNotOpenThePopupOnHold() {
         fixture(gesture = ControlShortcutGesture.DOUBLE_TAP)
-        ui.onNodeWithContentDescription("Control").performTouchInput { longClick() }
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            longClick()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
     }
 
     @Test
     fun doubleTapPreservesAnAlreadyActiveCtrlModifier() {
         fixture(gesture = ControlShortcutGesture.DOUBLE_TAP, initiallyActive = true)
-        ui.onNodeWithContentDescription("Control").performTouchInput { doubleClick() }
-        ui.onNodeWithContentDescription("Control shortcuts").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Control").assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            doubleClick()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsSelected()
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
     }
 
@@ -322,18 +346,23 @@ class ControlShortcutsTest {
 
     private fun assertTriggerClosesAndClears(initiallyActive: Boolean) {
         fixture(gesture = ControlShortcutGesture.DOUBLE_TAP, initiallyActive = initiallyActive)
-        ui.onNodeWithContentDescription("Control").performTouchInput { doubleClick() }
-        ui.onNodeWithContentDescription("Control shortcuts").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            doubleClick()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertIsDisplayed()
         nativeTapControl()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Control").assertIsNotSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsNotSelected()
         ui.runOnIdle {
             assertEquals(if (initiallyActive) 3 else 2, toggles)
             assertTrue(sent.isEmpty())
         }
         nativeTapControl()
-        ui.onNodeWithContentDescription("Control").assertIsSelected()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
     }
 
     @Test
@@ -349,18 +378,22 @@ class ControlShortcutsTest {
     @Test
     fun nativeOutsideDismissalDoesNotConsumeTheNextCtrlTap() {
         fixture(gesture = ControlShortcutGesture.DOUBLE_TAP)
-        ui.onNodeWithContentDescription("Control").performTouchInput { doubleClick() }
-        ui.onNodeWithContentDescription("Control shortcuts").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            doubleClick()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertIsDisplayed()
         val start = bounds("Control")
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, 1f, start.exactCenterY(), down)
         SystemClock.sleep(35)
         touch(MotionEvent.ACTION_UP, 1f, start.exactCenterY(), down)
         ui.waitForIdle()
-        ui.onNodeWithContentDescription("Control shortcuts").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Control").assertIsNotSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
+            .assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsNotSelected()
         nativeTapControl()
-        ui.onNodeWithContentDescription("Control").assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsSelected()
         ui.runOnIdle {
             assertEquals(3, toggles)
             assertTrue(sent.isEmpty())

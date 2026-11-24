@@ -220,13 +220,13 @@ internal fun ActivitySheet(
                                                 context.getString(
                                                     R.string.a11y_activity_record,
                                                     record.label,
-                                                    record.stateLabel,
+                                                    record.stateLabel(context),
                                                     record.sessionLabel,
                                                     source.server.label,
                                                 )
                                             stateDescription =
                                                 listOf(
-                                                        record.stateLabel,
+                                                        record.stateLabel(context),
                                                         if (seen)
                                                             context.getString(
                                                                 R.string.a11y_state_seen,
