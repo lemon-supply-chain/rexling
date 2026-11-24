@@ -75,6 +75,7 @@ class BackgroundMonitorService: Service() {
                 while(isActive) {
                 var handle=0L
                 try {
+                    NetworkSettings.awaitInitialized()
                     handle=NativeBridge.create();check(handle!=0L);monitor.handle=handle
                     NativeBridge.command(handle,"{\"type\":\"monitor\"}")
                     NativeBridge.command(handle,JSONObject().put("type","connect").put("server",profile.endpoint).toString())

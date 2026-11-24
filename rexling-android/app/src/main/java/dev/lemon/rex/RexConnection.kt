@@ -217,7 +217,12 @@ internal class RexConnection(application: Application, private val scope: Corout
         if(seen.length()>2048) {val keys=seen.keys().asSequence().toList();keys.take(keys.size-2048).forEach {seen.remove(it)}}
         preferences.edit {putString("activity_seen:$savedEndpoint",seen.toString())};command("activity_seen","items" to seen)
     }
-    fun retryNow() {if(foreground && savedEndpoint.isNotBlank()) {cancelKeyRepeats();dropResize();activation.resume();command("retry")}}
+    fun retryNow() {
+        if(foreground && savedEndpoint.isNotBlank()) {
+            if(NetworkSettings.configurationError.value!=null) {scope.launch {NetworkSettings.reconfigure()}}
+            cancelKeyRepeats();dropResize();activation.resume();command("retry")
+        }
+    }
     fun networkChanged(change: NetworkChange) {
         if(foreground && (!change.available || change.reroute || !state.value.connected)) {cancelKeyRepeats();dropResize();command("network","online" to change.available,"force" to change.reroute)}
     }

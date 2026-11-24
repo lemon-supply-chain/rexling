@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
 @Composable internal fun EmptyServerContent(onAdd: ()->Unit) {
@@ -108,7 +109,7 @@ import kotlinx.coroutines.launch
 }
 
 @Composable internal fun ServerEditor(server: ServerProfile?,onClose: ()->Unit,onSave: (String,String,ServerIcon)->String?) {
-    val networkStatus by NetworkSettings.status.collectAsState()
+    val networkStatus by NetworkSettings.status.collectAsStateWithLifecycle()
     val tailnetConnected=networkStatus.optJSONObject("tailscale")?.optString("BackendState")=="Running"
     var name by remember(server?.id) {mutableStateOf(server?.label.orEmpty())}
     var endpoint by remember(server?.id) {mutableStateOf(server?.endpoint.orEmpty())}

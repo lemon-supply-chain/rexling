@@ -238,6 +238,7 @@ private data class TerminalCloseTarget(
 @Composable
 private fun RexWorkspace(model: RexModel, client: RexConnection) {
     val state by client.chromeState.collectAsState()
+    val networkConfigError by NetworkSettings.configurationError.collectAsState()
     val connectionRequested = model.activeConnectionRequested
     val connectionPhase =
         if (connectionRequested && state.phase in listOf("disconnected", "paused")) {
@@ -831,7 +832,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         }
                     }
                     if (blocks.isEmpty() && model.servers.isNotEmpty())
-                        ConnectionNotice(connectionPhase, model.networkAvailable, client::retryNow)
+                        ConnectionNotice(connectionPhase, model.networkAvailable, client::retryNow, configError = networkConfigError)
                     if (
                         blocks.isEmpty() &&
                             state.connected &&
@@ -999,7 +1000,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     bottomOverlayInset = bottomOverlayInset,
                                 )
                             }
-                            ConnectionNotice(connectionPhase, model.networkAvailable, client::retryNow, Modifier.align(Alignment.TopCenter).padding(8.dp))
+                            ConnectionNotice(connectionPhase, model.networkAvailable, client::retryNow, Modifier.align(Alignment.TopCenter).padding(8.dp), configError = networkConfigError)
                             ReadyNotice(state.connectionEpoch, controlled, ready, Modifier.align(Alignment.TopCenter).padding(8.dp), hazeState = terminalHaze, onVisibleChange = { readyBackdrop = it })
                             OtherOwnerNotice(chosen, state.otherOwner && !controlled, ready, client.screenDimensions, { client.takeControl() }, Modifier.align(Alignment.TopEnd).padding(10.dp), hazeState = terminalHaze, onVisibleChange = { ownerBackdrop = it })
                             val shortcutProfile =

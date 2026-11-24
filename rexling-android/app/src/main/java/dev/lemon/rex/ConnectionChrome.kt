@@ -23,15 +23,16 @@ internal fun connectionMessage(phase: String,network: Boolean?): String? = when 
     else->"Reconnecting · input paused"
 }
 
-@Composable internal fun connectionNoticeText(phase: String,network: Boolean?): String? = when {
+@Composable internal fun connectionNoticeText(phase: String,network: Boolean?,configError: String?=null): String? = when {
     phase !in listOf("connecting","reconnecting","error")->null
+    configError!=null->configError
     network==false->stringResource(R.string.waiting_network_input_paused)
     phase=="connecting"->stringResource(R.string.connecting)
     else->stringResource(R.string.reconnecting_input_paused)
 }
 
-@Composable internal fun ConnectionNotice(phase: String,network: Boolean?,onRetry: ()->Unit,modifier: Modifier=Modifier) {
-    connectionNoticeText(phase,network)?.let {message->
+@Composable internal fun ConnectionNotice(phase: String,network: Boolean?,onRetry: ()->Unit,modifier: Modifier=Modifier,configError: String?=null) {
+    connectionNoticeText(phase,network,configError)?.let {message->
         Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(start=12.dp,end=6.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             if(network!=false && (phase=="connecting" || phase=="reconnecting")) {

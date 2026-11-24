@@ -138,6 +138,13 @@ Recommendation: run migration/interfaces/configure on `Dispatchers.IO`, expose a
 initialization `StateFlow`/`CompletableDeferred`, and have `RexModel`/services await it
 before connecting.
 
+*Status: Fixed.* `NetworkSettings.initialize` now exposes `initialization: Deferred<String?>` and
+`awaitInitialized()`. `RexModel.init` gates initial connections on `awaitInitialized()`, and `connectServer`
+asynchronously awaits it before invoking `client.connect()`. Background monitoring and port forwarding
+services similarly gate connection establishment on `awaitInitialized()`. Furthermore, `configure()` errors
+are no longer dropped: SSH key decryption failures and Go configure errors are captured into `configurationError`,
+surfaced in the UI `ConnectionNotice` banner, and retried automatically on "Retry now" via `reconfigure()`.
+
 #### 1.5 The status poll runs forever, and Go `status()` has a start side effect
 
 `NetworkSettings.kt:90`; `rexling-network/main.go` (`status`, `tailServer`)
@@ -161,6 +168,12 @@ Recommendation: expose status only while a consumer (Network sheet, settings) is
 visible, pause it with the lifecycle, and back off. Split `status` into a read-only
 query and an explicit `ensureStarted`; store/report the start error; release the tail
 lock while `Start()` runs (a `started/starting` state) so logout/cancel stay responsive.
+
+*Status: Fixed on Android client.* Replaced perpetual background polling with consumer-driven, lifecycle-aware
+polling in `NetworkSettings`: status polling now runs only when consumers are subscribed (`subscriptionCount > 0`)
+and the application is in the foreground (tracked via `ActivityLifecycleCallbacks`). Subscriptions in `NetworkSheet`
+and `ServersSheet` now use `collectAsStateWithLifecycle()`. In addition, failing status polls automatically back off
+up to 30 seconds instead of hammering the daemon.
 
 ### P2 — should fix
 

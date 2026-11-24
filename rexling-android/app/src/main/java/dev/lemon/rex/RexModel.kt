@@ -316,7 +316,14 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     internal val activeConnectionRequested: Boolean get()=activeServerId in desired
     val connectedCount: Int get()=serverStatuses.values.count {it.connected}
 
-    init {viewModelScope.launch {NetworkSettings.revision.drop(1).collect {connections.filterKeys {it in desired}.values.forEach {it.retryNow()}}};preferences.registerOnSharedPreferenceChangeListener(alertsListener);desired.toList().forEach {id->connectServer(id,select=false)}}
+    init {
+        viewModelScope.launch {NetworkSettings.revision.drop(1).collect {connections.filterKeys {it in desired}.values.forEach {it.retryNow()}}}
+        preferences.registerOnSharedPreferenceChangeListener(alertsListener)
+        viewModelScope.launch {
+            NetworkSettings.awaitInitialized()
+            desired.toList().forEach {id->connectServer(id,select=false)}
+        }
+    }
 
     private fun connection(profile: ServerProfile): RexConnection = connections.getOrPut(profile.id) {
         RexConnection(getApplication(),viewModelScope,profile.endpoint,preferences).also {client->
@@ -447,8 +454,11 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
             client.visible=true;activeServerId=id;activeClient=client
         }
         desired=desired+id;persist()
-        if(client.state.value.phase in listOf("disconnected","error","preview")) client.connect(profile.endpoint)
-        else if(foreground && client.state.value.phase=="paused") client.resume()
+        viewModelScope.launch {
+            NetworkSettings.awaitInitialized()
+            if(client.state.value.phase in listOf("disconnected","error","preview")) client.connect(profile.endpoint)
+            else if(foreground && client.state.value.phase=="paused") client.resume()
+        }
     }
     /** The legacy URL form also adds a new host without disconnecting existing ones. */
     fun connect(endpoint: String): String? = runCatching {

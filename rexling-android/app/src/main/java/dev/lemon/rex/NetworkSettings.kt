@@ -1,12 +1,14 @@
 package dev.lemon.rex
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.os.Bundle
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -27,10 +29,21 @@ internal object NetworkSettings {
     private lateinit var context: Application
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private val mutex=Mutex()
-    val status=MutableStateFlow(JSONObject())
+    private val isForeground=MutableStateFlow(true)
+    private val _status=MutableStateFlow(JSONObject())
+    val status: StateFlow<JSONObject> = _status.asStateFlow()
+    val configurationError=MutableStateFlow<String?>(null)
     val revision=MutableStateFlow(0L)
     val sshKeys=MutableStateFlow<List<SshKeyInfo>>(emptyList())
     val sshKeyBindings=MutableStateFlow<Map<String,String>>(emptyMap())
+    private val initDeferred=CompletableDeferred<String?>()
+    val initialization: Deferred<String?> get()=initDeferred
+    suspend fun awaitInitialized(): String? = withTimeoutOrNull(5000L) {
+        initDeferred.await()
+    } ?: run {
+        if(!initDeferred.isCompleted) initDeferred.complete("Network initialization timed out")
+        initDeferred.await()
+    }
     private val preferences get()=context.getSharedPreferences("network",Context.MODE_PRIVATE)
     val builtIn get()=preferences.getBoolean("built_in",false)
     fun route(endpoint: String)=ServerNetworkRoute.decode(JSONObject(preferences.getString("routes","{}")!!).optString(endpoint))
@@ -77,30 +90,74 @@ internal object NetworkSettings {
     private fun command(type: String,body: JSONObject=JSONObject()): JSONObject = JSONObject(NativeBridge.networkCommand(body.put("type",type).toString()))
     fun initialize(application: Context) {
         context=application.applicationContext as Application
-        scope.launch {
-            if(!preferences.getBoolean("per_server_routes",false)) {
-                val app=context.getSharedPreferences("rex",Context.MODE_PRIVATE)
-                val endpoints=SavedServers.decode(app.getString("servers",null),app.getString("endpoint","").orEmpty()).map {it.endpoint}
-                val routes=migratedServerRoutes(JSONObject(preferences.getString("routes","{}")!!),endpoints,builtIn)
-                preferences.edit().putString("routes",routes.toString()).putBoolean("tailscale_prepared",tailscaleEnabled)
-                    .putBoolean("built_in",false).putBoolean("per_server_routes",true).apply()
+        context.registerActivityLifecycleCallbacks(object: Application.ActivityLifecycleCallbacks {
+            private var startedActivities=0
+            override fun onActivityStarted(activity: Activity) {startedActivities++;isForeground.value=true}
+            override fun onActivityStopped(activity: Activity) {
+                startedActivities=(startedActivities-1).coerceAtLeast(0)
+                if(startedActivities==0) isForeground.value=false
             }
-            migrateKeys()
-            // Install configuration before any terminal or monitoring service can connect.
-            interfaces()
-            configure()
-            val manager=context.getSystemService(android.net.ConnectivityManager::class.java)
-            runCatching {manager?.registerDefaultNetworkCallback(object: android.net.ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: android.net.Network) {scope.launch {interfaces()}}
-                override fun onLost(network: android.net.Network) {scope.launch {interfaces()}}
-                override fun onLinkPropertiesChanged(network: android.net.Network,properties: android.net.LinkProperties) {scope.launch {interfaces()}}
-            })}
+            override fun onActivityCreated(activity: Activity,savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity,outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
+        scope.launch {
+            try {
+                if(!preferences.getBoolean("per_server_routes",false)) {
+                    val app=context.getSharedPreferences("rex",Context.MODE_PRIVATE)
+                    val endpoints=SavedServers.decode(app.getString("servers",null),app.getString("endpoint","").orEmpty()).map {it.endpoint}
+                    val routes=migratedServerRoutes(JSONObject(preferences.getString("routes","{}")!!),endpoints,builtIn)
+                    preferences.edit().putString("routes",routes.toString()).putBoolean("tailscale_prepared",tailscaleEnabled)
+                        .putBoolean("built_in",false).putBoolean("per_server_routes",true).apply()
+                }
+                migrateKeys()
+                // Install configuration before any terminal or monitoring service can connect.
+                interfaces()
+                val error=configure()
+                val manager=context.getSystemService(android.net.ConnectivityManager::class.java)
+                runCatching {manager?.registerDefaultNetworkCallback(object: android.net.ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: android.net.Network) {scope.launch {interfaces()}}
+                    override fun onLost(network: android.net.Network) {scope.launch {interfaces()}}
+                    override fun onLinkPropertiesChanged(network: android.net.Network,properties: android.net.LinkProperties) {scope.launch {interfaces()}}
+                })}
+                initDeferred.complete(error)
+            } catch(t: Throwable) {
+                val err=t.message ?: "Network initialization failed"
+                configurationError.value=err
+                initDeferred.complete(err)
+            }
         }
+        startStatusPolling()
+    }
+    private fun startStatusPolling() {
         scope.launch {
-            while(isActive) {
-                runCatching {status.value=command("status")}
-                delay(if(tailscaleEnabled) 3000 else 8000)
-            }
+            combine(_status.subscriptionCount,isForeground) {count,fg->count>0 && fg}
+                .distinctUntilChanged()
+                .collectLatest {active->
+                    if(active) {
+                        var failureCount=0
+                        while(isActive) {
+                            val result=runCatching {command("status")}
+                            if(result.isSuccess) {
+                                val newStatus=result.getOrThrow()
+                                configurationError.value?.let {cfgErr->
+                                    if(!newStatus.has("error") || newStatus.optString("error").isEmpty()) {
+                                        newStatus.put("error",cfgErr)
+                                    }
+                                }
+                                _status.value=newStatus
+                                failureCount=0
+                            } else {
+                                failureCount++
+                            }
+                            val baseDelay=if(tailscaleEnabled) 3000L else 8000L
+                            val backoffDelay=if(failureCount>0) (baseDelay*(1+failureCount)).coerceAtMost(30000L) else baseDelay
+                            delay(backoffDelay)
+                        }
+                    }
+                }
         }
     }
     private fun interfaces() {
@@ -119,14 +176,39 @@ internal object NetworkSettings {
     }
     private fun configure(): String? {
         val ssh=JSONObject();val library=keyLibrary()
-        library.assigned().forEach {(endpoint,id)->runCatching {ssh.put(endpoint,JSONObject().put("key",decrypt(library.secret(id))))}}
+        var decryptError: String?=null
+        library.assigned().forEach {(endpoint,id)->
+            runCatching {
+                val secret=library.secret(id)
+                val key=decrypt(secret)
+                if(key.isBlank()) throw IllegalStateException("Decrypted SSH key is empty")
+                ssh.put(endpoint,JSONObject().put("key",key))
+            }.onFailure {failure->
+                if(decryptError==null) {
+                    decryptError="Failed to decrypt SSH key for $endpoint: ${failure.message ?: failure.javaClass.simpleName}"
+                }
+            }
+        }
         val config=JSONObject().put("built_in",builtIn).put("control_url",controlUrl).put("hostname",hostname).put("directory",context.filesDir.resolve("tailscale").absolutePath)
             .put("built_in_suspended",preferences.getBoolean("tailscale_suspended",false)).put("built_in_enabled",tailscaleEnabled).put("routes",JSONObject(preferences.getString("routes","{}")!!))
             .put("ssh",ssh).put("trusted",JSONObject(preferences.getString("trusted","{}")!!))
-        val error=command("configure",JSONObject().put("config",config)).optString("error").takeIf {it.isNotEmpty()}
-        if(error==null) revision.value=revision.value+1
+        val commandResult=command("configure",JSONObject().put("config",config))
+        val commandError=commandResult.optString("error").takeIf {it.isNotEmpty()}
+        val error=decryptError ?: commandError
+        configurationError.value=error
+        if(error==null) {
+            revision.value=revision.value+1
+        } else {
+            val current=JSONObject(_status.value.toString())
+            current.put("error",error)
+            _status.value=current
+        }
         return error
     }
+    suspend fun reconfigure(): String? = withContext(Dispatchers.IO) {mutex.withLock {
+        interfaces()
+        configure()
+    }}
     suspend fun save(enabled: Boolean,url: String): String? = withContext(Dispatchers.IO) {mutex.withLock {
         val trimmed=url.trim().trimEnd('/')
         if(trimmed.isNotEmpty()) {
@@ -160,7 +242,9 @@ internal object NetworkSettings {
             // Do not reconfigure or bump the revision: phone-network SSH/Rex
             // connections must remain untouched by cancelling an enrollment.
         }
-        status.value=command("status")
+        val s=command("status")
+        configurationError.value?.let {cfgErr->if(!s.has("error") || s.optString("error").isEmpty()) s.put("error",cfgErr)}
+        _status.value=s
         error
     }}
     suspend fun logout(): String? = withContext(Dispatchers.IO) {mutex.withLock {
@@ -169,10 +253,16 @@ internal object NetworkSettings {
         if(error==null) {
             preferences.edit().putBoolean("tailscale_suspended",true).putBoolean("tailscale_prepared",false).commit()
         }
-        status.value=command("status")
+        val s=command("status")
+        configurationError.value?.let {cfgErr->if(!s.has("error") || s.optString("error").isEmpty()) s.put("error",cfgErr)}
+        _status.value=s
         error
     }}
-    suspend fun refreshStatus()=withContext(Dispatchers.IO) {status.value=command("status")}
+    suspend fun refreshStatus()=withContext(Dispatchers.IO) {
+        val s=command("status")
+        configurationError.value?.let {cfgErr->if(!s.has("error") || s.optString("error").isEmpty()) s.put("error",cfgErr)}
+        _status.value=s
+    }
     suspend fun addKey(name: String,text: String,passphrase: String): SshKeyImportResult = withContext(Dispatchers.IO) {mutex.withLock {
         if(name.trim().isEmpty() || name.trim().length>80) return@withLock SshKeyImportResult(error="Enter a key name of up to 80 characters")
         if(text.toByteArray().size>131072) return@withLock SshKeyImportResult(error="SSH key is too large")

@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -31,7 +32,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @Composable internal fun NetworkSheet(server: ServerProfile?=null,serverConnected: Boolean=false,hazeState: dev.chrisbanes.haze.HazeState?=null,onClose: ()->Unit) {
     val context=LocalContext.current
     val scope=rememberCoroutineScope()
-    val status by NetworkSettings.status.collectAsState()
+    val status by NetworkSettings.status.collectAsStateWithLifecycle()
     var control by remember {mutableStateOf(NetworkSettings.controlUrl)}
     var deviceName by remember {mutableStateOf(NetworkSettings.hostname)}
     var error by remember {mutableStateOf<String?>(null)}
@@ -195,7 +196,7 @@ internal fun tailscalePeers(status: org.json.JSONObject?): List<TailscalePeerSta
 }
 
 @Composable internal fun NetworkPrompts() {
-    val status by NetworkSettings.status.collectAsState();val scope=rememberCoroutineScope();val context=LocalContext.current
+    val status by NetworkSettings.status.collectAsStateWithLifecycle();val scope=rememberCoroutineScope();val context=LocalContext.current
     val host=status.optJSONArray("hosts")?.optJSONObject(0)
     var hidden by remember {mutableStateOf("")}
     val signature=host?.toString().orEmpty()
