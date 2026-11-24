@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
@@ -15,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -53,6 +51,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import dev.chrisbanes.haze.HazeState
 import kotlin.math.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -282,10 +281,22 @@ internal fun NeovimRadialShortcutButton(
     effect: NeovimShortcutEffect,
     hapticsEnabled: Boolean,
     name: String = "Neovim",
+    hazeState: HazeState? = null,
+    onExpandedChange: (Boolean) -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val notifyBackdrop by rememberUpdatedState(onExpandedChange)
+    val localHaze = remember { HazeState() }
+    val haze = hazeState ?: localHaze
+    val hostView = LocalView.current
+    val invalidator = remember(hostView) { PopupFrostInvalidator(hostView) }
     val wheel = remember(target, items, effect) { NeovimWheelState(items) }
-    DisposableEffect(wheel) { onDispose { wheel.close() } }
+    DisposableEffect(wheel) {
+        onDispose {
+            wheel.close()
+            notifyBackdrop(false)
+        }
+    }
     val transition =
         key(wheel) { updateTransition(wheel.open && enabled, label = "Neovim wheel visibility") }
     val animatedReveal =
@@ -306,6 +317,11 @@ internal fun NeovimRadialShortcutButton(
         enabled &&
             (if (effect == NeovimShortcutEffect.NONE) wheel.open
             else transition.currentState || transition.targetState || transition.isRunning)
+    LaunchedEffect(showing) { notifyBackdrop(showing) }
+    DisposableEffect(invalidator, showing) {
+        if (showing) invalidator.start()
+        onDispose { invalidator.stop() }
+    }
     // The non-focusable popup preserves a held gesture; consume Back as before.
     BackHandler(showing) {}
     val scope = rememberCoroutineScope()
@@ -318,7 +334,6 @@ internal fun NeovimRadialShortcutButton(
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var paneBounds by remember { mutableStateOf(Rect.Zero) }
     var windowBounds by remember { mutableStateOf(Rect.Zero) }
-    val hostView = LocalView.current
     val haptics = LocalHapticFeedback.current
     val latestHapticsEnabled by rememberUpdatedState(hapticsEnabled)
     val tick =
@@ -513,7 +528,16 @@ internal fun NeovimRadialShortcutButton(
                             clippingEnabled = false,
                         ),
                 ) {
-                    NeovimShortcutWheel(wheel, width, effect, reveal, tick, name) { item ->
+                    NeovimShortcutWheel(
+                        wheel,
+                        width,
+                        effect,
+                        reveal,
+                        tick,
+                        name,
+                        haze,
+                        invalidator,
+                    ) { item ->
                         latestChoose(item, target)
                     }
                 }
@@ -530,6 +554,8 @@ private fun NeovimShortcutWheel(
     reveal: State<Float>,
     onTick: () -> Unit,
     name: String,
+    haze: HazeState,
+    invalidator: PopupFrostInvalidator,
     onChoose: (NeovimShortcut) -> Unit,
 ) {
     val reopenDescription = stringResource(R.string.a11y_reopen_shortcuts, name)
@@ -703,13 +729,16 @@ private fun NeovimShortcutWheel(
                             remember(index, wheel.slots, effect, progress) {
                                 WheelFrostSector(index, wheel.slots, effect, progress)
                             }
-                        // One opaque surface for every page: the wheel must not pick up the program
-                        // behind it.
                         Box(
                             Modifier.fillMaxSize()
                                 .graphicsLayer { alpha = (progress * 3f).coerceIn(0f, 1f) }
-                                .clip(shape)
-                                .background(colors.sector),
+                                .paneFrost(
+                                    haze,
+                                    shape,
+                                    edge = false,
+                                    tint = colors.sector,
+                                    invalidator = invalidator,
+                                ),
                         )
                     }
                 }

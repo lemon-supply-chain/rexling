@@ -275,6 +275,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     var readyBackdrop by remember { mutableStateOf(false) }
     var floatingBackdrop by remember { mutableStateOf(false) }
     var ownerBackdrop by remember { mutableStateOf(false) }
+    var shortcutBackdrop by remember { mutableStateOf(false) }
     val palette = LocalTerminalPalette.current
     var endpoint by rememberSaveable { mutableStateOf(client.savedEndpoint) }
     var servers by remember { mutableStateOf(false) }
@@ -916,7 +917,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
-                    val tabActions: @Composable (Boolean) -> Unit = { vertical ->
+                    val tabActions: @Composable (Boolean, Boolean) -> Unit = { vertical, sideRail ->
                         TerminalActions(
                             state.connected && state.selectedSession.isNotBlank(),
                             model.connectedCount > 0,
@@ -935,6 +936,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     })
                                 else null,
                             vertical = vertical,
+                            sideRail = sideRail,
                         )
                     }
                     val tabRail: @Composable () -> Unit = {
@@ -971,7 +973,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             islandBottom =
                                 terminalBottomMargin + (if (extendUnderNav) 0.dp else 8.dp),
                         ) {
-                            tabActions(tabLayout.style == TabRailStyle.ICONS)
+                            tabActions(tabLayout.style == TabRailStyle.ICONS, true)
                         }
                     }
                     if (blocks.isNotEmpty())
@@ -1021,6 +1023,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     floatingBackdrop ||
                                         ownerBackdrop ||
                                         readyBackdrop ||
+                                        shortcutBackdrop ||
                                         model.images.state != null
                                 if (carouselBlocks.isEmpty())
                                     Box(
@@ -1187,6 +1190,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                 )
                                                     64.dp
                                                 else 10.dp),
+                                        hazeState = terminalHaze,
+                                        onExpandedChange = { shortcutBackdrop = it },
                                     )
                                 }
                                 if (floating.isNotEmpty()) {
@@ -1249,7 +1254,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 else if (keyboardVisible) terminalView?.hideKeyboard()
                                 else terminalView?.keyboard()
                             },
-                            actions = { tabActions(false) },
+                            actions = { tabActions(false, false) },
                         )
                     }
                 }

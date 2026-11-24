@@ -14,16 +14,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
@@ -112,10 +107,11 @@ internal fun PaneProgramTile(
         return
     }
     val assets = LocalContext.current.assets
+    val dark = LocalTerminalPalette.current.dark
     val skin = remember(program, assets) { ProgramCatalog.skin(program, assets) }
     val catalog = remember(program, assets) { ProgramCatalog.tile(program, assets) }
-    val shape = RoundedCornerShape(if (large) 7.dp else 5.dp)
-    if (catalog != null) {
+    val showCountdown = progress != null && (progress.percent != null || progress.busy)
+    if (!showCountdown && catalog != null) {
         val picture = remember(assets, catalog) { ProgramVectorPicture.load(assets, catalog) }
         // No clip here: the artwork carries its own rounded edge and must keep it.
         Canvas(
@@ -124,62 +120,58 @@ internal fun PaneProgramTile(
                 .rainbowMarquee(marquee, if (large) 7.dp else 5.dp),
         ) {
             val canvas = drawContext.canvas.nativeCanvas
-            picture.drawTile(canvas, size.width, size.height, 0f)
+            picture.drawTile(canvas, size.width, size.height, 0f, dark = dark)
             drawTileLight(marquee)
         }
         return
     }
-    val dark = LocalTerminalPalette.current.dark
     val colors =
-        if (skin.neutral || skin.colors.isEmpty()) neutralColors(dark) else skin.colors.map(::Color)
-    val ink = if (skin.neutral && !dark) Color(0xff323e50) else Color.White
+        when {
+            showCountdown -> countdownColors
+            skin.neutral || skin.colors.isEmpty() -> neutralColors(dark)
+            else -> skin.colors.map(::Color)
+        }
+    val ink =
+        when {
+            showCountdown -> Color.White
+            skin.neutral && !dark -> Color(0xff323e50)
+            else -> Color.White
+        }
     val radius = if (large) 7.dp else 5.dp
-    val rimColors =
-        if (colors.first().luminance() > .72f)
-            listOf(
-                Color.Black.copy(alpha = .12f),
-                Color.Black.copy(alpha = .055f),
-                Color.Transparent,
-            )
-        else
-            listOf(
-                Color.White.copy(alpha = .40f),
-                Color.White.copy(alpha = .12f),
-                Color.Transparent,
-            )
+    val fillInts = remember(colors) { colors.map { it.toArgb() }.toIntArray() }
+    val chrome =
+        remember(assets, fillInts) {
+            SkeuomorphicCardChrome.forAccent(assets, fillInts.firstOrNull() ?: 0)
+        }
+    val fillPaint = remember(fillInts) { SkeuomorphicCardChrome.plateFill(fillInts) }
     Box(
-        modifier
-            .graphicsLayer { rotationZ = rotation }
-            .rainbowMarquee(marquee, radius)
-            .clip(shape)
-            .background(Brush.verticalGradient(colors))
-            .drawWithContent {
-                drawContent()
-                drawTileLight(marquee)
-                val stroke = 1f.toDp().toPx()
-                val inset = stroke / 2f
-                drawRoundRect(
-                    Brush.verticalGradient(rimColors),
-                    Offset(inset, inset),
-                    Size(
-                        (size.width - inset * 2).coerceAtLeast(0f),
-                        (size.height - inset * 2).coerceAtLeast(0f),
-                    ),
-                    CornerRadius((radius.toPx() - inset).coerceAtLeast(0f)),
-                    style = Stroke(stroke),
-                )
-            },
+        modifier.graphicsLayer { rotationZ = rotation }.rainbowMarquee(marquee, radius),
         contentAlignment = Alignment.Center,
     ) {
+        Canvas(Modifier.matchParentSize()) {
+            val native = drawContext.canvas.nativeCanvas
+            if (chrome != null) {
+                chrome.drawCard(native, size.width, size.height, fillPaint, dark = dark)
+            } else {
+                // A catalog without a parseable plate still gets the rounded tile, not a square.
+                drawRoundRect(
+                    colors.firstOrNull() ?: Color.Gray,
+                    cornerRadius = CornerRadius(radius.toPx()),
+                )
+            }
+            drawTileLight(marquee)
+        }
         // The dial is a live progress visualization; surfaces without progress
         // data (activity rows, switchers, docks) keep the program's own icon.
-        if (progress != null && (progress.percent != null || progress.busy)) {
+        if (showCountdown) {
             CountdownIcon(progress, Modifier.size(if (large) 19.dp else 13.dp), ink)
         } else {
             ProgramIcon(program, Modifier.size(if (large) 19.dp else 13.dp), ink)
         }
     }
 }
+
+private val countdownColors = listOf(Color(0xff242220), Color.Black, Color.Black)
 
 private fun neutralColors(dark: Boolean): List<Color> =
     if (dark) listOf(0xff65788f, 0xff3f5067, 0xff253347).map(::Color)

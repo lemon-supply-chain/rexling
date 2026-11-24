@@ -1,7 +1,6 @@
 package dev.lemon.rex
 
 import android.content.res.AssetManager
-import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -21,51 +20,95 @@ import kotlin.math.ceil
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Cached vector commands; unrotated tiles are rasterized once per exact size. */
-internal class ProgramVectorPicture
-private constructor(
-    private val key: String,
-    private val flat: Picture,
-    private val surface: Picture?,
-    private val symbol: Picture?,
-    private val width: Float,
-    private val height: Float,
-    private val accent: Int,
-    private val outline: Path?,
-) {
-    private val symbolRim =
+/**
+ * Shared SuperBlockIcons-style skeuomorphic card chrome in the 61x48 catalog artboard: outer
+ * contact shadow, theme-matched outer rim margin (white in light theme, soft charcoal in dark
+ * theme), radial surface lighting, top specular ridge, inner bevel ring, and 1 device-pixel rim
+ * highlight.
+ */
+internal class SkeuomorphicCardChrome(private val outline: Path, accent: Int) {
+    private val lightPlate = luminance(accent) > .72f
+
+    private val darkShadowPaint = outerShadowPaint(alpha = 102)
+    private val lightShadowPaint = outerShadowPaint(alpha = 48)
+    private val darkOuterRimPaint = outerRimPaint(Color.rgb(42, 42, 46))
+    private val lightOuterRimPaint = outerRimPaint(Color.WHITE)
+
+    private val radialLightPaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-            alpha = 84
+            val matrix =
+                Matrix().apply {
+                    setScale(81.956f, 50.094f)
+                    postTranslate(30.5f, 1.23f)
+                }
+            shader =
+                RadialGradient(
+                        0f,
+                        0f,
+                        1f,
+                        intArrayOf(
+                            Color.argb(55, 255, 255, 255),
+                            Color.argb(28, 255, 255, 255),
+                            Color.argb(0, 255, 255, 255),
+                            Color.argb(11, 0, 0, 0),
+                            Color.argb(18, 0, 0, 0),
+                        ),
+                        floatArrayOf(0f, .29f, .58f, .8075f, 1f),
+                        Shader.TileMode.CLAMP,
+                    )
+                    .apply { setLocalMatrix(matrix) }
         }
-    private val tilePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    // Evicted bitmaps are not recycled: an older display list may still reference them.
-    private val tileBitmaps =
-        object : LinkedHashMap<Long, Bitmap>(8, .75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Bitmap>?) =
-                size > 4
+
+    private val topHighlightPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader =
+                LinearGradient(
+                    1.23f,
+                    0f,
+                    59.77f,
+                    0f,
+                    intArrayOf(
+                        Color.argb(0, 255, 255, 255),
+                        Color.argb(58, 255, 255, 255),
+                        Color.argb(92, 255, 255, 255),
+                        Color.argb(58, 255, 255, 255),
+                        Color.argb(0, 255, 255, 255),
+                    ),
+                    floatArrayOf(0f, .25f, .5f, .75f, 1f),
+                    Shader.TileMode.CLAMP,
+                )
         }
+
+    private val innerBevelPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (lightPlate) Color.argb(22, 0, 0, 0) else Color.argb(36, 255, 255, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            strokeJoin = Paint.Join.ROUND
+            strokeCap = Paint.Cap.ROUND
+        }
+
     private val rimPaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
-            shader = outline?.let { path ->
-                val bounds = RectF()
-                path.computeBounds(bounds, true)
-                val stops =
-                    if (luminance(accent) > .72f)
-                        intArrayOf(
-                            Color.argb(30, 0, 0, 0),
-                            Color.argb(14, 0, 0, 0),
-                            Color.argb(0, 0, 0, 0),
-                        )
-                    else
-                        intArrayOf(
-                            Color.argb(115, 255, 255, 255),
-                            Color.argb(36, 255, 255, 255),
-                            Color.argb(0, 255, 255, 255),
-                        )
+            val bounds = RectF()
+            outline.computeBounds(bounds, true)
+            val stops =
+                if (lightPlate)
+                    intArrayOf(
+                        Color.argb(30, 0, 0, 0),
+                        Color.argb(14, 0, 0, 0),
+                        Color.argb(0, 0, 0, 0),
+                    )
+                else
+                    intArrayOf(
+                        Color.argb(115, 255, 255, 255),
+                        Color.argb(36, 255, 255, 255),
+                        Color.argb(0, 255, 255, 255),
+                    )
+            shader =
                 LinearGradient(
                     0f,
                     bounds.top,
@@ -75,7 +118,137 @@ private constructor(
                     floatArrayOf(0f, .4f, 1f),
                     Shader.TileMode.CLAMP,
                 )
+        }
+
+    fun drawBackdrop(canvas: Canvas, dark: Boolean = true) {
+        canvas.drawPath(outline, if (dark) darkShadowPaint else lightShadowPaint)
+        canvas.drawPath(outline, if (dark) darkOuterRimPaint else lightOuterRimPaint)
+    }
+
+    fun drawSurfaceOverlays(canvas: Canvas, unitsToPx: Float) {
+        canvas.drawRect(1.23f, 1.23f, 59.77f, 46.77f, radialLightPaint)
+        canvas.drawRect(1.23f, 1.23f, 59.77f, 2.23f, topHighlightPaint)
+        canvas.drawPath(outline, innerBevelPaint)
+        rimPaint.strokeWidth = 2f / unitsToPx
+        canvas.drawPath(outline, rimPaint)
+    }
+
+    fun drawCard(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        fillPaint: Paint,
+        dark: Boolean = true,
+    ) {
+        val save = canvas.save()
+        canvas.scale(width / ARTBOARD_WIDTH, height / ARTBOARD_HEIGHT)
+        val unitsToPx = (width / ARTBOARD_WIDTH).coerceAtLeast(.01f)
+        drawBackdrop(canvas, dark)
+        val clipped = canvas.save()
+        canvas.clipPath(outline)
+        canvas.drawPath(outline, fillPaint)
+        drawSurfaceOverlays(canvas, unitsToPx)
+        canvas.restoreToCount(clipped)
+        canvas.restoreToCount(save)
+    }
+
+    companion object {
+        const val ARTBOARD_WIDTH = 61f
+        const val ARTBOARD_HEIGHT = 48f
+
+        private val plateMatrix = Matrix().apply { setTranslate(-6f, -6f) }
+
+        // Fallback tiles share one plate and a handful of skin palettes, so the chrome and the fill
+        // shader are built once per palette instead of once per composed tile. Compose draws and
+        // composes on the main thread, matching the tile bitmap cache above.
+        private var sharedPlate: Path? = null
+        private val chromes = HashMap<Int, SkeuomorphicCardChrome>()
+        private val fills = HashMap<List<Int>, Paint>()
+
+        fun defaultPlate(assets: AssetManager): Path? =
+            sharedPlate
+                ?: ProgramCatalog.plate(assets)
+                    ?.let { Path(it).apply { transform(plateMatrix) } }
+                    ?.also { sharedPlate = it }
+
+        fun forAccent(assets: AssetManager, accent: Int): SkeuomorphicCardChrome? =
+            defaultPlate(assets)?.let { plate ->
+                chromes.getOrPut(accent) { SkeuomorphicCardChrome(plate, accent) }
             }
+
+        /** Vertical brand ramp for fallback plates, in artboard units. */
+        fun plateFill(colors: IntArray): Paint =
+            fills.getOrPut(colors.toList()) {
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    if (colors.size >= 2) {
+                        shader =
+                            LinearGradient(
+                                0f,
+                                1.23f,
+                                0f,
+                                46.77f,
+                                colors,
+                                null,
+                                Shader.TileMode.CLAMP,
+                            )
+                    } else {
+                        color = colors.firstOrNull() ?: Color.GRAY
+                    }
+                }
+            }
+
+        private fun outerShadowPaint(alpha: Int): Paint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(alpha, 0, 0, 0)
+                style = Paint.Style.FILL_AND_STROKE
+                strokeWidth = 1.96f
+                strokeJoin = Paint.Join.ROUND
+                strokeCap = Paint.Cap.ROUND
+            }
+
+        private fun outerRimPaint(color: Int): Paint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.FILL_AND_STROKE
+                strokeWidth = 1.16f
+                strokeJoin = Paint.Join.ROUND
+                strokeCap = Paint.Cap.ROUND
+            }
+
+        private fun luminance(color: Int): Float =
+            (.299f * Color.red(color) + .587f * Color.green(color) + .114f * Color.blue(color)) /
+                255f
+    }
+}
+
+/** Cached vector commands; unrotated tiles are rasterized once per exact size. */
+internal class ProgramVectorPicture
+private constructor(
+    private val key: String,
+    private val flat: Picture,
+    private val surface: Picture?,
+    private val symbol: Picture?,
+    private val width: Float,
+    private val height: Float,
+    accent: Int,
+    private val outline: Path?,
+) {
+    private val cardChrome = outline?.let { SkeuomorphicCardChrome(it, accent) }
+    private val symbolRim =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            alpha = 84
+        }
+    private val tilePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val tileDst = RectF()
+    // Evicted bitmaps are not recycled: an older display list may still reference them.
+    private val darkTileBitmaps = tileBitmapCache()
+    private val lightTileBitmaps = tileBitmapCache()
+
+    private fun tileBitmapCache() =
+        object : LinkedHashMap<Long, Bitmap>(8, .75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Bitmap>?) =
+                size > 4
         }
 
     fun draw(canvas: Canvas, width: Float, height: Float, rotation: Float = 0f) {
@@ -88,14 +261,22 @@ private constructor(
     }
 
     /**
-     * Tile material: flat plate at 18/27dp, ceramic surface at 34dp, a rim calibrated in device
-     * pixels, and a logo that gains depth only when the tile is large enough to resolve it.
+     * Tile material: full skeuomorphic card stack (outer shadow, theme-matched outer rim, radial
+     * lighting, top specular ridge, inner bevel ring, device-pixel rim, and symbol highlight) at
+     * all sizes.
      */
-    fun drawTile(canvas: Canvas, width: Float, height: Float, rotation: Float = 0f) {
+    fun drawTile(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        rotation: Float = 0f,
+        dark: Boolean = true,
+    ) {
         if (rotation == 0f) {
+            val cache = if (dark) darkTileBitmaps else lightTileBitmaps
             val key = (width.toBits().toLong() shl 32) or (height.toBits().toLong() and 0xffffffffL)
             val cached =
-                tileBitmaps[key]
+                cache[key]
                     ?: run {
                         val bitmap =
                             Bitmap.createBitmap(
@@ -103,39 +284,44 @@ private constructor(
                                 ceil(height).toInt().coerceAtLeast(1),
                                 Bitmap.Config.ARGB_8888,
                             )
-                        drawTileDirect(Canvas(bitmap), width, height)
-                        tileBitmaps[key] = bitmap
+                        drawTileDirect(Canvas(bitmap), width, height, dark = dark)
+                        cache[key] = bitmap
                         bitmap
                     }
-            canvas.drawBitmap(cached, 0f, 0f, tilePaint)
+            // The bitmap is ceil-sized; blit it into the exact layout bounds so the cached path
+            // and the direct path agree instead of leaving a sub-pixel transparent sliver.
+            tileDst.set(0f, 0f, width, height)
+            canvas.drawBitmap(cached, null, tileDst, tilePaint)
             return
         }
-        drawTileDirect(canvas, width, height, rotation)
+        drawTileDirect(canvas, width, height, rotation, dark)
     }
 
     /** Vector source for the size-specific bitmap cache and the rare rotated direct draw. */
-    private fun drawTileDirect(canvas: Canvas, width: Float, height: Float, rotation: Float = 0f) {
-        val density = Resources.getSystem().displayMetrics.density.coerceAtLeast(1f)
+    private fun drawTileDirect(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        rotation: Float = 0f,
+        dark: Boolean = true,
+    ) {
         val symbol = symbol
         val outline = outline
-        val detailed = width / density >= DETAILED_WIDTH_DP
+        val chrome = cardChrome
         val save = canvas.save()
         canvas.rotate(rotation, width / 2, height / 2)
         canvas.scale(width / this.width, height / this.height)
         val unitsToPx = (width / this.width).coerceAtLeast(.01f)
-        canvas.drawPicture(if (detailed && surface != null) surface else flat)
-        if (outline != null) drawRim(canvas, outline, unitsToPx)
+        chrome?.drawBackdrop(canvas, dark)
+        val clipped = canvas.save()
+        if (outline != null) canvas.clipPath(outline)
+        canvas.drawPicture(surface ?: flat)
+        chrome?.drawSurfaceOverlays(canvas, unitsToPx)
         if (symbol != null) {
-            // Everything the logo adds is clipped to the plate so nothing can spill
-            // past the rounded edge.
-            val clipped = canvas.save()
-            if (outline != null) canvas.clipPath(outline)
-            if (detailed) {
-                offsetSymbol(canvas, symbol, -RIM_DY / unitsToPx, symbolRim)
-            }
+            offsetSymbol(canvas, symbol, -RIM_DY / unitsToPx, symbolRim)
             canvas.drawPicture(symbol)
-            canvas.restoreToCount(clipped)
         }
+        canvas.restoreToCount(clipped)
         canvas.restoreToCount(save)
     }
 
@@ -146,17 +332,8 @@ private constructor(
         canvas.restoreToCount(layer)
     }
 
-    private fun drawRim(canvas: Canvas, outline: Path, unitsToPx: Float) {
-        val layer = canvas.save()
-        canvas.clipPath(outline)
-        rimPaint.strokeWidth = 2f / unitsToPx
-        canvas.drawPath(outline, rimPaint)
-        canvas.restoreToCount(layer)
-    }
-
     companion object {
         private const val RIM_DY = 1f
-        private const val DETAILED_WIDTH_DP = 30f
         private const val DEFAULT_ACCENT = 0xFF3B78F0.toInt()
         private val cache = mutableMapOf<String, ProgramVectorPicture>()
         private val glyphCache = mutableMapOf<String, ProgramVectorPicture>()
@@ -302,10 +479,6 @@ private constructor(
             }
             return matrix
         }
-
-        private fun luminance(color: Int): Float =
-            (.299f * Color.red(color) + .587f * Color.green(color) + .114f * Color.blue(color)) /
-                255f
 
         private fun JSONObject.float(key: String) = getDouble(key).toFloat()
 

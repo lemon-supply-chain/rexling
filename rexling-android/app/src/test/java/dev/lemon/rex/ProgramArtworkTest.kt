@@ -66,7 +66,9 @@ class ProgramArtworkTest {
                     "SSH" to ProgramSkin(null, "ssh", emptyMap(), emptyList(), true),
                     "TMUX" to ProgramSkin(null, "tmux", emptyMap(), emptyList(), false),
                 ),
-            aliases = mapOf("gcc" to "clang", "tofu" to "terraform"),
+            // gcc-12 is artwork-only: the vocabulary does not know it, so the ancestor rule
+            // has to resolve it without identity help.
+            aliases = mapOf("gcc" to "clang", "tofu" to "terraform", "gcc-12" to "clang"),
         )
 
     private fun artwork(vararg names: String) =
@@ -112,7 +114,7 @@ class ProgramArtworkTest {
         )
         assertEquals(
             ProgramArtwork("clang", "clang", ProgramArtwork.Source.CANDIDATE),
-            artwork("custom-task", "gcc"),
+            artwork("custom-task", "gcc-12"),
         )
         assertEquals(ProgramArtwork(null, "ssh", ProgramArtwork.Source.EXECUTABLE), artwork("ssh"))
         assertEquals(

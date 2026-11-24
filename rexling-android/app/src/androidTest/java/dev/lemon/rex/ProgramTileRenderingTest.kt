@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -263,5 +264,123 @@ class ProgramTileRenderingTest {
                 .flatMap { y -> (0 until 64).asSequence().map { x -> bitmap.getPixel(x, y) } }
                 .first { Color.alpha(it) > 0 }
         assertTrue(Color.red(pixel) > Color.green(pixel) && Color.red(pixel) > Color.blue(pixel))
+    }
+
+    @Test
+    fun skeuomorphicTileStackDrawsOuterRimShadowAndSpecularAtAllSizes() {
+        val picture = ProgramVectorPicture.load(context.assets, "claude_code")
+        for ((width, height) in listOf(66f to 54f, 102f to 81f)) {
+            val bitmap =
+                Bitmap.createBitmap(
+                    kotlin.math.ceil(width).toInt(),
+                    kotlin.math.ceil(height).toInt(),
+                    Bitmap.Config.ARGB_8888,
+                )
+            picture.drawTile(Canvas(bitmap), width, height)
+            // Outer margin carries the dark rim/shadow frame rather than remaining empty or flat
+            // accent.
+            val rimY = (height * (0.75f / 48f)).toInt()
+            val topEdge = bitmap.getPixel((width / 2f).toInt(), rimY)
+            assertTrue(
+                "Outer rim must be present at ${width}x$height (y=$rimY): $topEdge",
+                Color.alpha(topEdge) > 0 && Color.red(topEdge) < 80,
+            )
+            // The same frame has to run down both sides; a one-sided or missing side rim would
+            // still pass a centre-column sample.
+            for (x in listOf(width * (0.75f / 61f), width * (60.25f / 61f))) {
+                val sideEdge = bitmap.getPixel(x.toInt(), (height / 2f).toInt())
+                assertTrue(
+                    "Side rim must be present at ${width}x$height (x=$x): $sideEdge",
+                    Color.alpha(sideEdge) > 0 && Color.red(sideEdge) < 80,
+                )
+            }
+            // Upper plate center receives warm highlight + radial sheen brighter than bottom plate.
+            val topPlate = bitmap.getPixel((width / 2f).toInt(), (height * (3.0f / 48f)).toInt())
+            val bottomPlate =
+                bitmap.getPixel((width / 2f).toInt(), (height * (44.0f / 48f)).toInt())
+            assertTrue(
+                "Top plate must be brighter than bottom keel at ${width}x$height: top=$topPlate bottom=$bottomPlate",
+                Color.red(topPlate) >= Color.red(bottomPlate) &&
+                    Color.green(topPlate) >= Color.green(bottomPlate),
+            )
+            bitmap.recycle()
+        }
+    }
+
+    @Test
+    fun outerRimMatchesLightWhiteAndDarkCharcoalTheme() {
+        val picture = ProgramVectorPicture.load(context.assets, "rex")
+        val width = 102f
+        val height = 81f
+        val rimY = (height * (0.90f / 48f)).toInt()
+        val midX = (width / 2f).toInt()
+
+        val lightBitmap =
+            Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+        picture.drawTile(Canvas(lightBitmap), width, height, dark = false)
+        val lightRim = lightBitmap.getPixel(midX, rimY)
+        assertTrue(
+            "Light theme outer rim must be white (y=$rimY): ${Integer.toHexString(lightRim)}",
+            Color.alpha(lightRim) > 180 &&
+                Color.red(lightRim) > 180 &&
+                Color.green(lightRim) > 180 &&
+                Color.blue(lightRim) > 180,
+        )
+        lightBitmap.recycle()
+
+        val darkBitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+        picture.drawTile(Canvas(darkBitmap), width, height, dark = true)
+        val darkRim = darkBitmap.getPixel(midX, rimY)
+        assertTrue(
+            "Dark theme outer rim must be soft charcoal (y=$rimY): ${Integer.toHexString(darkRim)}",
+            Color.alpha(darkRim) > 180 &&
+                Color.red(darkRim) in 20..75 &&
+                Color.green(darkRim) in 20..75 &&
+                Color.blue(darkRim) in 20..80,
+        )
+        darkBitmap.recycle()
+    }
+
+    @Test
+    fun countdownTileUsesBlackPlateAcrossCatalogAndFallbackPrograms() {
+        val catalogProgram = ProgramIdentity.resolve(listOf("claude"))
+        val fallbackProgram = ProgramIdentity.resolve(listOf("custom-timer"))
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PaneProgramTile(
+                        catalogProgram,
+                        Modifier.size(34.dp, 27.dp).testTag("countdown_catalog"),
+                        large = true,
+                        rotation = 0f,
+                        progress = TerminalProgress("set", 40),
+                    )
+                    PaneProgramTile(
+                        fallbackProgram,
+                        Modifier.size(34.dp, 27.dp).testTag("countdown_fallback"),
+                        large = true,
+                        rotation = 0f,
+                        progress = TerminalProgress("pause", 65),
+                    )
+                }
+            }
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_progress_percent, 40))
+            .assertExists()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_progress_paused)).assertExists()
+        for (tag in listOf("countdown_catalog", "countdown_fallback")) {
+            val tile = ui.onNodeWithTag(tag).captureToImage().asAndroidBitmap()
+            // Sample the lower-left card plate outside the centered dial (radius ~8.5u in 19dp).
+            val platePixel =
+                tile.getPixel((tile.width * 0.16f).toInt(), (tile.height * 0.72f).toInt())
+            assertTrue(
+                "$tag plate must be black/near-black: pixel=${Integer.toHexString(platePixel)}",
+                Color.alpha(platePixel) > 200 &&
+                    Color.red(platePixel) < 50 &&
+                    Color.green(platePixel) < 50 &&
+                    Color.blue(platePixel) < 50,
+            )
+            tile.recycle()
+        }
     }
 }

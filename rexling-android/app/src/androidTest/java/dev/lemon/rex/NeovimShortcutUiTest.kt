@@ -28,6 +28,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
@@ -39,12 +41,14 @@ class NeovimShortcutUiTest {
     @get:Rule val ui = createComposeRule()
 
     @Test
-    fun wheelStaysOpaqueOverTheProgramBehindIt() {
+    fun wheelSamplesTheLiveBackdropAndReleasesCaptureWhenClosed() {
         val backdrop = mutableStateOf(androidx.compose.ui.graphics.Color.Red)
+        var capturing = false
         ui.setContent {
+            val haze = remember { HazeState() }
             MaterialTheme {
                 Box(Modifier.fillMaxSize()) {
-                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize().hazeSource(haze)) {
                         drawRect(backdrop.value)
                     }
                     NeovimShortcutButton(
@@ -56,12 +60,15 @@ class NeovimShortcutUiTest {
                         layout = NeovimShortcutLayout.CIRCULAR,
                         effect = NeovimShortcutEffect.NONE,
                         position = Offset(.5f, .5f),
+                        hazeState = haze,
+                        onExpandedChange = { capturing = it },
                     )
                 }
             }
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
             .performClick()
+        ui.runOnIdle { assertTrue(capturing) }
         val bounds = nativeBounds(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
         fun pixel(x: Float, y: Float): Int {
             ui.waitForIdle()
@@ -74,27 +81,36 @@ class NeovimShortcutUiTest {
                 )
                 .also { shot.recycle() }
         }
-        // One opaque surface for every page: the ring must not show the red program behind it.
         val ring = pixel(.5f, .08f)
         assertTrue(
-            "Wheel must stay opaque over the program: $ring",
-            android.graphics.Color.red(ring) < android.graphics.Color.green(ring) + 35,
+            "Wheel must sample the red backdrop: $ring",
+            android.graphics.Color.red(ring) > android.graphics.Color.green(ring) + 35,
         )
         // The neutral gap remains transparent rather than gaining a solid annulus.
         val gap = pixel(.5f, .28f)
         assertTrue(android.graphics.Color.red(gap) > 200)
+        // Close, switch backdrop to green, and reopen so the disarmed popup samples the new
+        // backdrop.
+        ui.onNodeWithContentDescription(appString(R.string.a11y_close_shortcuts_named, "Neovim"))
+            .performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
+            .assertDoesNotExist()
+        ui.runOnIdle { assertFalse(capturing) }
         ui.runOnIdle { backdrop.value = androidx.compose.ui.graphics.Color.Green }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
+        ui.runOnIdle { assertTrue(capturing) }
         val greenRing = pixel(.5f, .08f)
         assertTrue(
-            "Open wheel must not follow backdrop changes: $greenRing",
-            android.graphics.Color.green(greenRing) < android.graphics.Color.red(greenRing) + 35,
+            "Reopened wheel must sample the green backdrop: $greenRing",
+            android.graphics.Color.green(greenRing) > android.graphics.Color.red(greenRing) + 35,
         )
         val greenGap = pixel(.5f, .28f)
         assertTrue(android.graphics.Color.green(greenGap) > 200)
         val shot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()!!
         File(
                 InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
-                "neovim-wheel-opaque.png",
+                "neovim-wheel-frost.png",
             )
             .outputStream()
             .use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -103,6 +119,7 @@ class NeovimShortcutUiTest {
             .performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertDoesNotExist()
+        ui.runOnIdle { assertFalse(capturing) }
     }
 
     @Test

@@ -71,6 +71,37 @@ class ProgramCatalogDataTest {
     }
 
     @Test
+    fun everyProgramTileIsReachableFromTheVocabulary() {
+        val icons = root.getJSONObject("icons")
+        // shell_manual is a catalog style variant for the manual shell card, not a program name.
+        val styleTiles = setOf("shell_manual")
+        val unreachable =
+            icons
+                .keys()
+                .asSequence()
+                .filterNot(styleTiles::contains)
+                .filter { ProgramVocabulary.Default.mapping(it) == null }
+                .toList()
+        assertEquals(emptyList<String>(), unreachable)
+    }
+
+    @Test
+    fun catalogAliasesResolveThroughTheVocabulary() {
+        val aliases = root.getJSONObject("aliases")
+        val mismatched =
+            aliases
+                .keys()
+                .asSequence()
+                .mapNotNull { alias ->
+                    val target = aliases.getString(alias)
+                    val resolved = ProgramVocabulary.Default.mapping(alias)
+                    if (resolved == target) null else "$alias -> $resolved, expected $target"
+                }
+                .toList()
+        assertEquals(emptyList<String>(), mismatched)
+    }
+
+    @Test
     fun everyTileDeclaresFlatSurfaceAndSymbolLayers() {
         val icons = root.getJSONObject("icons")
         val layers = root.getJSONObject("layers")

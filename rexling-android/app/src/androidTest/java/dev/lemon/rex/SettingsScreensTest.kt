@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import android.graphics.Bitmap
+import android.view.KeyEvent
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.luminance
@@ -54,6 +55,57 @@ class SettingsScreensTest {
             ui.onNodeWithText("Portside").assertDoesNotExist()
             capture("preferences", isDark)
         }
+    }
+
+    @Test
+    fun expandedPreferencesSheetOnlyDismissesFromTopHandleZone() {
+        var closed = 0
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                PreferencesSheet({}, {}, {}, {}, onClose = { closed++ })
+            }
+        }
+        val handleZone = ui.onNodeWithTag("Preferences handle zone")
+        ui.awaitDisplayed(handleZone)
+        handleZone.performTouchInput {
+            swipeUp(startY = centerY, endY = centerY - 600f, durationMillis = 150)
+        }
+        ui.waitForIdle()
+        val expandedTop = handleZone.fetchSemanticsNode().boundsInRoot.top
+        ui.onNodeWithText(appString(R.string.appearance)).performTouchInput {
+            swipeDown(startY = centerY, endY = centerY + 500f, durationMillis = 150)
+        }
+        ui.waitForIdle()
+        ui.runOnIdle { assertEquals(0, closed) }
+        assertEquals(expandedTop, handleZone.fetchSemanticsNode().boundsInRoot.top, 2f)
+        handleZone.performTouchInput {
+            swipeDown(startY = centerY, endY = centerY + 900f, durationMillis = 100)
+        }
+        ui.waitForIdle()
+        assertTrue(
+            closed > 0 || handleZone.fetchSemanticsNode().boundsInRoot.top > expandedTop + 20f,
+        )
+    }
+
+    @Test
+    fun systemBackClosesTheExpandedPreferencesSheet() {
+        var closed = 0
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                PreferencesSheet({}, {}, {}, {}, onClose = { closed++ })
+            }
+        }
+        val handleZone = ui.onNodeWithTag("Preferences handle zone")
+        ui.awaitDisplayed(handleZone)
+        handleZone.performTouchInput {
+            swipeUp(startY = centerY, endY = centerY - 600f, durationMillis = 150)
+        }
+        ui.waitForIdle()
+        // Delivered synchronously so the event cannot leak into the next test's sheet.
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        ui.waitUntil(5_000) { closed > 0 }
+        ui.waitForIdle()
+        assertEquals(1, closed)
     }
 
     private fun capture(name: String, dark: Boolean) {

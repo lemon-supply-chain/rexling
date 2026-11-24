@@ -379,6 +379,9 @@ class PaneChromeTest {
                 ProgramIdentity.resolve(listOf("fish")),
             )
         val actions = mutableListOf<String>()
+        // Hoisted so the fixture can switch the action bar between the side rail and the bottom
+        // bar.
+        val sideRail = mutableStateOf(true)
         ui.setContent {
             RexTheme(false, ThemeCatalog.defaults[1]) {
                 var style by remember { mutableStateOf(TabRailStyle.TITLES) }
@@ -408,13 +411,20 @@ class PaneChromeTest {
                             keyboardLabel = appString(R.string.a11y_show_keyboard),
                             onKeyboard = { actions += "keyboard" },
                             vertical = style == TabRailStyle.ICONS,
+                            sideRail = sideRail.value,
                         )
                     }
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
                 }
             }
         }
-        fun check(width: androidx.compose.ui.unit.Dp, mode: String) {
+        fun check(
+            width: androidx.compose.ui.unit.Dp,
+            mode: String,
+            vertical: Boolean,
+            sideRail: Boolean = true,
+            capture: Boolean = true,
+        ) {
             ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
                 .assertWidthIsEqualTo(width)
             ui.onNodeWithContentDescription(
@@ -424,16 +434,32 @@ class PaneChromeTest {
                 .assertIsDisplayed()
                 .assertIsSelected()
             ui.onNodeWithTag("Tab unread dot tab", useUnmergedTree = true).assertIsDisplayed()
-            listOf(
-                    appString(R.string.a11y_show_keyboard),
-                    appString(R.string.a11y_tabs_and_panes),
-                    appString(R.string.activity),
-                )
-                .forEach { description ->
-                    val button = ui.onNodeWithContentDescription(description)
-                    ui.awaitDisplayed(button)
-                    button.assertWidthIsEqualTo(36.dp).performClick()
-                }
+            // The side rail leads with activity; the bottom bar leads with the keyboard.
+            val descriptions =
+                if (sideRail)
+                    listOf(
+                        appString(R.string.activity),
+                        appString(R.string.a11y_tabs_and_panes),
+                        appString(R.string.a11y_show_keyboard),
+                    )
+                else
+                    listOf(
+                        appString(R.string.a11y_show_keyboard),
+                        appString(R.string.a11y_tabs_and_panes),
+                        appString(R.string.activity),
+                    )
+            val bounds = descriptions.map { description ->
+                val button = ui.onNodeWithContentDescription(description)
+                ui.awaitDisplayed(button)
+                button.assertWidthIsEqualTo(36.dp).performClick()
+                button.fetchSemanticsNode().boundsInRoot
+            }
+            if (vertical) {
+                assertTrue(bounds[0].top < bounds[1].top && bounds[1].top < bounds[2].top)
+            } else {
+                assertTrue(bounds[0].left < bounds[1].left && bounds[1].left < bounds[2].left)
+            }
+            if (!capture) return
             val bitmap = ui.onNodeWithTag("Side tabs fixture").captureToImage().asAndroidBitmap()
             File(
                     InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
@@ -442,11 +468,18 @@ class PaneChromeTest {
                 .outputStream()
                 .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        check(144.dp, "titles")
+        check(144.dp, "titles", vertical = false)
         ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).performClick()
-        check(48.dp, "icons")
+        check(48.dp, "icons", vertical = true)
+        ui.runOnIdle { sideRail.value = false }
+        // Ordering only: the two screenshots above already cover the visuals.
+        check(48.dp, "icons-bottom", vertical = true, sideRail = false, capture = false)
         ui.runOnIdle {
-            assertEquals(List(2) { listOf("keyboard", "switcher", "activity") }.flatten(), actions)
+            assertEquals(
+                List(2) { listOf("activity", "switcher", "keyboard") }.flatten() +
+                    listOf("keyboard", "switcher", "activity"),
+                actions,
+            )
         }
     }
 }

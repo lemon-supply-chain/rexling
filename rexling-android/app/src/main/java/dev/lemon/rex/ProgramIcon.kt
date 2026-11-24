@@ -86,10 +86,12 @@ internal fun CountdownIcon(
             angle
         } else 0f
 
-    val countdownDescription = stringResource(R.string.a11y_countdown)
-    Canvas(
-        modifier.semantics { contentDescription = progress?.description ?: countdownDescription },
-    ) {
+    // TerminalProgress.description is English-only; the dial is announced through the same
+    // localized copy the activity rows use.
+    val countdownDescription =
+        if (progress == null) stringResource(R.string.a11y_countdown)
+        else terminalProgressDescription(progress)
+    Canvas(modifier.semantics { contentDescription = countdownDescription }) {
         val u = size.minDimension / 24f
         val cx = size.width / 2f
         val cy = size.height / 2f

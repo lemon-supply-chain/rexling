@@ -1,5 +1,8 @@
 package dev.lemon.rex
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -9,8 +12,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,15 +77,57 @@ internal fun PreferencesSheet(
     // the
     // sheet that host is the sheet's own window, which then redraws itself every frame while open.
     val frost = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
+    // Read only from pointer and nested-scroll callbacks, so this stays out of composition state.
+    val gesture = remember { SheetGesture() }
+    val sheetHolder = remember { SheetStateHolder() }
+    val isExpanded by remember {
+        derivedStateOf { sheetHolder.state?.currentValue == SheetValue.Expanded }
+    }
+    // Remembered because rememberModalBottomSheetState keys its SheetState on this lambda.
+    val confirmValueChange = remember {
+        { next: SheetValue ->
+            next == SheetValue.Expanded || !isExpanded || gesture.startedInHandleZone
+        }
+    }
+    val sheetState =
+        rememberModalBottomSheetState(
+            skipPartiallyExpanded = false,
+            confirmValueChange = confirmValueChange,
+        )
+    sheetHolder.state = sheetState
+    val blockExpandedBodyDismiss = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset =
+                if (isExpanded && !gesture.startedInHandleZone && available.y > 0f)
+                    Offset(0f, available.y)
+                else Offset.Zero
+
+            override suspend fun onPostFling(
+                consumed: Velocity,
+                available: Velocity,
+            ): Velocity =
+                if (isExpanded && !gesture.startedInHandleZone && available.y > 0f)
+                    Velocity(0f, available.y)
+                else Velocity.Zero
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        sheetState = sheetState,
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         dragHandle = null,
         contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Top) },
     ) {
+        // Material3 routes back through SheetState.hide(), which the guard above refuses while the
+        // sheet is expanded, so back needs its own path. Registered inside the sheet content to
+        // follow Material3's predictive-back handler and therefore win.
+        BackHandler(enabled = isExpanded) { onClose() }
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val contentMaxHeight = (maxHeight - 64.dp).coerceAtLeast(200.dp)
@@ -82,31 +136,51 @@ internal fun PreferencesSheet(
                         .fillMaxWidth()
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
-                        ),
+                        )
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                val down =
+                                    awaitFirstDown(
+                                        requireUnconsumed = false,
+                                        pass = PointerEventPass.Initial,
+                                    )
+                                gesture.startedInHandleZone =
+                                    down.position.y <= gesture.handleZoneBottomPx
+                            }
+                        },
                 ) {
-                    DrawerHandle()
-                    Row(
+                    Column(
                         Modifier.fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .padding(start = 16.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .testTag("Preferences handle zone")
+                            .onGloballyPositioned {
+                                gesture.handleZoneBottomPx = it.size.height.toFloat()
+                            },
                     ) {
-                        Text(
-                            stringResource(R.string.preferences),
-                            Modifier.weight(1f),
-                            style = SettingsType.row,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        ChromeButton(
-                            ChromeIcon.CLOSE,
-                            stringResource(R.string.close_preferences),
-                            onClick = onClose,
-                        )
+                        DrawerHandle()
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .padding(start = 16.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                stringResource(R.string.preferences),
+                                Modifier.weight(1f),
+                                style = SettingsType.row,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            ChromeButton(
+                                ChromeIcon.CLOSE,
+                                stringResource(R.string.close_preferences),
+                                onClick = onClose,
+                            )
+                        }
                     }
                     Column(
                         Modifier.fillMaxWidth()
                             .heightIn(max = contentMaxHeight)
+                            .nestedScroll(blockExpandedBodyDismiss)
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp)
                             .padding(top = 8.dp, bottom = 12.dp),
@@ -852,4 +926,19 @@ private fun TabLayoutChoice(
                 }
             }
     }
+}
+
+/** Pointer bookkeeping for the sheet: read from gesture callbacks, never from composition. */
+private class SheetGesture {
+    var startedInHandleZone = false
+    var handleZoneBottomPx = 0f
+}
+
+/**
+ * The confirm callback needs the sheet state before `rememberModalBottomSheetState` returns it; a
+ * plain holder keeps that circular reference out of composition state.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+private class SheetStateHolder {
+    var state: SheetState? = null
 }

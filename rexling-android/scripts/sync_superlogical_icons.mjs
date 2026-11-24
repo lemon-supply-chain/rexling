@@ -158,7 +158,7 @@ try {
     if (colors.background !== icon.background.toLowerCase()) reasons.push('background');
     if (colors.foreground !== (icon.foreground || '#ffffff').toLowerCase()) reasons.push('foreground');
     if (retainedGlyph !== glyph && paintOnly(retainedGlyph) !== paintOnly(glyph)) reasons.push('glyph art');
-    if (reasons.length) stale.push([icon.id, reasons, tile, glyph]);
+    if (reasons.length) stale.push([icon, reasons, tile, glyph]);
     else unchanged.push(icon.id);
   }
 
@@ -166,7 +166,7 @@ try {
   if (added.length) console.log(`missing: ${added.map(([icon]) => icon.id).join(', ')}`);
   if (stale.length) {
     const groups = new Map();
-    for (const [id, reasons] of stale) groups.set(reasons.join('+'), [...(groups.get(reasons.join('+')) || []), id]);
+    for (const [icon, reasons] of stale) groups.set(reasons.join('+'), [...(groups.get(reasons.join('+')) || []), icon.id]);
     for (const [reasons, ids] of groups) console.log(`drift ${reasons} (${ids.length}): ${ids.slice(0, 8).join(', ')}${ids.length > 8 ? ', …' : ''}`);
   }
   for (const [id, reason] of excluded) console.log(`excluded ${id}: ${reason}`);
@@ -174,7 +174,7 @@ try {
   if (!write) {
     console.log('report only; pass --write to add missing icons' + (stale.length ? ' and --overwrite to refresh drifting ones' : ''));
   } else {
-    const pending = overwrite ? [...added, ...stale] : added;
+    const pending = overwrite ? [...added, ...stale.map(([icon, , tile, glyph]) => [icon, tile, glyph])] : added;
     for (const [icon, tile, glyph] of pending) {
       fs.writeFileSync(path.join(SOURCE, `${icon.id}.svg`), tile);
       fs.writeFileSync(path.join(SOURCE, 'glyphs', `${icon.id}.svg`), glyph);
@@ -183,6 +183,13 @@ try {
     const glyphNames = fs.readdirSync(path.join(SOURCE, 'glyphs')).filter((name) => name.endsWith('.svg')).sort();
     metadata.sha256 = Object.fromEntries(tiles.map((name) => [name.slice(0, -4), digest(path.join(SOURCE, name))]));
     metadata.glyph_sha256 = Object.fromEntries(glyphNames.map((name) => [name.slice(0, -4), digest(path.join(SOURCE, 'glyphs', name))]));
+    // The catalog release travels with the digests so a sync cannot leave a stale version behind.
+    const release = catalog.packageRelease;
+    const version = release?.version?.replace(/^v/, '');
+    if (version) metadata.catalog_version = version;
+    if (release?.publishedAt) metadata.catalog_published_at = release.publishedAt;
+    if (metadata.sync_note && version)
+      metadata.sync_note = metadata.sync_note.replace(/\bcatalog v?\d+(?:\.\d+)* exports\b/, `catalog ${version} exports`);
     fs.writeFileSync(METADATA, JSON.stringify(metadata, null, 2) + '\n');
     console.log(`wrote ${pending.length} icons; ${tiles.length} tiles and ${glyphNames.length} glyphs are recorded in ${path.relative(ROOT, METADATA)}`);
     console.log('run scripts/build_program_vectors.py and commit app/src/main/assets/program_tiles.json');

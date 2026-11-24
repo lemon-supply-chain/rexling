@@ -1542,6 +1542,7 @@ internal fun TerminalActions(
     keyboardLabel: String = "",
     onKeyboard: (() -> Unit)? = null,
     vertical: Boolean = false,
+    sideRail: Boolean = false,
 ) {
     val activityDescription = stringResource(R.string.activity)
     val activityState =
@@ -1563,9 +1564,11 @@ internal fun TerminalActions(
             ) {
                 content()
             }
-    Group {
+    val keyboardButton: @Composable () -> Unit = {
         if (onKeyboard != null)
             ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = onKeyboard)
+    }
+    val switcherButton: @Composable () -> Unit = {
         ChromeButton(
             ChromeIcon.SPLIT,
             stringResource(R.string.a11y_tabs_and_panes),
@@ -1573,6 +1576,8 @@ internal fun TerminalActions(
             readable = activityEnabled,
             onClick = onSwitcher,
         )
+    }
+    val activityButton: @Composable () -> Unit = {
         Box(Modifier.size(41.dp), contentAlignment = Alignment.Center) {
             Box(
                 Modifier.matchParentSize()
@@ -1613,6 +1618,17 @@ internal fun TerminalActions(
                         .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
                         .semantics { testTag = "Activity unread dot" },
                 )
+        }
+    }
+    Group {
+        if (sideRail) {
+            activityButton()
+            switcherButton()
+            keyboardButton()
+        } else {
+            keyboardButton()
+            switcherButton()
+            activityButton()
         }
     }
 }

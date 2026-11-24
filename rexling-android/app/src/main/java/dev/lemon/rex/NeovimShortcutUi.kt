@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import dev.chrisbanes.haze.HazeState
 import kotlin.math.roundToInt
 
 @Composable
@@ -53,6 +54,8 @@ internal fun NeovimShortcutButton(
     effect: NeovimShortcutEffect = NeovimShortcutEffect.FAN_OUT,
     hapticsEnabled: Boolean = true,
     name: String = "Neovim",
+    hazeState: HazeState? = null,
+    onExpandedChange: (Boolean) -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     if (layout == NeovimShortcutLayout.CIRCULAR) {
@@ -68,6 +71,8 @@ internal fun NeovimShortcutButton(
             effect,
             hapticsEnabled,
             name,
+            hazeState,
+            onExpandedChange,
         )
         return
     }
