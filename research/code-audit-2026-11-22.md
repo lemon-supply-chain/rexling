@@ -328,8 +328,8 @@ consumer-driven foreground polling with backoff, `configurationError` surfaced a
 2.1/2.2 (docs and comments), 2.3 (remaining UI copy routed through resources; instrumented
 tests resolve copy with `appString()`), 2.4 (24 unused strings and the dinosaur drawable
 removed, dead `connectionMessage` deleted, English enum duplicates dropped, window colours
-moved to resources), 2.5 (frost tokens), 2.6 (ktfmt plugin, whole-tree pass, CI check),
-2.7 (verify workflow), 2.10 (auto-open survives backgrounding).
+moved to resources), 2.5 (frost tokens), 2.6 (ktfmt plugin and whole-tree pass), 2.10 (auto-open survives
+backgrounding). CI is out of scope by request (2.7 stays open; the checks remain manual).
 
 Still open: 2.8 (one connection per saved server), 2.9 (cleartext warning), 3 (the worst
 remaining nit: `TerminalProgress.description` and `ProgramIdentity` labels are still English

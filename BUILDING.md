@@ -99,8 +99,9 @@ workspace commands. Protocol-probe usage and evidence are in
 
 ## Code style
 
-Rust is formatted with `cargo fmt`; CI runs `cargo fmt --check`, `cargo clippy
---workspace --all-targets -- -D warnings` and the workspace tests.
+Rust is formatted with `cargo fmt`. Before committing, run `cargo fmt --check`,
+`cargo clippy --workspace --all-targets -- -D warnings` and the workspace tests
+(see "Checks without a phone"); this repository has no CI, so these are manual.
 
 Kotlin uses [ktfmt](https://github.com/Kotlin/ktfmt) through the
 [ktfmt-gradle](https://github.com/cortinico/ktfmt-gradle) plugin (0.28.0,
