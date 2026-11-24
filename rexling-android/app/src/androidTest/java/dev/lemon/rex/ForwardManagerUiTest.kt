@@ -60,7 +60,9 @@ class ForwardManagerUiTest {
                 ui.onNodeWithText("http://127.0.0.1:5173", useUnmergedTree = true)
                     .getUnclippedBoundsInRoot()
             val remove =
-                ui.onNodeWithContentDescription("Remove forward to 127.0.0.1:5173")
+                ui.onNodeWithContentDescription(
+                        appString(R.string.a11y_remove_forward, "127.0.0.1:5173"),
+                    )
                     .getUnclippedBoundsInRoot()
             val copy =
                 ui.onNodeWithContentDescription(appString(R.string.a11y_copy_forwarded_url))

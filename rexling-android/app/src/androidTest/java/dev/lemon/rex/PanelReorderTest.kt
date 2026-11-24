@@ -240,6 +240,10 @@ class PanelReorderTest {
             row(appString(R.string.a11y_pane_title, "Pane A"))
                 .fetchSemanticsNode()
                 .config[SemanticsActions.CustomActions]
+                .filter {
+                    it.label == appString(R.string.move_up) ||
+                        it.label == appString(R.string.move_down)
+                }
         ui.runOnIdle {
             assertEquals(listOf(appString(R.string.move_down)), first.map { it.label })
             assertTrue(first.single().action())

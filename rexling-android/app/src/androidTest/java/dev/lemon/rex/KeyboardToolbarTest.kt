@@ -25,7 +25,10 @@ class KeyboardToolbarTest {
         )
         ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 3, "Escape"))
             .assertExists()
-        drag(appString(R.string.a11y_toolbar_slot, 3, "Escape"), "Available toolbar buttons")
+        drag(
+            appString(R.string.a11y_toolbar_slot, 3, "Escape"),
+            appString(R.string.a11y_available_toolbar_buttons),
+        )
         ui.onNodeWithText(appString(R.string.your_toolbar_format, 6, 7)).assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Escape"))
             .assertExists()
@@ -219,7 +222,8 @@ class KeyboardToolbarTest {
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard)).performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys)).performClick()
-        ui.onNodeWithContentDescription("Function key F1").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
+            .assertIsDisplayed()
         ui.runOnIdle { assertEquals(1, keyboard) }
     }
 }

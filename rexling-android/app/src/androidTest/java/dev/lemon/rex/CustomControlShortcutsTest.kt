@@ -173,9 +173,12 @@ class CustomControlShortcutsTest {
             .File(instrumentation.targetContext.cacheDir, "ctrl-shortcuts-$name.png")
             .outputStream()
             .use {
-                instrumentation.uiAutomation
-                    .takeScreenshot()
-                    .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                val shot = instrumentation.uiAutomation.takeScreenshot()
+                org.junit.Assume.assumeTrue(
+                    "Screenshot unavailable; keep the screen on",
+                    shot != null,
+                )
+                shot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
             }
     }
 

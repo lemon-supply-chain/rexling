@@ -687,10 +687,14 @@ class NeovimShortcutUiTest {
             .performClick()
         ui.waitForIdle()
         fun checkCentered(resting: Rect) {
-            assertEquals(
-                "Opening the wheel must not move its button",
-                resting,
-                nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim")),
+            // Native and Compose bounds can differ by one device pixel.
+            val opened = nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            assertTrue(
+                "Opening the wheel must not move its button: $resting vs $opened",
+                kotlin.math.abs(resting.left - opened.left) <= 1f &&
+                    kotlin.math.abs(resting.top - opened.top) <= 1f &&
+                    kotlin.math.abs(resting.right - opened.right) <= 1f &&
+                    kotlin.math.abs(resting.bottom - opened.bottom) <= 1f,
             )
             // Translate the Compose anchor into native screen coordinates.
             val button =
