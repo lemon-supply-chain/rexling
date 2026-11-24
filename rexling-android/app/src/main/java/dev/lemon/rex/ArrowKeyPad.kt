@@ -15,6 +15,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Localized name of an arrow key, for the "%1$s arrow" descriptions. */
+internal fun arrowDirectionRes(key: String): Int? =
+    when (key) {
+        "left" -> R.string.direction_left
+        "right" -> R.string.direction_right
+        "up" -> R.string.direction_up
+        "down" -> R.string.direction_down
+        else -> null
+    }
+
 /** Discrete tap/hold arrows, restored as the joystick's double-tap alternative. */
 @Composable
 internal fun ArrowKeyPad(
@@ -58,7 +68,9 @@ internal fun ArrowKeyPad(
                                         else ->
                                             context.getString(
                                                 R.string.a11y_arrow_format,
-                                                key.replaceFirstChar { it.uppercaseChar() },
+                                                context.getString(
+                                                    arrowDirectionRes(key) ?: R.string.direction_up,
+                                                ),
                                             )
                                     }
                             }

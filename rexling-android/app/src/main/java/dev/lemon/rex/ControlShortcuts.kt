@@ -85,6 +85,7 @@ internal fun ControlDockKey(
     val controlLabel = stringResource(R.string.a11y_control)
     val controlShortcutsLabel = stringResource(R.string.a11y_control_shortcuts)
     val haptics = LocalHapticFeedback.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     fun dismiss() {
         visible = false
         highlighted = -1
@@ -324,7 +325,28 @@ internal fun ControlDockKey(
                                                                     .Transparent,
                                                         )
                                                         .semantics {
-                                                            contentDescription = item.description
+                                                            contentDescription =
+                                                                if (
+                                                                    item.keys.length == 1 &&
+                                                                        item.label ==
+                                                                            "^" +
+                                                                                item.keys.uppercase(
+                                                                                    java.util.Locale
+                                                                                        .ROOT,
+                                                                                )
+                                                                )
+                                                                    context.getString(
+                                                                        R.string.a11y_control_key,
+                                                                        item.keys.uppercase(
+                                                                            java.util.Locale.ROOT,
+                                                                        ),
+                                                                    )
+                                                                else
+                                                                    context.getString(
+                                                                        R.string
+                                                                            .a11y_control_shortcut,
+                                                                        item.label,
+                                                                    )
                                                             this.selected = current
                                                         }
                                                         .clickable(

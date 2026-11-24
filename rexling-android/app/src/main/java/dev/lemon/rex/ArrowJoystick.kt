@@ -106,7 +106,9 @@ internal fun ArrowJoystickDockKey(
                             direction?.let {
                                 context.getString(
                                     R.string.a11y_arrow_format,
-                                    it.replaceFirstChar(Char::uppercaseChar),
+                                    context.getString(
+                                        arrowDirectionRes(it) ?: R.string.direction_up,
+                                    ),
                                 )
                             } ?: context.getString(R.string.a11y_state_neutral)
                         useJoystick && enabled -> context.getString(R.string.a11y_arrow_hold_hint)
@@ -122,7 +124,9 @@ internal fun ArrowJoystickDockKey(
                             CustomAccessibilityAction(
                                 context.getString(
                                     R.string.a11y_arrow_format,
-                                    key.replaceFirstChar(Char::uppercaseChar),
+                                    context.getString(
+                                        arrowDirectionRes(key) ?: R.string.direction_up,
+                                    ),
                                 ),
                             ) {
                                 latest(key)

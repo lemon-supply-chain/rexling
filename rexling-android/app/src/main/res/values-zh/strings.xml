@@ -434,10 +434,10 @@
     <string name="a11y_tab_key">Tab 键</string>
     <string name="a11y_paste_key">粘贴</string>
     <string name="a11y_function_key">功能键 %1$s</string>
-    <string name="a11y_progress_working">运行中</string>
+    <string name="a11y_progress_working">进行中</string>
     <string name="a11y_progress_percent">运行中 · %1$d%%</string>
     <string name="a11y_progress_paused">已暂停</string>
-    <string name="a11y_progress_failed">失败</string>
+    <string name="a11y_progress_failed">已失败</string>
     <string name="a11y_pane_position_indicator">分屏位置指示</string>
     <string name="a11y_pane_of_format">第 %1$d 个分屏，共 %2$d 个</string>
     <string name="a11y_pane_switch_indicator">分屏切换指示</string>
@@ -447,7 +447,7 @@
     <string name="a11y_layout_pane_format">布局分屏 %1$s</string>
     <string name="a11y_state_selected">已选中</string>
     <string name="a11y_state_floating">浮动</string>
-    <string name="a11y_arrow_directions">方向键</string>
+    <string name="a11y_arrow_directions">方向按键</string>
     <string name="a11y_arrow_keys">方向键</string>
     <string name="a11y_arrow_key_popup">方向键浮层</string>
     <string name="a11y_arrow_joystick">方向摇杆</string>
@@ -472,7 +472,7 @@
     <string name="a11y_arrow_hold_hint">按住滑动或双击切换方向键</string>
     <string name="a11y_arrow_tap_hint">点击切换方向键</string>
     <string name="a11y_toggle_arrow_popup">切换方向键浮层</string>
-    <string name="a11y_arrow_format">%1$s 方向</string>
+    <string name="a11y_arrow_format">%1$s方向</string>
     <string name="a11y_page_up">上一页</string>
     <string name="a11y_page_down">下一页</string>
     <string name="label_prev_command">上一条命令</string>
@@ -743,4 +743,10 @@
     <string name="activity_kind_question">等待回答</string>
     <string name="activity_kind_sign_in">需要登录</string>
     <string name="a11y_state_failed">失败</string>
+    <string name="direction_left">左</string>
+    <string name="direction_right">右</string>
+    <string name="direction_up">上</string>
+    <string name="direction_down">下</string>
+    <string name="a11y_control_key">Ctrl %1$s</string>
+    <string name="a11y_control_shortcut">Ctrl 快捷键 %1$s</string>
 </resources>
