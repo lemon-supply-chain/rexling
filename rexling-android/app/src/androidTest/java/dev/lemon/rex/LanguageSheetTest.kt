@@ -34,15 +34,15 @@ class LanguageSheetTest {
             }
         }
 
-        ui.onNodeWithText(appString(R.string.language)).assertIsDisplayed()
-        ui.onNodeWithText("System default").assertIsDisplayed()
-        ui.onNodeWithText("English").assertIsDisplayed()
-        ui.onNodeWithText("简体中文").assertIsDisplayed()
+        ui.onAllNodesWithText(appString(R.string.language)).onFirst().assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.language_system)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.language_en)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.language_zh)).assertIsDisplayed()
 
-        ui.onNodeWithText("English").performClick()
+        ui.onNodeWithText(appString(R.string.language_en)).performClick()
         ui.runOnIdle { assertEquals("en", selected.value) }
 
-        ui.onNodeWithText("简体中文").performClick()
+        ui.onNodeWithText(appString(R.string.language_zh)).performClick()
         ui.runOnIdle { assertEquals("zh", selected.value) }
 
         ui.onNodeWithContentDescription(appString(R.string.close_language)).performClick()

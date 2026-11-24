@@ -19,17 +19,29 @@ class KeyboardToolbarTest {
             }
         }
         capture()
-        drag("Toolbar slot 1: Escape", "Toolbar slot 3: Alt")
-        ui.onNodeWithContentDescription("Toolbar slot 3: Escape").assertExists()
-        drag("Toolbar slot 3: Escape", "Available toolbar buttons")
-        ui.onNodeWithText("Your toolbar · 6/7").assertIsDisplayed()
+        drag(
+            appString(R.string.a11y_toolbar_slot, 1, "Escape"),
+            appString(R.string.a11y_toolbar_slot, 3, "Alt"),
+        )
+        ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 3, "Escape"))
+            .assertExists()
+        drag(appString(R.string.a11y_toolbar_slot, 3, "Escape"), "Available toolbar buttons")
+        ui.onNodeWithText(appString(R.string.your_toolbar_format, 6, 7)).assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Escape"))
             .assertExists()
-        drag(appString(R.string.a11y_available_button, "Paste"), "Toolbar slot 1: Ctrl")
-        ui.onNodeWithContentDescription("Toolbar slot 1: Paste").assertExists()
-        ui.onNodeWithText("Your toolbar · 7/7").assertIsDisplayed()
-        drag(appString(R.string.a11y_available_button, "Backspace"), "Toolbar slot 7: Enter")
-        ui.onNodeWithContentDescription("Toolbar slot 7: Backspace").assertExists()
+        drag(
+            appString(R.string.a11y_available_button, "Paste"),
+            appString(R.string.a11y_toolbar_slot, 1, "Ctrl"),
+        )
+        ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 1, "Paste"))
+            .assertExists()
+        ui.onNodeWithText(appString(R.string.your_toolbar_format, 7, 7)).assertIsDisplayed()
+        drag(
+            appString(R.string.a11y_available_button, "Backspace"),
+            appString(R.string.a11y_toolbar_slot, 7, "Enter"),
+        )
+        ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 7, "Backspace"))
+            .assertExists()
         ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Enter"))
             .assertExists()
         ui.onNodeWithText(appString(R.string.save)).performClick()
@@ -54,18 +66,21 @@ class KeyboardToolbarTest {
         ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Paste"))
             .performClick()
         val actions =
-            ui.onNodeWithContentDescription("Toolbar slot 7: Paste")
+            ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 7, "Paste"))
                 .fetchSemanticsNode()
                 .config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
         ui.runOnIdle { actions.first { it.label == "Move left" }.action() }
-        ui.onNodeWithContentDescription("Toolbar slot 6: Paste").assertExists()
-        ui.onNodeWithContentDescription("Toolbar slot 1: Ctrl").performTouchInput {
-            down(center)
-            advanceEventTime(700)
-            moveBy(androidx.compose.ui.geometry.Offset(40f, 0f))
-            cancel()
-        }
-        ui.onNodeWithContentDescription("Toolbar slot 1: Ctrl").assertExists()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 6, "Paste"))
+            .assertExists()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 1, "Ctrl"))
+            .performTouchInput {
+                down(center)
+                advanceEventTime(700)
+                moveBy(androidx.compose.ui.geometry.Offset(40f, 0f))
+                cancel()
+            }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_toolbar_slot, 1, "Ctrl"))
+            .assertExists()
         ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(7, saved!!.size)
@@ -129,7 +144,7 @@ class KeyboardToolbarTest {
                 KeyboardToolbarSheet(ToolbarLayout.defaults, {}, { dismissals++ })
             }
         }
-        ui.onNodeWithText("Your toolbar · 7/7").performClick()
+        ui.onNodeWithText(appString(R.string.your_toolbar_format, 7, 7)).performClick()
         ui.runOnIdle { assertEquals(0, dismissals) }
         androidx.test.espresso.Espresso.pressBack()
         ui.runOnIdle { assertEquals(1, dismissals) }
