@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -50,6 +51,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.SpanStyle
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import dev.chrisbanes.haze.HazeState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -122,6 +125,7 @@ internal enum class ChromeIcon {
     PLAY,
     STOP,
     MOVE,
+    WAFFLE,
     ZOOM,
     UNZOOM,
 }
@@ -210,6 +214,19 @@ internal fun ChromeSymbol(
                 line(12f, 4f, 15f, 7f)
                 line(12f, 20f, 9f, 17f)
                 line(12f, 20f, 15f, 17f)
+            }
+            ChromeIcon.WAFFLE -> {
+                // A bento (waffle) menu grip: a 3×3 grid of rounded tiles.
+                for (row in 0..2) {
+                    for (col in 0..2) {
+                        drawRoundRect(
+                            color,
+                            Offset((4.5f + col * 5.5f) * u, (4.5f + row * 5.5f) * u),
+                            Size(4f * u, 4f * u),
+                            CornerRadius(1.2f * u),
+                        )
+                    }
+                }
             }
             ChromeIcon.ZOOM -> {
                 line(13f, 11f, 20f, 4f)
@@ -1119,6 +1136,13 @@ internal fun PositionDots(index: Int, count: Int, modifier: Modifier = Modifier)
     }
 }
 
+/**
+ * A floating tab bar keeps one length along the bottom, so its tabs scroll inside; a floating side
+ * rail hugs its tabs instead.
+ */
+internal val FloatingTabBarWidth = 360.dp
+internal val FloatingTabBarHeight = 52.dp
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun TerminalTabs(
@@ -1136,18 +1160,36 @@ internal fun TerminalTabs(
     reorderKey: String = "",
     animateWorking: Boolean = true,
     contentReady: Boolean = true,
+    floating: Boolean = false,
+    hazeState: HazeState? = null,
+    handle: (@Composable () -> Unit)? = null,
     paneProgress: (WindowItem) -> TerminalProgress? = { null },
     tabAttention: (WindowItem) -> Int = { 0 },
     actions: @Composable () -> Unit,
 ) {
+    // A floating bar is a fixed-length rounded card over the terminal, so its tabs scroll inside
+    // it.
+    val barShape = RexTokens.shape.tabCell
+    val barHeight = if (floating) FloatingTabBarHeight else 45.dp
+    val barModifier =
+        if (floating)
+            Modifier.fillMaxWidth()
+                .height(barHeight)
+                .shadow(3.dp, barShape, clip = false)
+                .then(
+                    if (hazeState == null)
+                        Modifier.clip(barShape).background(MaterialTheme.colorScheme.surface)
+                    else Modifier.paneFrost(hazeState, barShape),
+                )
+                .testTag("Floating tab bar")
+                .padding(horizontal = 6.dp)
+        else Modifier.fillMaxWidth().height(barHeight).padding(start = 11.dp, end = 6.dp)
     var revealed by remember(reorderKey) { mutableStateOf(false) }
     LaunchedEffect(reorderKey, contentReady) { if (contentReady) revealed = true }
     if (!contentReady && !revealed) {
         // Reserve the dock's normal bounds so first-load metadata cannot resize the terminal.
-        Row(
-            Modifier.fillMaxWidth().height(45.dp).padding(start = 11.dp, end = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
+            handle?.invoke()
             Spacer(Modifier.weight(1f).fillMaxHeight())
             actions()
         }
@@ -1227,10 +1269,8 @@ internal fun TerminalTabs(
             }
         }
     }
-    Row(
-        Modifier.fillMaxWidth().height(45.dp).padding(start = 11.dp, end = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
+        handle?.invoke()
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             val density = LocalDensity.current.density
             val widths =

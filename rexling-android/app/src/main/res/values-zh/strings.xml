@@ -115,6 +115,10 @@
     <string name="tab_position_right">右侧</string>
     <string name="tab_rail_style_icons">图标</string>
     <string name="tab_rail_style_titles">图标与标题</string>
+    <string name="tab_floating">悬浮标签栏</string>
+    <string name="tab_floating_detail">长按格子图标可将标签栏拖到终端任意位置</string>
+    <string name="a11y_move_tab_bar">移动标签栏</string>
+    <string name="a11y_show_tab_bar">展开标签栏</string>
     <string name="panes_unfolded_title">展开全屏</string>
     <string name="panes_unfolded_desc">在折叠屏内屏或平板上全屏运行，旁边无其他应用</string>
     <string name="use_joystick">方向键摇杆</string>

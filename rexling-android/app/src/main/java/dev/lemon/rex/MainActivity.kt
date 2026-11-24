@@ -427,7 +427,11 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         }
     val allowFloatingOverlay = unfoldedFullScreen
     val tabLayout = model.tabLayout(tabWidth.first)
-    val extendUnderNav = panelShown && tabLayout.side && model.toolbarWithKeyboardOnly
+    // Floating tabs are a pure overlay: they take no layout space, so moving them never resizes the
+    // terminal. The docked rail and bottom strip step aside while this is on.
+    val floatingTabs = model.floatingTabs
+    val extendUnderNav =
+        panelShown && tabLayout.side && !floatingTabs && model.toolbarWithKeyboardOnly
     val navigationClearance =
         with(keyboardDensity) {
             val inset = WindowInsets.navigationBars.getBottom(this).toDp()
@@ -469,7 +473,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             ?.layout
             ?.firstOrNull { it.id == chosen && it.floating && !it.minimized }
             ?.takeIf { pane -> floating.any { it.id == pane.id } }
-    val flushSinglePane = tabLayout.side && tiles == null
+    val flushSinglePane = tabLayout.side && !floatingTabs && tiles == null
     val terminalBottomMargin =
         when {
             flushSinglePane -> 0.dp
@@ -939,7 +943,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             sideRail = sideRail,
                         )
                     }
-                    val tabRail: @Composable () -> Unit = {
+                    val tabRail: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
                         TerminalTabRail(
                             windows,
                             activeWindowId,
@@ -969,16 +973,66 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 model.changeTabLayout(tabWidth.first, tabLayout.copy(style = it))
                             },
                             extendUnderNav = extendUnderNav,
-                            island = tiles != null,
+                            island = tiles != null && !floatingTabs,
                             islandBottom =
                                 terminalBottomMargin + (if (extendUnderNav) 0.dp else 8.dp),
+                            floating = floatingTabs,
+                            hazeState = terminalHaze,
+                            handle = handle,
                         ) {
                             tabActions(tabLayout.style == TabRailStyle.ICONS, true)
                         }
                     }
+                    // A floating strip always carries a grip; the docked strip never does.
+                    val tabStrip: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
+                        TerminalTabs(
+                            windows,
+                            activeWindowId,
+                            state.connected && !state.creating && !changingSession,
+                            client::selectWindow,
+                            panePrograms = client::tabPrograms,
+                            selectedPane = client::tabPaneIndex,
+                            paneTitle = { window, pane ->
+                                state.titles[window.blocks.getOrNull(pane)?.id].orEmpty()
+                            },
+                            isPaneWorking = { window, pane ->
+                                window.blocks.getOrNull(pane)?.id in state.workingBlocks
+                            },
+                            paneWorking = { window ->
+                                window.blocks.any { it.id in state.workingBlocks }
+                            },
+                            onClose = { closeTarget = closeTabTarget(it) },
+                            onMove = client::moveTab,
+                            reorderKey = displayedSession,
+                            animateWorking = !workspaceBackdrop,
+                            tabAttention = { window -> activityBadges.tabs[window.id] ?: 0 },
+                            paneProgress = { window ->
+                                state.terminalProgress[
+                                        window.blocks.getOrNull(client.tabPaneIndex(window))?.id]
+                                    ?: window.blocks.firstNotNullOfOrNull {
+                                        state.terminalProgress[it.id]
+                                    }
+                            },
+                            contentReady =
+                                client.hasScreen &&
+                                    !state.creating &&
+                                    !changingSession &&
+                                    windows.isNotEmpty() &&
+                                    windows.all { window ->
+                                        val block =
+                                            window.blocks.getOrNull(client.tabPaneIndex(window))
+                                        block != null && state.programs[block.id]?.pending == false
+                                    },
+                            floating = handle != null,
+                            hazeState = terminalHaze,
+                            handle = handle,
+                            actions = { tabActions(false, false) },
+                        )
+                    }
                     if (blocks.isNotEmpty())
                         Row(Modifier.weight(1f).fillMaxWidth()) {
-                            if (tabLayout.position == TabBarPosition.LEFT) tabRail()
+                            if (!floatingTabs && tabLayout.position == TabBarPosition.LEFT)
+                                tabRail(null)
                             Box(
                                 Modifier.weight(1f)
                                     .fillMaxHeight()
@@ -1024,6 +1078,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                         ownerBackdrop ||
                                         readyBackdrop ||
                                         shortcutBackdrop ||
+                                        floatingTabs ||
                                         model.images.state != null
                                 if (carouselBlocks.isEmpty())
                                     Box(
@@ -1064,7 +1119,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                         captureBackdrop = captureTerminal,
                                         bottomPaddingDp = if (floating.isNotEmpty()) 28 else 6,
                                         bottomMargin = !extendUnderNav,
-                                        sideRail = tabLayout.position,
+                                        sideRail =
+                                            if (floatingTabs) TabBarPosition.BOTTOM
+                                            else tabLayout.position,
                                         splits = window.splits,
                                         zoomed = window.zoomed,
                                         paneActionsEnabled = ready,
@@ -1112,7 +1169,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             if (model.toolbarWithKeyboardOnly) toolbarHeight[0]
                                             else 0
                                         },
-                                        squareCorners = tabLayout.side,
+                                        squareCorners = tabLayout.side && !floatingTabs,
                                         extendsUnderNavigation = extendUnderNav,
                                         navigationClearance = singlePaneNavigationClearance,
                                         bottomOverlayInset = bottomOverlayInset,
@@ -1210,8 +1267,23 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                         onExpandedChange = { floatingBackdrop = it },
                                     )
                                 }
+                                if (floatingTabs)
+                                    FloatingTabBar(
+                                        model.floatingTabPosition,
+                                        model::moveFloatingTab,
+                                        Modifier.fillMaxSize(),
+                                        // Only the left and right rails tuck themselves away.
+                                        hideAtEdges = tabLayout.side,
+                                    ) { handle ->
+                                        if (tabLayout.position == TabBarPosition.BOTTOM)
+                                            Box(Modifier.width(FloatingTabBarWidth)) {
+                                                tabStrip(handle)
+                                            }
+                                        else tabRail(handle)
+                                    }
                             }
-                            if (tabLayout.position == TabBarPosition.RIGHT) tabRail()
+                            if (!floatingTabs && tabLayout.position == TabBarPosition.RIGHT)
+                                tabRail(null)
                         }
                     else
                         Box(
@@ -1234,27 +1306,26 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             model,
                             client,
                             state,
-                            windows,
-                            activeWindowId,
-                            displayedSession,
-                            tabLayout.side,
-                            extendUnderNav,
                             changingSession,
-                            !workspaceBackdrop,
-                            activityBadges.tabs,
+                            // Without a docked rail the bar keeps its rounded top.
+                            tabLayout.side && !floatingTabs,
+                            extendUnderNav,
                             controlled,
                             ready,
                             keyboardVisible,
                             keyTarget,
                             toolbarHeight,
-                            onCloseTab = { closeTarget = closeTabTarget(it) },
                             onPaste = ::pasteClipboard,
                             onKeyboard = {
                                 if (!controlled) client.takeControl()
                                 else if (keyboardVisible) terminalView?.hideKeyboard()
                                 else terminalView?.keyboard()
                             },
-                            actions = { tabActions(false, false) },
+                            tabs =
+                                if (floatingTabs) null
+                                else {
+                                    { tabStrip(null) }
+                                },
                         )
                     }
                 }
@@ -1438,6 +1509,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 tabLayouts = model.tabLayouts,
                 tabWidth = tabWidth,
                 onTabLayout = model::changeTabLayout,
+                floatingTabs = model.floatingTabs,
+                onFloatingTabs = model::changeFloatingTabs,
                 compactTopBar = model.compactTopBar,
                 onCompactTopBar = model::changeCompactTopBar,
                 codexTitleAttention = model.experimentalCodexAttention,
@@ -1796,23 +1869,17 @@ private fun WorkspaceBottomBar(
     model: RexModel,
     client: RexConnection,
     state: AppState,
-    windows: List<WindowItem>,
-    activeWindowId: String,
-    session: String,
+    changingSession: Boolean,
     sideTabs: Boolean,
     extendUnderNav: Boolean,
-    changingSession: Boolean,
-    animateWorking: Boolean,
-    tabAttention: Map<String, Int>,
     controlled: Boolean,
     ready: Boolean,
     keyboardVisible: Boolean,
     keyTarget: String,
     toolbarHeight: IntArray,
-    onCloseTab: (WindowItem) -> Unit,
     onPaste: () -> Boolean,
     onKeyboard: () -> Unit,
-    actions: @Composable () -> Unit,
+    tabs: (@Composable () -> Unit)?,
 ) {
     // Square beside a side tab rail; the bottom tab bar keeps its rounded top.
     val shape =
@@ -1830,42 +1897,7 @@ private fun WorkspaceBottomBar(
                     ),
             ),
     ) {
-        if (!sideTabs) {
-            TerminalTabs(
-                windows,
-                activeWindowId,
-                state.connected && !state.creating && !changingSession,
-                client::selectWindow,
-                panePrograms = client::tabPrograms,
-                selectedPane = client::tabPaneIndex,
-                paneTitle = { window, pane ->
-                    state.titles[window.blocks.getOrNull(pane)?.id].orEmpty()
-                },
-                isPaneWorking = { window, pane ->
-                    window.blocks.getOrNull(pane)?.id in state.workingBlocks
-                },
-                paneWorking = { window -> window.blocks.any { it.id in state.workingBlocks } },
-                onClose = onCloseTab,
-                onMove = client::moveTab,
-                reorderKey = session,
-                animateWorking = animateWorking,
-                tabAttention = { window -> tabAttention[window.id] ?: 0 },
-                paneProgress = { window ->
-                    state.terminalProgress[window.blocks.getOrNull(client.tabPaneIndex(window))?.id]
-                        ?: window.blocks.firstNotNullOfOrNull { state.terminalProgress[it.id] }
-                },
-                contentReady =
-                    client.hasScreen &&
-                        !state.creating &&
-                        !changingSession &&
-                        windows.isNotEmpty() &&
-                        windows.all { window ->
-                            val block = window.blocks.getOrNull(client.tabPaneIndex(window))
-                            block != null && state.programs[block.id]?.pending == false
-                        },
-                actions = actions,
-            )
-        }
+        if (!sideTabs && tabs != null) tabs()
         Box(
             Modifier.fillMaxWidth()
                 .then(

@@ -47,6 +47,8 @@ internal fun PreferencesSheet(
     tabLayouts: Map<TabWidthClass, TabBarLayout> = emptyMap(),
     tabWidth: Pair<TabWidthClass, Int> = TabWidthClass.NARROW to 0,
     onTabLayout: (TabWidthClass, TabBarLayout) -> Unit = { _, _ -> },
+    floatingTabs: Boolean = false,
+    onFloatingTabs: (Boolean) -> Unit = {},
     compactTopBar: Boolean = false,
     onCompactTopBar: (Boolean) -> Unit = {},
     codexTitleAttention: Boolean = false,
@@ -337,6 +339,35 @@ internal fun PreferencesSheet(
                                 style = SettingsType.detail,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .toggleable(
+                                        value = floatingTabs,
+                                        role = androidx.compose.ui.semantics.Role.Switch,
+                                        onValueChange = onFloatingTabs,
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Column(
+                                    Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.tab_floating),
+                                        style = SettingsType.row,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        stringResource(R.string.tab_floating_detail),
+                                        style = SettingsType.detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Switch(checked = floatingTabs, onCheckedChange = null)
+                            }
+                            SettingsDivider()
                             TabWidthClass.entries.forEachIndexed { i, each ->
                                 if (i > 0) SettingsDivider()
                                 TabLayoutChoice(

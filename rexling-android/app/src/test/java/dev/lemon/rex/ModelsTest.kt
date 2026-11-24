@@ -168,6 +168,8 @@ class ModelsTest {
     fun tabBarLayoutRoundTripsAndFallsBackPerScreen() {
         val left = TabBarLayout(TabBarPosition.LEFT, TabRailStyle.TITLES)
         assertEquals(left, TabBarLayout.decode(left.encode(), TabBarLayout()))
+        // A stored layout with extra parts keeps its position and style.
+        assertEquals(left, TabBarLayout.decode("LEFT,TITLES,1", TabBarLayout()))
         val unfoldedDefault = TabBarLayout(style = TabRailStyle.TITLES)
         assertEquals(unfoldedDefault, TabBarLayout.decode(null, unfoldedDefault))
         assertEquals(TabBarLayout(), TabBarLayout.decode("SIDEWAYS,ICONS", TabBarLayout()))

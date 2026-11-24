@@ -19,11 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
@@ -31,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
 
 internal enum class TabBarPosition(@androidx.annotation.StringRes val labelRes: Int) {
     BOTTOM(R.string.tab_position_bottom),
@@ -131,6 +135,9 @@ internal fun TerminalTabRail(
     extendUnderNav: Boolean = false,
     island: Boolean = false,
     islandBottom: androidx.compose.ui.unit.Dp = 8.dp,
+    floating: Boolean = false,
+    hazeState: HazeState? = null,
+    handle: (@Composable () -> Unit)? = null,
     actions: @Composable () -> Unit,
 ) {
     val titles = style == TabRailStyle.TITLES
@@ -141,7 +148,8 @@ internal fun TerminalTabRail(
     // ending level with them; slightly narrower so the terminal keeps about the same width.
     val width by
         androidx.compose.animation.core.animateDpAsState(
-            if (island) (if (titles) 144.dp else 48.dp) else if (titles) 152.dp else 52.dp,
+            if (floating || island) (if (titles) 144.dp else 48.dp)
+            else if (titles) 152.dp else 52.dp,
             androidx.compose.animation.core.tween(180),
             label = "Tab rail width",
         )
@@ -164,286 +172,339 @@ internal fun TerminalTabRail(
         if (index >= 0) list.animateScrollToItem(index)
     }
     val islandShape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    // A floating rail is a rounded card that hugs its tabs, so it has no fixed corner size.
+    val pillShape = RexTokens.shape.tabCell
     val styleToggleDescription =
         stringResource(if (titles) R.string.show_icons_only else R.string.show_tab_titles)
     val tabsDescription = stringResource(R.string.a11y_tabs)
-    Column(
-        Modifier.fillMaxHeight()
+    BoxWithConstraints(
+        Modifier.then(if (floating) Modifier else Modifier.fillMaxHeight())
             .then(
                 if (island)
                     Modifier.padding(
-                            start = if (side == TabBarPosition.LEFT) 8.dp else 0.dp,
-                            end = if (side == TabBarPosition.RIGHT) 8.dp else 0.dp,
-                            top = 8.dp,
-                            bottom = islandBottom,
-                        )
-                        .width(width)
-                        .clip(islandShape)
-                        .background(scheme.surface)
-                        .border(1.5.dp, scheme.outline.copy(alpha = .25f), islandShape)
-                else
-                    Modifier.width(width)
-                        .background(scheme.surface)
-                        // Reaches the screen edge under the gesture handle; its buttons stay above
-                        // it.
-                        .then(
-                            if (extendUnderNav)
-                                Modifier.windowInsetsPadding(
-                                    WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
-                                )
-                            else Modifier,
-                        ),
-            )
-            .systemGestureExclusion { coordinates ->
-                val height = coordinates.size.height.toFloat()
-                androidx.compose.ui.geometry.Rect(
-                    0f,
-                    (height - exclusion).coerceAtLeast(0f),
-                    coordinates.size.width.toFloat(),
-                    height,
-                )
-            }
-            .draggable(
-                androidx.compose.foundation.gestures.rememberDraggableState { swipe += it },
-                androidx.compose.foundation.gestures.Orientation.Horizontal,
-                onDragStarted = { swipe = 0f },
-                onDragStopped = {
-                    val next =
-                        when {
-                            swipe * outward > threshold -> TabRailStyle.TITLES
-                            swipe * outward < -threshold -> TabRailStyle.ICONS
-                            else -> style
-                        }
-                    swipe = 0f
-                    if (next != style) {
-                        haptic.performHapticFeedback(
-                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                        )
-                        onStyle(next)
-                    }
-                },
-            )
-            .semantics {
-                customActions =
-                    listOf(
-                        CustomAccessibilityAction(styleToggleDescription) {
-                            onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
-                            true
-                        },
+                        start = if (side == TabBarPosition.LEFT) 8.dp else 0.dp,
+                        end = if (side == TabBarPosition.RIGHT) 8.dp else 0.dp,
+                        top = 8.dp,
+                        bottom = islandBottom,
                     )
-            }
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+                else Modifier,
+            )
+            .width(width)
+            // A floating rail is an overlay that hugs its tabs, so it never claims layout space.
+            .then(if (floating) Modifier.wrapContentHeight() else Modifier)
+            .then(if (floating || island) Modifier else Modifier.background(scheme.surface))
+            // Reaches the screen edge under the gesture handle; its buttons stay above it.
+            .then(
+                if (extendUnderNav && !floating && !island)
+                    Modifier.windowInsetsPadding(
+                        WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                    )
+                else Modifier,
+            ),
+        contentAlignment = Alignment.TopCenter,
     ) {
-        LazyColumn(
-            Modifier.weight(1f).fillMaxWidth().semantics { contentDescription = tabsDescription },
-            state = list,
-            contentPadding =
-                PaddingValues(horizontal = if (titles) 4.dp else 2.dp, vertical = 2.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
-        ) {
-            itemsIndexed(windows, key = { _, w -> w.id }) { i, w ->
-                fun moveBy(delta: Int): Boolean {
-                    val target = i + delta
-                    if (target !in windows.indices) return false
-                    val reordered =
-                        ids.toMutableList().apply {
-                            removeAt(i)
-                            add(target, w.id)
-                        }
-                    return onMove(w.id, reordered.getOrNull(target + 1))
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        // The toggle and the action buttons sit below the tabs. Measured so the pill can hug them;
+        // seeded with their tallest arrangement so the first frame already fits.
+        var chromePx by
+            remember(density) { mutableIntStateOf(with(density) { 161.dp.roundToPx() }) }
+        val listHeight =
+            (windows.size * 48).dp + ((windows.size - 1).coerceAtLeast(0) * 4).dp + 4.dp
+        val grip = if (handle != null) FloatingTabBarHandle else 0.dp
+        val pillHeight =
+            if (floating)
+                (listHeight + with(density) { chromePx.toDp() } + grip + 8.dp).coerceAtMost(
+                    maxHeight,
+                )
+            else maxHeight
+        Column(
+            Modifier.fillMaxWidth()
+                .height(pillHeight)
+                .then(
+                    when {
+                        floating ->
+                            Modifier.shadow(3.dp, pillShape, clip = false)
+                                .then(
+                                    if (hazeState == null)
+                                        Modifier.clip(pillShape).background(scheme.surface)
+                                    else Modifier.paneFrost(hazeState, pillShape),
+                                )
+                        island ->
+                            Modifier.clip(islandShape)
+                                .background(scheme.surface)
+                                .border(1.5.dp, scheme.outline.copy(alpha = .25f), islandShape)
+                        else -> Modifier
+                    },
+                )
+                .then(if (floating) Modifier.testTag("Floating tab rail") else Modifier)
+                .systemGestureExclusion { coordinates ->
+                    val height = coordinates.size.height.toFloat()
+                    androidx.compose.ui.geometry.Rect(
+                        0f,
+                        (height - exclusion).coerceAtLeast(0f),
+                        coordinates.size.width.toFloat(),
+                        height,
+                    )
                 }
-                val active = w.id == selectedId
-                val programs = panePrograms(w)
-                val pane = selectedPane(w)
-                val program = programs.getOrNull(pane) ?: ProgramIdentity.Loading
-                val title =
-                    program.tabTitle(
-                        w.label,
-                        w.blocks.getOrNull(pane)?.label.orEmpty(),
-                        i + 1,
-                        paneTitle(w, pane),
-                    )
-                val unread = tabAttention(w)
-                val progress = paneProgress(w)
-                val busy = paneWorking(w) || progress?.busy == true
-                val indicator = terminalProgressColor(progress)
-                val tabDescription =
-                    stringResource(
-                        if (busy && progress == null) R.string.a11y_tab_working
-                        else R.string.a11y_tab,
-                        title,
-                        program.label,
-                    )
-                val unreadDescription =
-                    pluralStringResource(R.plurals.a11y_unread_items, unread, unread)
-                val moveUpLabel = stringResource(R.string.move_up)
-                val moveDownLabel = stringResource(R.string.move_down)
-                val tabOptionsLabel = stringResource(R.string.tab_options)
-                Box(Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)) {
-                    val workPhase =
-                        rememberWorkingPhase(
-                            animateWorking &&
-                                active &&
-                                if (progress != null) progress.busy && progress.percent == null
-                                else busy,
+                .draggable(
+                    androidx.compose.foundation.gestures.rememberDraggableState { swipe += it },
+                    androidx.compose.foundation.gestures.Orientation.Horizontal,
+                    onDragStarted = { swipe = 0f },
+                    onDragStopped = {
+                        val next =
+                            when {
+                                swipe * outward > threshold -> TabRailStyle.TITLES
+                                swipe * outward < -threshold -> TabRailStyle.ICONS
+                                else -> style
+                            }
+                        swipe = 0f
+                        if (next != style) {
+                            haptic.performHapticFeedback(
+                                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                            )
+                            onStyle(next)
+                        }
+                    },
+                )
+                .semantics {
+                    customActions =
+                        listOf(
+                            CustomAccessibilityAction(styleToggleDescription) {
+                                onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
+                                true
+                            },
                         )
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .height(48.dp)
-                            .background(if (active) scheme.surfaceVariant else Color.Transparent)
-                            .drawWithContent {
-                                drawContent()
-                                // The bottom indicator bar is only drawn on the active tab.
-                                if (active) {
-                                    val origin = Offset(0f, size.height - 2.dp.toPx())
-                                    val bar = Size(size.width, 2.dp.toPx())
-                                    if (progress != null) {
-                                        drawWorkingBar(indicator.copy(alpha = .18f), origin, bar)
-                                        val fill =
-                                            progress.percent?.let {
-                                                bar.copy(width = bar.width * it / 100f)
-                                            } ?: bar
-                                        drawWorkingBar(
-                                            indicator,
-                                            origin,
-                                            fill,
-                                            phase =
-                                                if (
-                                                    progress.busy &&
-                                                        progress.percent == null &&
-                                                        animateWorking
-                                                )
-                                                    workPhase.value
-                                                else null,
-                                        )
-                                    } else
-                                        drawWorkingBar(
-                                            indicator,
-                                            origin,
-                                            bar,
-                                            phase =
-                                                if (busy && animateWorking) workPhase.value
-                                                else null,
-                                        )
-                                }
+                }
+                .padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // A floating rail carries its grip in the same column, above the tabs.
+            handle?.invoke()
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth().semantics {
+                    contentDescription = tabsDescription
+                },
+                state = list,
+                contentPadding =
+                    PaddingValues(horizontal = if (titles) 4.dp else 2.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
+            ) {
+                itemsIndexed(windows, key = { _, w -> w.id }) { i, w ->
+                    fun moveBy(delta: Int): Boolean {
+                        val target = i + delta
+                        if (target !in windows.indices) return false
+                        val reordered =
+                            ids.toMutableList().apply {
+                                removeAt(i)
+                                add(target, w.id)
                             }
-                            .semantics(mergeDescendants = true) {
-                                contentDescription =
-                                    tabDescription + (progress?.let { ", ${it.description}" } ?: "")
-                            }
-                            .semantics {
-                                selected = active
-                                if (unread > 0) stateDescription = unreadDescription
-                                if (enabled)
-                                    customActions = buildList {
-                                        if (i > 0)
-                                            add(
-                                                CustomAccessibilityAction(moveUpLabel) {
-                                                    moveBy(-1)
-                                                },
+                        return onMove(w.id, reordered.getOrNull(target + 1))
+                    }
+                    val active = w.id == selectedId
+                    val programs = panePrograms(w)
+                    val pane = selectedPane(w)
+                    val program = programs.getOrNull(pane) ?: ProgramIdentity.Loading
+                    val title =
+                        program.tabTitle(
+                            w.label,
+                            w.blocks.getOrNull(pane)?.label.orEmpty(),
+                            i + 1,
+                            paneTitle(w, pane),
+                        )
+                    val unread = tabAttention(w)
+                    val progress = paneProgress(w)
+                    val busy = paneWorking(w) || progress?.busy == true
+                    val indicator = terminalProgressColor(progress)
+                    val tabDescription =
+                        stringResource(
+                            if (busy && progress == null) R.string.a11y_tab_working
+                            else R.string.a11y_tab,
+                            title,
+                            program.label,
+                        )
+                    val unreadDescription =
+                        pluralStringResource(R.plurals.a11y_unread_items, unread, unread)
+                    val moveUpLabel = stringResource(R.string.move_up)
+                    val moveDownLabel = stringResource(R.string.move_down)
+                    val tabOptionsLabel = stringResource(R.string.tab_options)
+                    Box(Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)) {
+                        val workPhase =
+                            rememberWorkingPhase(
+                                animateWorking &&
+                                    active &&
+                                    if (progress != null) progress.busy && progress.percent == null
+                                    else busy,
+                            )
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .height(48.dp)
+                                .background(
+                                    if (active) scheme.surfaceVariant else Color.Transparent,
+                                )
+                                .drawWithContent {
+                                    drawContent()
+                                    // The bottom indicator bar is only drawn on the active tab.
+                                    if (active) {
+                                        val origin = Offset(0f, size.height - 2.dp.toPx())
+                                        val bar = Size(size.width, 2.dp.toPx())
+                                        if (progress != null) {
+                                            drawWorkingBar(
+                                                indicator.copy(alpha = .18f),
+                                                origin,
+                                                bar,
                                             )
-                                        if (i < windows.lastIndex)
-                                            add(
-                                                CustomAccessibilityAction(moveDownLabel) {
-                                                    moveBy(1)
-                                                },
+                                            val fill =
+                                                progress.percent?.let {
+                                                    bar.copy(width = bar.width * it / 100f)
+                                                } ?: bar
+                                            drawWorkingBar(
+                                                indicator,
+                                                origin,
+                                                fill,
+                                                phase =
+                                                    if (
+                                                        progress.busy &&
+                                                            progress.percent == null &&
+                                                            animateWorking
+                                                    )
+                                                        workPhase.value
+                                                    else null,
+                                            )
+                                        } else
+                                            drawWorkingBar(
+                                                indicator,
+                                                origin,
+                                                bar,
+                                                phase =
+                                                    if (busy && animateWorking) workPhase.value
+                                                    else null,
                                             )
                                     }
+                                }
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription =
+                                        tabDescription +
+                                            (progress?.let { ", ${it.description}" } ?: "")
+                                }
+                                .semantics {
+                                    selected = active
+                                    if (unread > 0) stateDescription = unreadDescription
+                                    if (enabled)
+                                        customActions = buildList {
+                                            if (i > 0)
+                                                add(
+                                                    CustomAccessibilityAction(moveUpLabel) {
+                                                        moveBy(-1)
+                                                    },
+                                                )
+                                            if (i < windows.lastIndex)
+                                                add(
+                                                    CustomAccessibilityAction(moveDownLabel) {
+                                                        moveBy(1)
+                                                    },
+                                                )
+                                        }
+                                }
+                                .combinedClickable(
+                                    enabled = enabled,
+                                    role = Role.Tab,
+                                    onLongClickLabel = tabOptionsLabel,
+                                    onLongClick = { menuId = w.id },
+                                    onClick = { onSelect(w.id) },
+                                )
+                                .padding(horizontal = if (titles) 6.dp else 0.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement =
+                                if (titles) Arrangement.spacedBy(4.dp) else Arrangement.Center,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                ProgramStack(programs, pane, fixedSlot = true)
+                                if (unread > 0 || busy)
+                                    Box(
+                                        Modifier.align(Alignment.TopEnd)
+                                            .offset(x = 2.dp, y = (-2).dp)
+                                            .size(8.dp)
+                                            .border(1.5.dp, scheme.background, CircleShape)
+                                            .background(
+                                                if (unread > 0) scheme.primary else indicator,
+                                                CircleShape,
+                                            )
+                                            .semantics {
+                                                testTag =
+                                                    if (unread > 0) "Tab unread dot ${w.id}"
+                                                    else "Tab working dot ${w.id}"
+                                            },
+                                    )
                             }
-                            .combinedClickable(
-                                enabled = enabled,
-                                role = Role.Tab,
-                                onLongClickLabel = tabOptionsLabel,
-                                onLongClick = { menuId = w.id },
-                                onClick = { onSelect(w.id) },
-                            )
-                            .padding(horizontal = if (titles) 6.dp else 0.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement =
-                            if (titles) Arrangement.spacedBy(4.dp) else Arrangement.Center,
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            ProgramStack(programs, pane, fixedSlot = true)
-                            if (unread > 0 || busy)
-                                Box(
-                                    Modifier.align(Alignment.TopEnd)
-                                        .offset(x = 2.dp, y = (-2).dp)
-                                        .size(8.dp)
-                                        .border(1.5.dp, scheme.background, CircleShape)
-                                        .background(
-                                            if (unread > 0) scheme.primary else indicator,
-                                            CircleShape,
-                                        )
-                                        .semantics {
-                                            testTag =
-                                                if (unread > 0) "Tab unread dot ${w.id}"
-                                                else "Tab working dot ${w.id}"
-                                        },
+                            if (titles)
+                                Text(
+                                    title,
+                                    Modifier.weight(1f),
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                    color =
+                                        if (active) scheme.onSurface else scheme.onSurfaceVariant,
                                 )
                         }
-                        if (titles)
-                            Text(
-                                title,
-                                Modifier.weight(1f),
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                color = if (active) scheme.onSurface else scheme.onSurfaceVariant,
+                        DropdownMenu(
+                            menuId == w.id,
+                            { menuId = null },
+                            containerColor = scheme.surface,
+                            tonalElevation = 0.dp,
+                        ) {
+                            TerminalMenuItem(
+                                moveUpLabel,
+                                ChromeIcon.UP,
+                                enabled = enabled && i > 0,
+                                onClick = {
+                                    menuId = null
+                                    moveBy(-1)
+                                },
                             )
-                    }
-                    DropdownMenu(
-                        menuId == w.id,
-                        { menuId = null },
-                        containerColor = scheme.surface,
-                        tonalElevation = 0.dp,
-                    ) {
-                        TerminalMenuItem(
-                            moveUpLabel,
-                            ChromeIcon.UP,
-                            enabled = enabled && i > 0,
-                            onClick = {
-                                menuId = null
-                                moveBy(-1)
-                            },
-                        )
-                        TerminalMenuItem(
-                            moveDownLabel,
-                            ChromeIcon.DOWN,
-                            enabled = enabled && i < windows.lastIndex,
-                            onClick = {
-                                menuId = null
-                                moveBy(1)
-                            },
-                        )
-                        TerminalMenuItem(
-                            stringResource(R.string.close_tab),
-                            ChromeIcon.CLOSE,
-                            enabled = enabled,
-                            onClick = {
-                                menuId = null
-                                onClose(w)
-                            },
-                        )
+                            TerminalMenuItem(
+                                moveDownLabel,
+                                ChromeIcon.DOWN,
+                                enabled = enabled && i < windows.lastIndex,
+                                onClick = {
+                                    menuId = null
+                                    moveBy(1)
+                                },
+                            )
+                            TerminalMenuItem(
+                                stringResource(R.string.close_tab),
+                                ChromeIcon.CLOSE,
+                                enabled = enabled,
+                                onClick = {
+                                    menuId = null
+                                    onClose(w)
+                                },
+                            )
+                        }
                     }
                 }
             }
+            Column(
+                Modifier.fillMaxWidth().onSizeChanged { chromePx = it.height },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // Points the way the rail will go: toward the terminal to show titles, toward the
+                // edge to hide them.
+                val towardTerminal = if (side == TabBarPosition.LEFT) -90f else 90f
+                ChromeButton(
+                    ChromeIcon.CHEVRON,
+                    styleToggleDescription,
+                    modifier =
+                        Modifier.graphicsLayer {
+                            rotationZ = if (titles) -towardTerminal else towardTerminal
+                        },
+                ) {
+                    onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
+                }
+                Box(Modifier.padding(top = 4.dp)) { actions() }
+            }
         }
-        // Points the way the rail will go: toward the terminal to show titles, toward the edge to
-        // hide them.
-        val towardTerminal = if (side == TabBarPosition.LEFT) -90f else 90f
-        ChromeButton(
-            ChromeIcon.CHEVRON,
-            styleToggleDescription,
-            modifier =
-                Modifier.graphicsLayer {
-                    rotationZ = if (titles) -towardTerminal else towardTerminal
-                },
-        ) {
-            onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
-        }
-        Box(Modifier.padding(top = 4.dp)) { actions() }
     }
 }

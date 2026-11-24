@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -444,6 +445,37 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     internal fun changeTabLayout(width: TabWidthClass, layout: TabBarLayout) {
         tabLayouts[width] = layout
         preferences.edit { putString(width.key, layout.encode()) }
+    }
+
+    /**
+     * Float the tab bar over the workspace instead of docking it. The bar never takes layout space:
+     * moving it only moves an overlay, so the terminal keeps its size.
+     */
+    internal var floatingTabs by mutableStateOf(preferences.getBoolean("floating_tabs", false))
+        private set
+
+    internal fun changeFloatingTabs(value: Boolean) {
+        floatingTabs = value
+        preferences.edit { putBoolean("floating_tabs", value) }
+    }
+
+    /** Where the floating tab bar rests, as a fraction of the free space around it. */
+    internal var floatingTabPosition by
+        mutableStateOf(
+            Offset(storedFraction("floating_tab_x", .5f), storedFraction("floating_tab_y", 1f)),
+        )
+        private set
+
+    private fun storedFraction(key: String, fallback: Float) =
+        preferences.getFloat(key, fallback).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: fallback
+
+    internal fun moveFloatingTab(value: Offset) {
+        if (!value.x.isFinite() || !value.y.isFinite()) return
+        floatingTabPosition = Offset(value.x.coerceIn(0f, 1f), value.y.coerceIn(0f, 1f))
+        preferences.edit {
+            putFloat("floating_tab_x", floatingTabPosition.x)
+            putFloat("floating_tab_y", floatingTabPosition.y)
+        }
     }
 
     /** Unfolded and full screen, show a tab's tiled panes side by side instead of one at a time. */

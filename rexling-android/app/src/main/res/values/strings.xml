@@ -115,6 +115,10 @@
     <string name="tab_position_right">Right</string>
     <string name="tab_rail_style_icons">Icons</string>
     <string name="tab_rail_style_titles">Icons and titles</string>
+    <string name="tab_floating">Floating tab bar</string>
+    <string name="tab_floating_detail">Long-press the waffle grip to drag the tabs anywhere over the terminal</string>
+    <string name="a11y_move_tab_bar">Move the tab bar</string>
+    <string name="a11y_show_tab_bar">Show the tab bar</string>
     <string name="panes_unfolded_title">Unfolded, full screen</string>
     <string name="panes_unfolded_desc">On a foldable’s inner screen or a tablet, with no other app beside Rexling</string>
     <string name="use_joystick">Use joystick for arrows</string>
