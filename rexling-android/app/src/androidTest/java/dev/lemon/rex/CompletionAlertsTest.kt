@@ -263,11 +263,11 @@ class CompletionAlertsTest {
                 assertTrue(
                     first.notification.extras
                         .getString(Notification.EXTRA_TITLE)!!
-                        .startsWith("Finished"),
+                        .startsWith(appString(R.string.filter_finished)),
                 )
                 assertEquals(Notification.VISIBILITY_PRIVATE, first.notification.visibility)
                 assertEquals(
-                    "Rexling task finished",
+                    appString(R.string.notification_task_finished),
                     first.notification.publicVersion.extras.getString(Notification.EXTRA_TITLE),
                 )
                 peer.report("idle", "report cleared")
@@ -314,7 +314,7 @@ class CompletionAlertsTest {
                 assertTrue(
                     question.notification.extras
                         .getString(Notification.EXTRA_TITLE)!!
-                        .startsWith("Needs you"),
+                        .startsWith(appString(R.string.filter_attention)),
                 )
                 peer.title("[ . ] Action Required | Fixture task")
                 Thread.sleep(1200)

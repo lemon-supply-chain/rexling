@@ -42,8 +42,10 @@ class AppearanceSheetTest {
             }
         }
         ui.onNodeWithText(appString(R.string.dark_theme)).performClick()
-        ui.onNodeWithContentDescription("Theme Rexling Default").assertIsSelected()
-        ui.onNodeWithContentDescription("Theme Abyssal Trench").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_theme_format, "Rexling Default"))
+            .assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_theme_format, "Abyssal Trench"))
+            .performClick()
         ui.runOnIdle {
             assertEquals("abyssal-trench", chosen)
             assertEquals(Appearance.SYSTEM, mode)
@@ -60,7 +62,7 @@ class AppearanceSheetTest {
         ui.onNodeWithText("11 sp").assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_decrease_font_size)).performClick()
         ui.onNodeWithText("10 sp").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Font size").performSemanticsAction(
+        ui.onNodeWithContentDescription(appString(R.string.a11y_font_size)).performSemanticsAction(
             androidx.compose.ui.semantics.SemanticsActions.SetProgress,
         ) {
             it(9f)

@@ -46,10 +46,11 @@ class AboutSheetTest {
         var closed = false
         ui.setContent { MaterialTheme { AboutSheetForTest({ closed = true }, { links.add(it) }) } }
         for (label in
-            listOf("Source code on GitHub", "Apache License 2.0", "Open-source notices")) ui
-            .onNodeWithText(label)
-            .performScrollTo()
-            .performClick()
+            listOf(
+                appString(R.string.source_code_github),
+                appString(R.string.apache_license),
+                appString(R.string.opensource_notices),
+            )) ui.onNodeWithText(label).performScrollTo().performClick()
         ui.runOnIdle {
             assertEquals(
                 listOf(

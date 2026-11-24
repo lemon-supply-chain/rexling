@@ -74,7 +74,16 @@ class ActivitySheetTest {
         ui.onNodeWithContentDescription(appString(R.string.refresh_activity)).assertIsEnabled()
         ui.onNodeWithText(appString(R.string.filter_attention)).performClick()
         ui.onNodeWithText("Building").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Review, Approval, Session s2, Mac").performClick()
+        ui.onNodeWithContentDescription(
+                appString(
+                    R.string.a11y_activity_record,
+                    "Review",
+                    appString(R.string.activity_kind_approval),
+                    "Session s2",
+                    "Mac",
+                ),
+            )
+            .performClick()
         ui.runOnIdle {
             assertEquals("b", selected!!.server.id)
             assertEquals("s2", selected!!.record.session)
@@ -177,7 +186,14 @@ class ActivitySheetTest {
                 )
             }
         }
-        val rowDescription = "Review, Finished, Session s, Linux"
+        val rowDescription =
+            appString(
+                R.string.a11y_activity_record,
+                "Review",
+                appString(R.string.filter_finished),
+                "Session s",
+                "Linux",
+            )
         fun textBounds() =
             ui.onNodeWithText("Review", useUnmergedTree = true)
                 .fetchSemanticsNode()
@@ -221,19 +237,21 @@ class ActivitySheetTest {
             .assert(
                 SemanticsMatcher.expectValue(
                     androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
-                    "Finished",
+                    appString(R.string.filter_finished),
                 ),
             )
         ui.onNodeWithText(appString(R.string.a11y_state_seen)).assertDoesNotExist()
         capture("activity-finished-alignment-dark.png")
-        ui.onNodeWithContentDescription("Mark Review seen").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_mark_seen, "Review")).performClick()
         ui.onNodeWithText(appString(R.string.a11y_state_seen)).assertDoesNotExist()
         ui.onNodeWithText(appString(R.string.mark_seen)).assertIsNotEnabled()
         ui.onNodeWithContentDescription(rowDescription)
             .assert(
                 SemanticsMatcher.expectValue(
                     androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
-                    "Finished · Seen",
+                    appString(R.string.filter_finished) +
+                        " · " +
+                        appString(R.string.a11y_state_seen),
                 ),
             )
         assertEquals("Acknowledging must not move the title block", before, textBounds())
