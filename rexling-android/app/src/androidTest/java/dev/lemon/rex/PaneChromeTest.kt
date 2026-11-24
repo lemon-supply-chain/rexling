@@ -415,7 +415,8 @@ class PaneChromeTest {
             }
         }
         fun check(width: androidx.compose.ui.unit.Dp, mode: String) {
-            ui.onNodeWithContentDescription("Tabs").assertWidthIsEqualTo(width)
+            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+                .assertWidthIsEqualTo(width)
             ui.onNodeWithContentDescription(
                     appString(R.string.a11y_tab, "PDF preview", "Codex"),
                     substring = true,
@@ -423,12 +424,17 @@ class PaneChromeTest {
                 .assertIsDisplayed()
                 .assertIsSelected()
             ui.onNodeWithTag("Tab unread dot tab", useUnmergedTree = true).assertIsDisplayed()
-            listOf("Show keyboard", "Tabs and panes", "Activity").forEach { description ->
-                ui.onNodeWithContentDescription(description)
-                    .assertIsDisplayed()
-                    .assertWidthIsEqualTo(36.dp)
-                    .performClick()
-            }
+            listOf(
+                    appString(R.string.a11y_show_keyboard),
+                    appString(R.string.a11y_tabs_and_panes),
+                    appString(R.string.activity),
+                )
+                .forEach { description ->
+                    ui.onNodeWithContentDescription(description)
+                        .assertIsDisplayed()
+                        .assertWidthIsEqualTo(36.dp)
+                        .performClick()
+                }
             val bitmap = ui.onNodeWithTag("Side tabs fixture").captureToImage().asAndroidBitmap()
             File(
                     InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,

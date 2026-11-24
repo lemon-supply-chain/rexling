@@ -38,7 +38,7 @@ class ExperimentalPreferenceTest {
         toggle.performScrollTo().assertIsOff().performClick().assertIsOn()
         ui.onNodeWithText(appString(R.string.section_experimental)).assertIsDisplayed()
         ui.onNodeWithText(
-                "Use Codex’s explicit Action Required title when its status stays Working. Depends on Codex’s title format.",
+                appString(R.string.codex_title_attention_detail),
             )
             .assertIsDisplayed()
         ui.runOnIdle { assertEquals(1, calls) }

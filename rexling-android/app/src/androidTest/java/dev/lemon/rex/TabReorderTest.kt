@@ -82,17 +82,23 @@ class TabReorderTest {
         show()
         val start = tab("One").fetchSemanticsNode().boundsInRoot.center
         val end = tab("Three").fetchSemanticsNode().boundsInRoot.center
-        val root = ui.onNodeWithContentDescription("Tabs").fetchSemanticsNode().boundsInRoot.topLeft
+        val root =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .topLeft
         ui.mainClock.autoAdvance = false
-        ui.onNodeWithContentDescription("Tabs").performTouchInput { down(start - root) }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
+            down(start - root)
+        }
         ui.mainClock.advanceTimeBy(700)
         ui.waitForIdle()
-        ui.onNodeWithContentDescription("Tabs").performTouchInput {
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
             moveTo(end - root + Offset(10f, 0f), 200)
         }
         ui.mainClock.advanceTimeBy(100)
         ui.waitForIdle()
-        ui.onNodeWithContentDescription("Tabs").performTouchInput { up() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput { up() }
         ui.mainClock.advanceTimeBy(500)
         ui.runOnIdle {
             assertEquals(listOf("Two", "Three", "One", "Four", "Five", "Six"), order.value)
@@ -106,17 +112,25 @@ class TabReorderTest {
     @Test
     fun normalSwipeScrollsAndCancelledDragDoesNotMutateOrder() {
         show()
-        ui.onNodeWithContentDescription("Tabs").performTouchInput { swipeLeft() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
+            swipeLeft()
+        }
         ui.runOnIdle { assertTrue(moves.isEmpty()) }
-        ui.onNodeWithContentDescription("Tabs").performTouchInput { swipeRight() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
+            swipeRight()
+        }
         ui.waitForIdle()
         ui.mainClock.autoAdvance = false
         tab("One").performTouchInput { down(center) }
         ui.mainClock.advanceTimeBy(700)
         ui.waitForIdle()
-        ui.onNodeWithContentDescription("Tabs").performTouchInput { moveBy(Offset(90f, 0f)) }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
+            moveBy(Offset(90f, 0f))
+        }
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Tabs").performTouchInput { cancel() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
+            cancel()
+        }
         ui.mainClock.advanceTimeBy(500)
         ui.runOnIdle {
             assertTrue(moves.isEmpty())
@@ -129,7 +143,7 @@ class TabReorderTest {
     fun edgeHoldScrollsToTabsThatStartedOffscreen() {
         show()
         ui.mainClock.autoAdvance = false
-        val strip = ui.onNodeWithContentDescription("Tabs")
+        val strip = ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
         val start = tab("One").fetchSemanticsNode().boundsInRoot.center
         val bounds = strip.fetchSemanticsNode().boundsInRoot
         strip.performTouchInput { down(start - bounds.topLeft) }
@@ -156,7 +170,7 @@ class TabReorderTest {
         ui.waitForIdle()
         ui.runOnIdle { session.value = "session-two" }
         ui.mainClock.advanceTimeByFrame()
-        ui.onNodeWithContentDescription("Tabs").performTouchInput {
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
             moveBy(Offset(140f, 0f))
             up()
         }
@@ -170,7 +184,7 @@ class TabReorderTest {
         show()
         val actions = tab("One").fetchSemanticsNode().config[SemanticsActions.CustomActions]
         ui.runOnIdle {
-            assertEquals(listOf("Move right"), actions.map { it.label })
+            assertEquals(listOf(appString(R.string.move_right)), actions.map { it.label })
             assertTrue(actions.single().action())
         }
         ui.runOnIdle { enabled.value = false }

@@ -174,7 +174,7 @@ class KeyboardBarTest {
     @Test
     fun nativeHoldSlideRepeatsAndReleaseDoesNotActivateANeighboringButton() {
         keyboard()
-        val bounds = nativeBounds("Arrow keys")
+        val bounds = nativeBounds(appString(R.string.a11y_arrow_keys))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
         fun send(action: Int, x: Float) {
@@ -348,13 +348,13 @@ class KeyboardBarTest {
         val labels =
             listOf(
                 "Escape",
-                "Control",
+                appString(R.string.a11y_control),
                 "Alt",
                 "Shift",
-                "Tab key",
-                "Arrow keys",
+                appString(R.string.a11y_tab_key),
+                appString(R.string.a11y_arrow_keys),
                 "Enter",
-                "Hide keyboard",
+                appString(R.string.a11y_hide_keyboard),
             )
         val bounds = labels.map { label ->
             ui.onNodeWithContentDescription(label)
@@ -391,10 +391,17 @@ class KeyboardBarTest {
             viewing[x, y],
         )
         for (label in
-            listOf("Escape", "Control", "Alt", "Shift", "Tab key", "Arrow keys", "Enter")) ui
-            .onNodeWithContentDescription(label)
-            .assertIsNotEnabled()
-            .performTouchInput { click() }
+            listOf(
+                "Escape",
+                appString(R.string.a11y_control),
+                "Alt",
+                "Shift",
+                appString(R.string.a11y_tab_key),
+                appString(R.string.a11y_arrow_keys),
+                "Enter",
+            )) ui.onNodeWithContentDescription(label).assertIsNotEnabled().performTouchInput {
+            click()
+        }
         ui.runOnIdle { assertTrue("Readable icons must not enable terminal input", sent.isEmpty()) }
     }
 
@@ -453,15 +460,18 @@ class KeyboardBarTest {
         ui.runOnIdle { assertEquals(listOf("\r"), sent) }
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
             .assertIsNotDisplayed()
-        ui.onNodeWithContentDescription("Function key F1").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
+            .assertDoesNotExist()
         ui.onNodeWithContentDescription(appString(R.string.a11y_terminal_keys)).performTouchInput {
             swipeRight()
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
             .assertIsDisplayed()
             .performTouchInput { click() }
-        ui.onNodeWithContentDescription("Function key F1").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Function key F12").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
+            .assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F12"))
+            .assertIsDisplayed()
         val chevron =
             ui.onNodeWithContentDescription(appString(R.string.a11y_hide_extra_keys))
                 .fetchSemanticsNode()
@@ -477,7 +487,8 @@ class KeyboardBarTest {
         capture("hidden-chevron-revealed", ui.onNodeWithTag("Keyboard test area"))
         ui.onNodeWithContentDescription(appString(R.string.a11y_hide_extra_keys))
             .performTouchInput { click() }
-        ui.onNodeWithContentDescription("Function key F1").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
+            .assertDoesNotExist()
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
             .assertIsNotDisplayed()
         assertEquals(
@@ -523,11 +534,13 @@ class KeyboardBarTest {
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
             .assertIsDisplayed()
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        ui.onNodeWithContentDescription("Function key F1").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
+            .assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard)).performTouchInput {
             click()
         }
-        ui.onNodeWithContentDescription("Function key F1").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
+            .assertDoesNotExist()
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
             .assertIsNotDisplayed()
         assertEquals(
@@ -593,7 +606,7 @@ class KeyboardBarTest {
     @Test
     fun nativeTapDoesNotOpenAPersistentArrowPopupOrType() {
         keyboard()
-        nativeTap("Arrow keys")
+        nativeTap(appString(R.string.a11y_arrow_keys))
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
             .assertDoesNotExist()
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
@@ -781,7 +794,7 @@ class KeyboardBarTest {
             }
             // Begin near the left edge, not at the button's center.
             send(MotionEvent.ACTION_DOWN, left + 4f, center.y)
-            val face = nativeBounds("Arrow joystick")
+            val face = nativeBounds(appString(R.string.a11y_arrow_joystick))
             val context = InstrumentationRegistry.getInstrumentation().targetContext
             InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { shot
                 ->
@@ -822,9 +835,15 @@ class KeyboardBarTest {
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performTouchInput {
             doubleClick()
         }
-        ui.onNodeWithContentDescription("Left arrow").performTouchInput { click() }
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_left)),
+            )
+            .performTouchInput { click() }
         ui.onNodeWithContentDescription("Shift").assertIsNotSelected()
-        ui.onNodeWithContentDescription("Right arrow").performTouchInput { click() }
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_right)),
+            )
+            .performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_page_up)).performTouchInput {
             click()
         }
@@ -847,7 +866,7 @@ class KeyboardBarTest {
     @Test
     fun nativeSingleTapClosesPopupAndOutsideKeysLeaveItOpen() {
         keyboard()
-        val bounds = nativeBounds("Arrow keys")
+        val bounds = nativeBounds(appString(R.string.a11y_arrow_keys))
         fun doubleTap() {
             repeat(2) { index ->
                 val down = SystemClock.uptimeMillis()
@@ -879,9 +898,9 @@ class KeyboardBarTest {
         nativeTap("Escape")
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
             .assertIsDisplayed()
-        nativeTap("Left arrow")
+        nativeTap(appString(R.string.a11y_arrow_format, appString(R.string.direction_left)))
         ui.runOnIdle { assertEquals(listOf("\u001b", "\u001b[D"), sent) }
-        nativeTap("Arrow keys")
+        nativeTap(appString(R.string.a11y_arrow_keys))
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
             .assertDoesNotExist()
         ui.runOnIdle {

@@ -112,7 +112,7 @@ class ControlShortcutsTest {
     @Test
     fun holdSlideAndReleaseSendsExactlyOneShortcut() {
         fixture()
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
         touch(MotionEvent.ACTION_DOWN, start.exactCenterX(), start.exactCenterY(), down)
@@ -121,7 +121,7 @@ class ControlShortcutsTest {
         ui.waitForIdle()
         ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
             .assertIsDisplayed()
-        val target = bounds("Control W")
+        val target = bounds(appString(R.string.a11y_control_key, "W"))
         touch(MotionEvent.ACTION_MOVE, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
         ui.onNodeWithContentDescription("Control W").assertIsSelected()
@@ -138,14 +138,14 @@ class ControlShortcutsTest {
     @Test
     fun holdSlideAndReleaseCanReachTheNewControlJCell() {
         fixture()
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
         touch(MotionEvent.ACTION_DOWN, start.exactCenterX(), start.exactCenterY(), down)
         ui.mainClock.advanceTimeBy(650)
         repeat(3) { ui.mainClock.advanceTimeByFrame() }
         ui.waitForIdle()
-        val target = bounds("Control J")
+        val target = bounds(appString(R.string.a11y_control_key, "J"))
         touch(MotionEvent.ACTION_MOVE, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
         ui.onNodeWithContentDescription("Control J").assertIsSelected()
@@ -162,16 +162,16 @@ class ControlShortcutsTest {
     @Test
     fun popupBelowAnEdgeTriggerStillSelectsTheCorrectRow() {
         fixture(alignment = Alignment.TopStart)
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
         touch(MotionEvent.ACTION_DOWN, start.exactCenterX(), start.exactCenterY(), down)
         ui.mainClock.advanceTimeBy(650)
         repeat(3) { ui.mainClock.advanceTimeByFrame() }
         ui.waitForIdle()
-        assertTrue(bounds("Control shortcuts").top > start.bottom)
+        assertTrue(bounds(appString(R.string.a11y_control_shortcuts)).top > start.bottom)
         capture("below-edge")
-        val target = bounds("Control W")
+        val target = bounds(appString(R.string.a11y_control_key, "W"))
         touch(MotionEvent.ACTION_MOVE, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
         ui.onNodeWithContentDescription("Control W").assertIsSelected()
@@ -196,7 +196,7 @@ class ControlShortcutsTest {
     @Test
     fun releasingOutsideThePopupCancelsWithoutTogglingOrTyping() {
         fixture()
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
         touch(MotionEvent.ACTION_DOWN, start.exactCenterX(), start.exactCenterY(), down)
@@ -218,14 +218,14 @@ class ControlShortcutsTest {
     @Test
     fun holdSlideAndReleaseSendsControlRightBracketExactlyOnce() {
         fixture()
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
         touch(MotionEvent.ACTION_DOWN, start.exactCenterX(), start.exactCenterY(), down)
         ui.mainClock.advanceTimeBy(650)
         repeat(3) { ui.mainClock.advanceTimeByFrame() }
         ui.waitForIdle()
-        val target = bounds("Control ]")
+        val target = bounds(appString(R.string.a11y_control_key, "]"))
         touch(MotionEvent.ACTION_MOVE, target.exactCenterX(), target.exactCenterY(), down)
         ui.mainClock.advanceTimeByFrame()
         ui.onNodeWithContentDescription("Control ]").assertIsSelected()
@@ -243,14 +243,14 @@ class ControlShortcutsTest {
     @Test
     fun releasingInAnEmptyGridCellDoesNotSendAShortcut() {
         fixture()
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
         touch(MotionEvent.ACTION_DOWN, start.exactCenterX(), start.exactCenterY(), down)
         ui.mainClock.advanceTimeBy(650)
         repeat(3) { ui.mainClock.advanceTimeByFrame() }
         ui.waitForIdle()
-        val last = bounds("Control ]")
+        val last = bounds(appString(R.string.a11y_control_key, "]"))
         val density =
             InstrumentationRegistry.getInstrumentation()
                 .targetContext
@@ -336,7 +336,7 @@ class ControlShortcutsTest {
     }
 
     private fun nativeTapControl() {
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, start.exactCenterX(), start.exactCenterY(), down)
         SystemClock.sleep(35)
@@ -383,7 +383,7 @@ class ControlShortcutsTest {
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcuts))
             .assertIsDisplayed()
-        val start = bounds("Control")
+        val start = bounds(appString(R.string.a11y_control))
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, 1f, start.exactCenterY(), down)
         SystemClock.sleep(35)

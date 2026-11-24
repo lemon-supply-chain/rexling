@@ -112,7 +112,10 @@ class MultiPaneMoveTest {
             val outer = with(ui.density) { 8.dp.toPx() }
             for (rail in listOf(TabBarPosition.LEFT, TabBarPosition.RIGHT)) {
                 ui.runOnIdle { side.value = rail }
-                val tabs = ui.onNodeWithContentDescription("Tabs").fetchSemanticsNode().boundsInRoot
+                val tabs =
+                    ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
                 val workspace =
                     ui.onNodeWithTag("Tiled workspace").fetchSemanticsNode().boundsInRoot
                 val (left, upper, lower) =
@@ -153,6 +156,7 @@ class MultiPaneMoveTest {
                 moveBy(Offset(20.dp.toPx(), 0f), delayMillis = 100)
                 up()
             }
+            ui.waitForIdle()
             assertTrue(columns.fetchSemanticsNode().boundsInRoot.center.x > second)
         } finally {
             ui.runOnIdle {

@@ -79,7 +79,7 @@ class AdaptiveTabsTest {
     private fun tab(index: Int) =
         ui.onNode(
             hasContentDescription(
-                appString(R.string.a11y_tab, names.value[index], "").trimEnd(),
+                appString(R.string.a11y_tab_item, names.value[index], "").trimEnd(),
                 substring = true,
             ),
         )
@@ -87,7 +87,10 @@ class AdaptiveTabsTest {
     private fun bounds(index: Int) = tab(index).fetchSemanticsNode().boundsInRoot
 
     private fun assertInside(index: Int) {
-        val strip = ui.onNodeWithContentDescription("Tabs").fetchSemanticsNode().boundsInRoot
+        val strip =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+                .fetchSemanticsNode()
+                .boundsInRoot
         val tab = bounds(index)
         assertTrue(
             "$tab outside $strip",
@@ -165,7 +168,7 @@ class AdaptiveTabsTest {
     fun selectingAnOverflowTabBringsItsEntireExpandedRowIntoView() {
         count.intValue = 8
         show()
-        ui.onNodeWithContentDescription("Tabs").performScrollToIndex(7)
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performScrollToIndex(7)
         tab(7).performClick().assertIsSelected()
         assertInside(7)
         capture("overflow-selection")

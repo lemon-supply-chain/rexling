@@ -134,7 +134,15 @@ class ActivitySheetTest {
             }
         }
         ui.onNodeWithText("Connection interrupted").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Finished task, Finished, Session s, Linux")
+        ui.onNodeWithContentDescription(
+                appString(
+                    R.string.a11y_activity_record,
+                    "Finished task",
+                    appString(R.string.filter_finished),
+                    "Session s",
+                    "Linux",
+                ),
+            )
             .assertIsNotEnabled()
         capture("activity-compact-dark.png")
         ui.runOnIdle { assertFalse(selected) }
@@ -430,7 +438,7 @@ class ActivitySheetTest {
             .assert(
                 SemanticsMatcher.expectValue(
                     androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
-                    "2 new activity items",
+                    appQuantity(R.plurals.a11y_unread_items, 2),
                 ),
             )
         ui.runOnIdle { count.intValue = 0 }

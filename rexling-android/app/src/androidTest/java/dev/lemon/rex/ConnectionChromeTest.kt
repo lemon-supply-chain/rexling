@@ -33,7 +33,8 @@ class ConnectionChromeTest {
         }
         ui.mainClock.autoAdvance = false
         ui.mainClock.advanceTimeBy(450)
-        ui.onNodeWithText("Sized by another client · 67×25").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.sized_by_another_client) + " · 67×25")
+            .assertIsDisplayed()
         ui.onNodeWithText(appString(R.string.take_over)).performClick()
         ui.runOnIdle {
             assertTrue(capture)

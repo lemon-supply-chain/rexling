@@ -51,6 +51,8 @@ class ArrowJoystickTest {
                 }
             }
         }
+        // Let the pointer-input coroutines attach before the tests freeze the clock.
+        ui.waitForIdle()
     }
 
     @Test
@@ -78,7 +80,7 @@ class ArrowJoystickTest {
         val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput {
             down(center)
-            moveTo(center + Offset(-40f, 0f))
+            moveTo(center + Offset(-16.dp.toPx(), 0f))
         }
         ui.mainClock.advanceTimeByFrame()
         ui.runOnIdle { assertEquals(listOf("one:left"), sent) }
@@ -96,7 +98,7 @@ class ArrowJoystickTest {
         val paused = sent.size
         ui.mainClock.advanceTimeBy(500)
         ui.runOnIdle { assertEquals(paused, sent.size) }
-        key.performTouchInput { moveTo(center + Offset(40f, 0f)) }
+        key.performTouchInput { moveTo(center + Offset(16.dp.toPx(), 0f)) }
         ui.mainClock.advanceTimeByFrame()
         ui.runOnIdle { assertEquals("one:right", sent.last()) }
         key.performTouchInput { up() }
@@ -141,10 +143,10 @@ class ArrowJoystickTest {
         val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput {
             down(center)
-            moveTo(center + Offset(0f, -40f))
+            moveTo(center + Offset(0f, -16.dp.toPx()))
         }
         ui.mainClock.advanceTimeBy(400)
-        key.performTouchInput { moveTo(center + Offset(0f, 40f)) }
+        key.performTouchInput { moveTo(center + Offset(0f, 16.dp.toPx())) }
         ui.mainClock.advanceTimeByFrame()
         val boundary = sent.size - 1
         ui.mainClock.advanceTimeBy(500)
@@ -181,7 +183,7 @@ class ArrowJoystickTest {
         val key = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         key.performTouchInput {
             down(center)
-            moveTo(center + Offset(40f, 0f))
+            moveTo(center + Offset(16.dp.toPx(), 0f))
         }
         ui.mainClock.advanceTimeBy(400)
         ui.runOnIdle { enabled.value = false }
@@ -203,7 +205,12 @@ class ArrowJoystickTest {
             .assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
             .assertDoesNotExist()
-        repeat(2) { ui.onNodeWithContentDescription("Left arrow").performTouchInput { click() } }
+        repeat(2) {
+            ui.onNodeWithContentDescription(
+                    appString(R.string.a11y_arrow_format, appString(R.string.direction_left)),
+                )
+                .performTouchInput { click() }
+        }
         ui.runOnIdle { assertEquals(listOf("one:left", "one:left"), sent) }
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
             .assertIsDisplayed()
@@ -220,7 +227,7 @@ class ArrowJoystickTest {
         key.performTouchInput { doubleClick() }
         key.performTouchInput {
             down(center)
-            moveTo(center + Offset(40f, 0f))
+            moveTo(center + Offset(16.dp.toPx(), 0f))
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
             .assertDoesNotExist()
@@ -242,7 +249,10 @@ class ArrowJoystickTest {
         key.performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
             .assertIsDisplayed()
-        ui.onNodeWithContentDescription("Down arrow").performTouchInput { click() }
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_down)),
+            )
+            .performTouchInput { click() }
         ui.runOnIdle { assertEquals(listOf("one:down"), sent) }
         key.performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
@@ -276,7 +286,10 @@ class ArrowJoystickTest {
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_key_popup))
             .assertIsDisplayed()
         ui.mainClock.autoAdvance = false
-        ui.onNodeWithContentDescription("Right arrow").performTouchInput { down(center) }
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_right)),
+            )
+            .performTouchInput { down(center) }
         ui.mainClock.advanceTimeBy(650)
         ui.runOnIdle {
             assertTrue(sent.isNotEmpty())
@@ -306,13 +319,16 @@ class ArrowJoystickTest {
         ui.onNodeWithContentDescription(appString(R.string.a11y_page_down)).performTouchInput {
             down(center)
         }
-        ui.mainClock.advanceTimeBy((holdDelay - 32).coerceAtLeast(1))
-        ui.runOnIdle { assertTrue(sent.isEmpty()) }
-        ui.mainClock.advanceTimeBy(64)
+        ui.mainClock.advanceTimeByFrame()
+        // A keypad press fires immediately; the long-press delay only starts the repeat.
         ui.runOnIdle { assertEquals(listOf("one:pagedown"), sent) }
+        ui.mainClock.advanceTimeBy((holdDelay - 32).coerceAtLeast(1))
+        ui.runOnIdle { assertEquals(1, sent.size) }
+        ui.mainClock.advanceTimeBy(64)
+        ui.runOnIdle { assertEquals(2, sent.size) }
         ui.mainClock.advanceTimeBy(160)
         ui.runOnIdle {
-            assertEquals(2, sent.size)
+            assertEquals(3, sent.size)
             target.value = "two"
         }
         ui.mainClock.advanceTimeByFrame()
@@ -334,7 +350,12 @@ class ArrowJoystickTest {
                 .fetchSemanticsNode()
                 .config[SemanticsActions.CustomActions]
         assertEquals(
-            setOf("Left arrow", "Right arrow", "Up arrow", "Down arrow"),
+            setOf(
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_left)),
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_right)),
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_up)),
+                appString(R.string.a11y_arrow_format, appString(R.string.direction_down)),
+            ),
             actions.map { it.label }.toSet(),
         )
         ui.runOnIdle {

@@ -57,7 +57,7 @@ class StartupTabsTest {
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_tab, "Loading…", "Loading…"))
             .assertDoesNotExist()
-        ui.onNodeWithContentDescription("Tabs").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).assertDoesNotExist()
         val actions =
             ui.onNodeWithContentDescription(appString(R.string.activity))
                 .fetchSemanticsNode()
@@ -87,7 +87,7 @@ class StartupTabsTest {
             )
             .assertIsDisplayed()
         ui.runOnIdle { session.value = "another-session" }
-        ui.onNodeWithContentDescription("Tabs").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).assertDoesNotExist()
         assertEquals(
             actions,
             ui.onNodeWithContentDescription(appString(R.string.activity))
@@ -104,8 +104,9 @@ class StartupTabsTest {
         try {
             val first = SavedWorkspacePresentation(prefs, "server-one")
             first.chrome(state(codex, "First task"))
+            // Presentation keeps the identity but never the raw candidate process names.
             assertEquals(
-                codex,
+                codex.copy(candidates = emptyList()),
                 SavedWorkspacePresentation(prefs, "server-one").chrome(state()).programs["p"],
             )
             assertEquals(

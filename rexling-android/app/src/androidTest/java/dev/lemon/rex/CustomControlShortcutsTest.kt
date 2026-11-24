@@ -38,7 +38,8 @@ class CustomControlShortcutsTest {
             }
         }
         open()
-        ui.onNodeWithContentDescription("Control shortcut Workspace").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcut, "Workspace"))
+            .performClick()
         ui.runOnIdle { assertEquals(listOf("\u0000l"), sent) }
         open()
         ui.runOnIdle { target.value = "pane-b" }
@@ -72,7 +73,8 @@ class CustomControlShortcutsTest {
         open()
         ui.onNodeWithContentDescription(appString(R.string.a11y_next_ctrl_page)).performClick()
         ui.onNodeWithText("2/2").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Control shortcut Key 13").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control_shortcut, "Key 13"))
+            .performClick()
         ui.runOnIdle { assertEquals(listOf("n"), sent) }
     }
 
@@ -102,8 +104,11 @@ class CustomControlShortcutsTest {
         ui.onNodeWithText(appString(R.string.session_name_optional)).performTextInput("Workspace")
         ui.onNodeWithText(appString(R.string.done)).performScrollTo().performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_ctrl_shortcut_list))
-            .performScrollToNode(hasContentDescription("Edit Ctrl shortcut Workspace"))
-        ui.onNodeWithContentDescription("Edit Ctrl shortcut Workspace").assertIsDisplayed()
+            .performScrollToNode(
+                hasContentDescription(appString(R.string.a11y_edit_ctrl_shortcut, "Workspace")),
+            )
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_ctrl_shortcut, "Workspace"))
+            .assertIsDisplayed()
         ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertTrue(closed)
@@ -127,7 +132,8 @@ class CustomControlShortcutsTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription("Edit Ctrl shortcut ^C").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_ctrl_shortcut, "^C"))
+            .performClick()
         ui.onNodeWithText(appString(R.string.clear)).performClick()
         ui.onNodeWithText(appString(R.string.press_keys)).performTextInput("ab")
         ui.onNodeWithText("Ctrl+A").assertExists()
@@ -136,22 +142,24 @@ class CustomControlShortcutsTest {
         ui.onNodeWithText("B", substring = false).assertDoesNotExist()
         ui.onNodeWithText(appString(R.string.press_keys)).performImeAction()
         ui.onAllNodesWithText("Enter", substring = false).assertCountEquals(2)
-        ui.onNodeWithText("Cancel", substring = false).performScrollTo().performClick()
+        ui.onNodeWithText(appString(R.string.cancel)).performScrollTo().performClick()
         val from =
-            ui.onNodeWithContentDescription("Edit Ctrl shortcut ^C")
+            ui.onNodeWithContentDescription(appString(R.string.a11y_edit_ctrl_shortcut, "^C"))
                 .fetchSemanticsNode()
                 .boundsInRoot
         val to =
-            ui.onNodeWithContentDescription("Edit Ctrl shortcut ^Z")
+            ui.onNodeWithContentDescription(appString(R.string.a11y_edit_ctrl_shortcut, "^Z"))
                 .fetchSemanticsNode()
                 .boundsInRoot
-        ui.onNodeWithContentDescription("Edit Ctrl shortcut ^C").performTouchInput {
-            down(center)
-            advanceEventTime(700)
-            moveTo(to.center - from.topLeft, delayMillis = 300)
-            up()
-        }
-        ui.onNodeWithContentDescription("Remove Ctrl shortcut ^Z").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_ctrl_shortcut, "^C"))
+            .performTouchInput {
+                down(center)
+                advanceEventTime(700)
+                moveTo(to.center - from.topLeft, delayMillis = 300)
+                up()
+            }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_remove_ctrl_shortcut, "^Z"))
+            .performClick()
         ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle { assertEquals(listOf("d", "c"), saved!!.map { it.keys }) }
     }
