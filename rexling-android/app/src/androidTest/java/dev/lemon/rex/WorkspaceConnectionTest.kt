@@ -45,7 +45,9 @@ class WorkspaceConnectionTest {
                 .commit()
             try {
                 ActivityScenario.launch(MainActivity::class.java).use {
-                    val progress = hasText("Connecting…") or hasText("Reconnecting · input paused")
+                    val progress =
+                        hasText(appString(R.string.connecting)) or
+                            hasText(appString(R.string.reconnecting_input_paused))
                     ui.waitUntil(10_000) {
                         ui.onAllNodes(progress).fetchSemanticsNodes().isNotEmpty()
                     }

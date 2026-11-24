@@ -90,9 +90,9 @@ class TabPaneSwitcherTest {
         row(appString(R.string.a11y_tab_title, "Project")).assertIsSelected()
         ui.onNodeWithText("Open tab").assertDoesNotExist()
         capture("tabs-light")
-        row("Tab Review changes").performTouchInput { click() }
+        row(appString(R.string.a11y_tab_title, "Review changes")).performTouchInput { click() }
         ui.onNodeWithText(appString(R.string.section_panes)).performClick()
-        row("Pane Plan next steps").assertIsSelected()
+        row(appString(R.string.a11y_pane_title, "Plan next steps")).assertIsSelected()
         row(appString(R.string.a11y_pane_title, "fish")).performTouchInput { click() }
         ui.onNodeWithText("Open pane").assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("tab:w2", "pane:a"), calls) }
@@ -102,23 +102,33 @@ class TabPaneSwitcherTest {
     fun horizontalSwipesRevealOneRowAtATimeAndKeepTheSection() {
         show(dark = true)
         row(appString(R.string.a11y_tab_title, "Project")).swipeForSwitcherActions()
-        action("Rename tab").assertIsDisplayed()
+        action(appString(R.string.label_rename_tab)).assertIsDisplayed()
         if (
-            ui.onAllNodesWithContentDescription("Tab Review changes")
+            ui.onAllNodesWithContentDescription(
+                    appString(R.string.a11y_tab_title, "Review changes"),
+                )
                 .fetchSemanticsNodes()
                 .isEmpty()
         ) {
-            row("Reorder tabs").performScrollToKey("w2")
+            row(appString(R.string.reorder_tabs)).performScrollToKey("w2")
         }
-        row("Tab Review changes").performScrollTo().swipeForSwitcherActions()
-        action("Rename tab").assertIsDisplayed()
-        val rowBounds = row("Tab Review changes").fetchSemanticsNode().boundsInRoot
+        row(appString(R.string.a11y_tab_title, "Review changes"))
+            .performScrollTo()
+            .swipeForSwitcherActions()
+        action(appString(R.string.label_rename_tab)).assertIsDisplayed()
+        val rowBounds =
+            row(appString(R.string.a11y_tab_title, "Review changes"))
+                .fetchSemanticsNode()
+                .boundsInRoot
         assertTrue(
-            action("Rename tab").fetchSemanticsNode().boundsInRoot.center.y in
-                rowBounds.top..rowBounds.bottom,
+            action(appString(R.string.label_rename_tab))
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .center
+                .y in rowBounds.top..rowBounds.bottom,
         )
-        row("Tab Review changes").performTouchInput { swipeRight() }
-        action("Rename tab").assertDoesNotExist()
+        row(appString(R.string.a11y_tab_title, "Review changes")).performTouchInput { swipeRight() }
+        action(appString(R.string.label_rename_tab)).assertDoesNotExist()
         ui.onNodeWithText(appString(R.string.label_new_tab)).assertIsDisplayed()
         ui.runOnIdle { assertTrue(calls.isEmpty()) }
     }
@@ -128,15 +138,15 @@ class TabPaneSwitcherTest {
         show()
         ui.onNodeWithText(appString(R.string.label_new_tab)).performClick()
         row(appString(R.string.a11y_tab_title, "Project")).swipeForSwitcherActions()
-        action("Close tab").performTouchInput { click() }
+        action(appString(R.string.close_tab)).performTouchInput { click() }
         ui.onNodeWithText(appString(R.string.section_panes)).performClick()
-        row("Pane Plan next steps").swipeForSwitcherActions()
-        action("Split right").performTouchInput { click() }
-        row("Pane nvim").swipeForSwitcherActions()
+        row(appString(R.string.a11y_pane_title, "Plan next steps")).swipeForSwitcherActions()
+        action(appString(R.string.split_right)).performTouchInput { click() }
+        row(appString(R.string.a11y_pane_title, "nvim")).swipeForSwitcherActions()
         capture("pane-actions")
-        action("Split below").performTouchInput { click() }
+        action(appString(R.string.split_below)).performTouchInput { click() }
         row(appString(R.string.a11y_pane_title, "fish")).swipeForSwitcherActions()
-        action("Close pane").performTouchInput { click() }
+        action(appString(R.string.close_pane)).performTouchInput { click() }
         ui.runOnIdle {
             assertEquals(
                 listOf(
@@ -154,11 +164,11 @@ class TabPaneSwitcherTest {
     @Test
     fun tappingARevealedPaneDismissesItsActionsBeforeItCanOpen() {
         show(initialPage = 1)
-        val pane = row("Pane nvim")
+        val pane = row(appString(R.string.a11y_pane_title, "nvim"))
         pane.swipeForSwitcherActions()
-        action("Rename pane").assertIsDisplayed()
+        action(appString(R.string.label_rename_pane)).assertIsDisplayed()
         ui.onNodeWithTag("Pane position: d", useUnmergedTree = true).performTouchInput { click() }
-        action("Rename pane").assertDoesNotExist()
+        action(appString(R.string.label_rename_pane)).assertDoesNotExist()
         ui.runOnIdle { assertTrue(calls.isEmpty()) }
         pane.performTouchInput { click() }
         ui.runOnIdle { assertEquals(listOf("pane:d"), calls) }
@@ -170,13 +180,13 @@ class TabPaneSwitcherTest {
         row(appString(R.string.a11y_tab_title, "Project"))
             .assertIsNotEnabled()
             .swipeForSwitcherActions()
-        action("Close tab").assertDoesNotExist()
+        action(appString(R.string.close_tab)).assertDoesNotExist()
         ui.onNodeWithText(appString(R.string.label_new_tab)).assertIsNotEnabled()
         ui.onNodeWithText(appString(R.string.section_panes)).performClick()
         row(appString(R.string.a11y_pane_title, "fish"))
             .assertIsNotEnabled()
             .swipeForSwitcherActions()
-        action("Split right").assertDoesNotExist()
+        action(appString(R.string.split_right)).assertDoesNotExist()
         ui.runOnIdle { assertTrue(calls.isEmpty()) }
     }
 
@@ -187,15 +197,15 @@ class TabPaneSwitcherTest {
         ui.onNodeWithText(appString(R.string.label_new_tab)).performClick()
         ui.onNodeWithText(appString(R.string.section_panes)).performClick()
         ui.onNodeWithText(appString(R.string.no_panes_yet)).assertIsDisplayed()
-        action("Split below").assertDoesNotExist()
+        action(appString(R.string.split_below)).assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("new-tab"), calls) }
     }
 
     @Test
     fun paneIndicatorCanOpenDirectlyAndTheLayoutOpensItsPane() {
         show(initialPage = 1, dark = true)
-        row("Pane Plan next steps").assertIsSelected()
-        row("Pane layout").assertDoesNotExist()
+        row(appString(R.string.a11y_pane_title, "Plan next steps")).assertIsSelected()
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
         for (id in listOf("a", "b", "d")) ui.onNodeWithTag(
                 "Pane position: $id",
                 useUnmergedTree = true,
@@ -203,10 +213,10 @@ class TabPaneSwitcherTest {
             .assertIsDisplayed()
         capture("panes-dark")
         ui.onNodeWithText(appString(R.string.show_map)).performClick()
-        row("Pane layout").assertIsDisplayed()
-        row("Layout pane nvim").performClick()
+        row(appString(R.string.a11y_pane_layout)).assertIsDisplayed()
+        row(appString(R.string.a11y_layout_pane_format, "nvim")).performClick()
         ui.onNodeWithText(appString(R.string.hide_map)).performClick()
-        row("Pane layout").assertDoesNotExist()
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("pane:d"), calls) }
     }
 
@@ -214,18 +224,18 @@ class TabPaneSwitcherTest {
     fun unavailableGeometryStillAllowsSplittingTheSwipedPane() {
         show(initialPage = 1, withoutLayout = true, selectedBlock = "stale-pane")
         ui.onNodeWithText(appString(R.string.show_map)).assertDoesNotExist()
-        row("Pane layout").assertDoesNotExist()
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
         ui.onNodeWithTag("Pane position: a", useUnmergedTree = true).assertDoesNotExist()
         row(appString(R.string.a11y_pane_title, "fish")).swipeForSwitcherActions()
-        action("Split below").performClick()
+        action(appString(R.string.split_below)).performClick()
         ui.runOnIdle { assertEquals(listOf("new-pane:a:vertical"), calls) }
     }
 
     @Test
     fun removingTheRevealedPaneHidesItsActions() {
         show(initialPage = 1, selectedBlock = "a")
-        row("Pane nvim").swipeForSwitcherActions()
-        action("Split right").assertIsDisplayed()
+        row(appString(R.string.a11y_pane_title, "nvim")).swipeForSwitcherActions()
+        action(appString(R.string.split_right)).assertIsDisplayed()
         ui.runOnIdle {
             windows.value =
                 windows.value.map {
@@ -235,7 +245,7 @@ class TabPaneSwitcherTest {
                     )
                 }
         }
-        action("Split right").assertDoesNotExist()
+        action(appString(R.string.split_right)).assertDoesNotExist()
         ui.runOnIdle { assertTrue(calls.isEmpty()) }
     }
 
@@ -254,8 +264,10 @@ class TabPaneSwitcherTest {
                 else w
             }
         show(initialPage = 1)
-        row("Pane layout").assertDoesNotExist()
-        for (title in listOf("fish", "Plan next steps", "nvim", "Build", "Logs")) row("Pane $title")
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
+        for (title in listOf("fish", "Plan next steps", "nvim", "Build", "Logs")) row(
+                appString(R.string.a11y_pane_title, title),
+            )
             .assertIsDisplayed()
         capture("five-panes")
     }

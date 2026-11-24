@@ -33,7 +33,8 @@ class ExperimentalPreferenceTest {
                 )
             }
         }
-        val toggle = ui.onNode(hasText("Codex title attention") and isToggleable())
+        val toggle =
+            ui.onNode(hasText(appString(R.string.codex_title_attention)) and isToggleable())
         toggle.performScrollTo().assertIsOff().performClick().assertIsOn()
         ui.onNodeWithText(appString(R.string.section_experimental)).assertIsDisplayed()
         ui.onNodeWithText(
@@ -64,7 +65,7 @@ class ExperimentalPreferenceTest {
                 )
             }
         }
-        val toggle = ui.onNode(hasText("Keyboard suggestions") and isToggleable())
+        val toggle = ui.onNode(hasText(appString(R.string.keyboard_suggestions)) and isToggleable())
         toggle.performScrollTo().assertIsOff().performClick().assertIsOn()
         ui.runOnIdle { assertEquals(1, calls) }
         toggle.performClick().assertIsOff()
@@ -91,7 +92,7 @@ class ExperimentalPreferenceTest {
                 )
             }
         }
-        val toggle = ui.onNode(hasText("Compact Top App Bar") and isToggleable())
+        val toggle = ui.onNode(hasText(appString(R.string.compact_top_bar)) and isToggleable())
         toggle.performScrollTo().assertIsOff().performClick().assertIsOn()
         ui.runOnIdle { assertEquals(1, calls) }
         toggle.performClick().assertIsOff()

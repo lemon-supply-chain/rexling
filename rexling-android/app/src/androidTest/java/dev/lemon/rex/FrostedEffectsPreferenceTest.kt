@@ -84,7 +84,7 @@ class FrostedEffectsPreferenceTest {
                 dark.value = isDark
                 enabled.value = true
             }
-            val toggle = ui.onNode(hasText("Frosted glass effects") and isToggleable())
+            val toggle = ui.onNode(hasText(appString(R.string.frosted_effects)) and isToggleable())
             toggle.performScrollTo().assertIsOn().performClick().assertIsOff()
             capture(isDark)
             toggle.performClick().assertIsOn()

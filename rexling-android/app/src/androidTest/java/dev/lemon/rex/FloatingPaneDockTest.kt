@@ -178,7 +178,8 @@ class FloatingPaneDockTest {
                 )
             }
         }
-        val toggle = ui.onNode(hasText("Minimize floating panes") and isToggleable())
+        val toggle =
+            ui.onNode(hasText(appString(R.string.minimize_floating_panes)) and isToggleable())
         toggle
             .performScrollTo()
             .assertIsOff()

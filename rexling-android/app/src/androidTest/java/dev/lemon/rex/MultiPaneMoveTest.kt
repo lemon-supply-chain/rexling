@@ -321,7 +321,10 @@ class MultiPaneMoveTest {
             )
             val floatingCorner = hasAnyAncestor(hasTestTag("Floating terminal pane"))
             fun revealCorner() =
-                ui.onNode(hasContentDescription("Pane actions, top left") and floatingCorner)
+                ui.onNode(
+                        hasContentDescription(appString(R.string.a11y_pane_actions_top_left)) and
+                            floatingCorner,
+                    )
                     .performClick()
             revealCorner()
             ui.onNodeWithContentDescription(appString(R.string.a11y_move_floating_pane))

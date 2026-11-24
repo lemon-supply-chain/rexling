@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
@@ -60,10 +61,10 @@ internal fun ProgramStack(
             if (framed) 34.dp else 22.dp
         } else (if (framed) 32.dp else 21.dp) + step * others.size
     val start = if (fixedSlot) (slotWidth - paintedWidth) / 2 else 0.dp
+    val paneCount = pluralStringResource(R.plurals.pane_count, items.size, items.size)
     Box(
         Modifier.size(slotWidth, if (framed) 35.dp else 25.dp).clearAndSetSemantics {
-            contentDescription =
-                active.label + (if (items.size > 1) ", ${items.size} panes" else "")
+            contentDescription = active.label + (if (items.size > 1) ", $paneCount" else "")
         },
     ) {
         for ((layer, index) in others.reversed().withIndex()) {

@@ -335,3 +335,21 @@ Still open: 2.8 (one connection per saved server), 2.9 (cleartext warning), 3 (t
 remaining nit: `TerminalProgress.description` and `ProgramIdentity` labels are still English
 model strings, not resources), and device-level verification — the instrumented suite still
 cannot install on the attached device (`INSTALL_FAILED_USER_RESTRICTED`).
+
+### Device smoke (2026-11-24)
+
+Release APK installed over the existing app on the Redmi 22081212C (zh-CN). Terminal
+rendering, session header, the terminal actions drawer, every Preferences section
+(including the tabs, frost and compact-bar rows), the frosted surfaces and the Chinese
+copy render correctly with no crash. Two corrections came out of the run:
+
+- `PopupFrostInvalidator` could keep its pre-draw listener when a popup never drew; it now
+  also stops on a 400 ms timeout, and `DrawerFrostTest` waits for the sheet and asserts the
+  contract instead of pixel-freezing (`captureToImage` re-runs the draw, so it can never
+  observe a freeze).
+- `ProgramStack` was the last English "N panes" description; it uses the `pane_count` plural.
+
+Targeted instrumentation (`DrawerFrostTest`, `FrostedEffectsPreferenceTest`,
+`TabPaneSwitcherTest`, `CompactTopBarTest`) is 16/16 on the device. The wider suite still
+has pre-existing failures from English test helpers (`hasText`, custom-action labels) and
+layout/timing assumptions; it needs its own locale pass.
