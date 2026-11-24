@@ -114,11 +114,13 @@ class PanelReorderTest {
     @Test
     fun holdingAndDraggingATabCommitsOnceWithoutSelectingOrOpeningIt() {
         show()
-        val list = row("Reorder tabs")
+        val list = row(appString(R.string.reorder_tabs))
         val end =
-            row("Tab Three").fetchSemanticsNode().boundsInRoot.center -
-                list.fetchSemanticsNode().boundsInRoot.topLeft
-        begin(list, "Tab One")
+            row(appString(R.string.a11y_tab_title, "Three"))
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .center - list.fetchSemanticsNode().boundsInRoot.topLeft
+        begin(list, appString(R.string.a11y_tab_title, "One"))
         list.performTouchInput { moveTo(end + Offset(0f, 10f), 200) }
         ui.mainClock.advanceTimeBy(100)
         finish(list)
@@ -127,18 +129,20 @@ class PanelReorderTest {
             assertEquals(listOf("tab:w0:null"), moves)
             assertTrue(actions.isEmpty())
         }
-        row("Tab One").assertIsSelected()
+        row(appString(R.string.a11y_tab_title, "One")).assertIsSelected()
     }
 
     @Test
     fun draggingAPaneKeepsSelectionAndUsesItsWindowAndStableId() {
         show(page = 1)
         val layout = windows.value.first().layout
-        val list = row("Reorder panes")
+        val list = row(appString(R.string.reorder_panes))
         val end =
-            row("Pane Pane C").fetchSemanticsNode().boundsInRoot.center -
-                list.fetchSemanticsNode().boundsInRoot.topLeft
-        begin(list, "Pane Pane A")
+            row(appString(R.string.a11y_pane_title, "Pane C"))
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .center - list.fetchSemanticsNode().boundsInRoot.topLeft
+        begin(list, appString(R.string.a11y_pane_title, "Pane A"))
         list.performTouchInput { moveTo(end + Offset(0f, 10f), 200) }
         ui.mainClock.advanceTimeBy(100)
         finish(list)
@@ -148,16 +152,16 @@ class PanelReorderTest {
             assertEquals(listOf("pane:w0:a:null"), moves)
             assertTrue(actions.isEmpty())
         }
-        row("Pane Pane A").assertIsSelected()
+        row(appString(R.string.a11y_pane_title, "Pane A")).assertIsSelected()
     }
 
     @Test
     fun holdWithoutMovingAndCancelledDragSendNothing() {
         show(page = 1)
-        val list = row("Reorder panes")
-        begin(list, "Pane Pane A")
+        val list = row(appString(R.string.reorder_panes))
+        begin(list, appString(R.string.a11y_pane_title, "Pane A"))
         finish(list)
-        begin(list, "Pane Pane A")
+        begin(list, appString(R.string.a11y_pane_title, "Pane A"))
         list.performTouchInput {
             moveBy(Offset(0f, 100f))
             cancel()
@@ -173,8 +177,8 @@ class PanelReorderTest {
     @Test
     fun metadataOrSessionChangeDuringADragCancelsTheCommit() {
         show(page = 1)
-        val list = row("Reorder panes")
-        begin(list, "Pane Pane A")
+        val list = row(appString(R.string.reorder_panes))
+        begin(list, appString(R.string.a11y_pane_title, "Pane A"))
         list.performTouchInput { moveBy(Offset(0f, 90f)) }
         ui.runOnIdle { session.value = "other-session" }
         ui.mainClock.advanceTimeByFrame()
@@ -189,7 +193,7 @@ class PanelReorderTest {
     fun mapLongPressAndDisabledListCannotReorder() {
         show(page = 1)
         ui.onNodeWithText(appString(R.string.show_map)).performClick()
-        val map = row("Pane layout")
+        val map = row(appString(R.string.a11y_pane_layout))
         ui.mainClock.autoAdvance = false
         map.performTouchInput { down(center) }
         ui.mainClock.advanceTimeBy(700)
@@ -200,8 +204,8 @@ class PanelReorderTest {
         }
         ui.mainClock.advanceTimeBy(300)
         ui.runOnIdle { enabled.value = false }
-        val list = row("Reorder panes")
-        begin(list, "Pane Pane A")
+        val list = row(appString(R.string.reorder_panes))
+        begin(list, appString(R.string.a11y_pane_title, "Pane A"))
         list.performTouchInput { moveBy(Offset(0f, 100f)) }
         finish(list)
         ui.runOnIdle {
@@ -215,7 +219,7 @@ class PanelReorderTest {
         val blocks = (0..11).map { BlockItem("p$it", "Pane $it") }
         windows.value = listOf(WindowItem("w0", "One", blocks))
         show(page = 1)
-        val list = row("Reorder panes")
+        val list = row(appString(R.string.reorder_panes))
         begin(list, "Pane Pane 0")
         val bounds = list.fetchSemanticsNode().boundsInRoot
         list.performTouchInput { moveTo(Offset(bounds.width / 2, bounds.height - 2f), 200) }
@@ -233,9 +237,10 @@ class PanelReorderTest {
     fun accessibleMovesRespectBoundariesAndDoNotNavigate() {
         show(page = 1)
         val first =
-            row("Pane Pane A").fetchSemanticsNode().config[SemanticsActions.CustomActions].filter {
-                it.label.startsWith("Move ")
-            }
+            row(appString(R.string.a11y_pane_title, "Pane A"))
+                .fetchSemanticsNode()
+                .config[SemanticsActions.CustomActions]
+                .filter { it.label.startsWith("Move ") }
         ui.runOnIdle {
             assertEquals(listOf("Move down"), first.map { it.label })
             assertTrue(first.single().action())

@@ -36,7 +36,7 @@ class SessionCreationTest {
                     }
             }
         }
-        ui.onNodeWithText("On Shulhi MBP").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.on_server_format, "Shulhi MBP")).assertIsDisplayed()
         ui.onNode(hasSetTextAction()).performTextInput("New project")
         ui.onNodeWithText(appString(R.string.create)).performClick()
         ui.onNode(hasSetTextAction()).assertTextContains("New project")
@@ -67,7 +67,7 @@ class SessionCreationTest {
                 EmptySessionContent("Ubuntu", true, { requested++ })
             }
         }
-        ui.onNodeWithText("Start a session on Ubuntu.").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.start_session_on_format, "Ubuntu")).assertIsDisplayed()
         ui.onNodeWithText(appString(R.string.new_session)).assertIsEnabled().performClick()
         ui.runOnIdle { assertEquals(1, requested) }
     }

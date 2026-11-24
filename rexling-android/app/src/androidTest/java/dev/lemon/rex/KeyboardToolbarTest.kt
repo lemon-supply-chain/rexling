@@ -23,13 +23,15 @@ class KeyboardToolbarTest {
         ui.onNodeWithContentDescription("Toolbar slot 3: Escape").assertExists()
         drag("Toolbar slot 3: Escape", "Available toolbar buttons")
         ui.onNodeWithText("Your toolbar · 6/7").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Available button: Escape").assertExists()
-        drag("Available button: Paste", "Toolbar slot 1: Ctrl")
+        ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Escape"))
+            .assertExists()
+        drag(appString(R.string.a11y_available_button, "Paste"), "Toolbar slot 1: Ctrl")
         ui.onNodeWithContentDescription("Toolbar slot 1: Paste").assertExists()
         ui.onNodeWithText("Your toolbar · 7/7").assertIsDisplayed()
-        drag("Available button: Backspace", "Toolbar slot 7: Enter")
+        drag(appString(R.string.a11y_available_button, "Backspace"), "Toolbar slot 7: Enter")
         ui.onNodeWithContentDescription("Toolbar slot 7: Backspace").assertExists()
-        ui.onNodeWithContentDescription("Available button: Enter").assertExists()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Enter"))
+            .assertExists()
         ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(7, saved!!.size)
@@ -49,7 +51,8 @@ class KeyboardToolbarTest {
             }
         }
         ui.onNodeWithText(appString(R.string.remove_selected)).performClick()
-        ui.onNodeWithContentDescription("Available button: Paste").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Paste"))
+            .performClick()
         val actions =
             ui.onNodeWithContentDescription("Toolbar slot 7: Paste")
                 .fetchSemanticsNode()
@@ -100,9 +103,11 @@ class KeyboardToolbarTest {
             )
         }
         repeat(4) { palette.performTouchInput { swipeUp(durationMillis = 150) } }
-        ui.onNodeWithContentDescription("Available button: F12").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "F12"))
+            .assertIsDisplayed()
         repeat(5) { palette.performTouchInput { swipeDown(durationMillis = 150) } }
-        ui.onNodeWithContentDescription("Available button: Paste").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_available_button, "Paste"))
+            .assertIsDisplayed()
         ui.runOnIdle { assertFalse(closed) }
         assertEquals(
             initial,

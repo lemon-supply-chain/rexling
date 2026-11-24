@@ -168,7 +168,11 @@ class SessionHeaderLoopTest {
     fun iconFollowsTheFingerAndSpringsBackOnCancelWithoutMovingTheTitle() {
         header(sessions, "mac:c", onSelect = {})
         val icon = ui.onNodeWithContentDescription(appString(R.string.a11y_session_program_icon))
-        val graphic = ui.onNodeWithContentDescription("fish, 3 panes", useUnmergedTree = true)
+        val graphic =
+            ui.onNodeWithContentDescription(
+                "fish, " + appQuantity(R.plurals.pane_count, 3),
+                useUnmergedTree = true,
+            )
         val before = graphic.fetchSemanticsNode().boundsInRoot
         val title = ui.onNodeWithText("Investigate Rex protocol").fetchSemanticsNode().boundsInRoot
         val anchor = icon.fetchSemanticsNode().boundsInRoot
