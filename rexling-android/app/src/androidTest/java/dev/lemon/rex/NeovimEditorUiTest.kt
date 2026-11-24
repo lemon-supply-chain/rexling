@@ -36,14 +36,14 @@ class NeovimEditorUiTest {
         ui.onNodeWithText(appString(R.string.session_name_optional)).performTextInput("Status")
         capture("command")
         ui.onNodeWithText(appString(R.string.done)).performScrollTo().performClick()
-        ui.onNodeWithContentDescription("Edit Neovim shortcut Status").assertExists()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_neovim_shortcut, "Status")).assertExists()
         ui.onNodeWithContentDescription(appString(R.string.back_to_neovim_shortcuts)).performClick()
         ui.onNodeWithContentDescription("Rename Neovim group Git").performClick()
         ui.onNodeWithText(appString(R.string.group_name)).performTextReplacement("Tools")
         ui.onNodeWithText(appString(R.string.done)).performClick()
         capture("groups")
         ui.onNodeWithContentDescription("Ungroup Neovim group Tools").performClick()
-        ui.onNodeWithContentDescription("Edit Neovim shortcut Status").assertExists()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_neovim_shortcut, "Status")).assertExists()
         ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(
@@ -120,7 +120,7 @@ class NeovimEditorUiTest {
             )
             up()
         }
-        ui.onNodeWithContentDescription("Edit Neovim shortcut :w").performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_neovim_shortcut, ":w")).performClick()
         ui.onNodeWithText("Group: Ungrouped").performClick()
         ui.onNodeWithText("Files", substring = false).performClick()
         ui.onNodeWithText(appString(R.string.done)).performScrollTo().performClick()
@@ -161,7 +161,7 @@ class NeovimEditorUiTest {
             .assertExists()
         ui.onNodeWithText(appString(R.string.session_name_optional)).performTextInput("Lua")
         ui.onNodeWithText(appString(R.string.done)).performScrollTo().performClick()
-        ui.onNodeWithContentDescription("Edit Neovim shortcut Lua").assertExists()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_neovim_shortcut, "Lua")).assertExists()
         // Android's IME/window transition runs outside Compose's test clock.
         ui.waitForIdle()
         Thread.sleep(350)
@@ -191,10 +191,10 @@ class NeovimEditorUiTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription("Edit Neovim shortcut :w").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_neovim_shortcut, ":w")).assertIsDisplayed()
         ui.onNodeWithContentDescription("Open Neovim group Ungrouped").assertDoesNotExist()
         ui.onNodeWithContentDescription(appString(R.string.a11y_ungrouped_shortcuts)).performClick()
-        ui.onNodeWithContentDescription("Edit Neovim shortcut :w").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_edit_neovim_shortcut, ":w")).assertDoesNotExist()
         ui.onNodeWithContentDescription("Open Neovim group Files").assertIsDisplayed()
         ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle { assertEquals(initial, saved) }
