@@ -827,8 +827,16 @@ private fun NeovimShortcutWheel(
                             .semantics(mergeDescendants = true) {
                                 contentDescription =
                                     if (item is NeovimShortcutEntry.Group)
-                                        "Shortcut group ${item.label}"
-                                    else "$name shortcut ${item.label}"
+                                        context.getString(
+                                            R.string.a11y_shortcut_group_label,
+                                            item.label,
+                                        )
+                                    else
+                                        context.getString(
+                                            R.string.a11y_shortcut_entry,
+                                            name,
+                                            item.label,
+                                        )
                                 role = Role.Button
                                 selected = wheel.highlighted == index
                                 if (wheel.open)

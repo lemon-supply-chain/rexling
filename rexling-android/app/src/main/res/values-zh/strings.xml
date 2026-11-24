@@ -749,4 +749,5 @@
     <string name="direction_down">下</string>
     <string name="a11y_control_key">Ctrl %1$s</string>
     <string name="a11y_control_shortcut">Ctrl 快捷键 %1$s</string>
+    <string name="a11y_shortcut_entry">%1$s 快捷键 %2$s</string>
 </resources>

@@ -753,4 +753,5 @@
     <string name="direction_down">Down</string>
     <string name="a11y_control_key">Control %1$s</string>
     <string name="a11y_control_shortcut">Control shortcut %1$s</string>
+    <string name="a11y_shortcut_entry">%1$s shortcut %2$s</string>
 </resources>

@@ -60,7 +60,8 @@ class NeovimShortcutUiTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         val bounds = nativeBounds(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
         fun pixel(x: Float, y: Float): Int {
             ui.waitForIdle()
@@ -120,7 +121,8 @@ class NeovimShortcutUiTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.onNodeWithText("LazyGit").performClick()
         ui.runOnIdle { assertEquals(listOf(items[1] to "pane-one"), sent) }
         ui.onNodeWithText("LazyGit").assertIsDisplayed().performClick()
@@ -187,7 +189,8 @@ class NeovimShortcutUiTest {
             if (area == null) SystemClock.sleep(20)
         }
         val bounds = area ?: error("No native terminal area")
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         repeat(2) { ui.onNodeWithText(":w").performTouchInput { click() } }
         ui.runOnIdle { assertEquals(2, sent) }
         instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
@@ -218,8 +221,7 @@ class NeovimShortcutUiTest {
             ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
                 .assertIsDisplayed()
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_close_shortcuts_named, "Neovim"))
-            .performClick()
+        ui.onNodeWithContentDescription(appString(R.string.close_shortcuts)).performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertDoesNotExist()
         ui.runOnIdle { assertEquals(2, sent) }
@@ -241,14 +243,17 @@ class NeovimShortcutUiTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.onNodeWithText(":q").assertIsDisplayed()
         ui.runOnIdle { target.value = "two" }
         ui.onNodeWithText(":q").assertDoesNotExist()
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.runOnIdle { enabled.value = false }
         ui.onNodeWithText(":q").assertDoesNotExist()
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).assertIsNotEnabled()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .assertIsNotEnabled()
         ui.runOnIdle { assertEquals(0, sent) }
     }
 
@@ -298,7 +303,10 @@ class NeovimShortcutUiTest {
             .performClick()
             .assertIsSelected()
         ui.runOnIdle { assertEquals(NeovimShortcutEffect.EXPAND, effect.value) }
-        ui.onNodeWithText("None").performScrollTo().performClick().assertIsSelected()
+        ui.onNodeWithText(appString(R.string.effect_none))
+            .performScrollTo()
+            .performClick()
+            .assertIsSelected()
         ui.runOnIdle { assertEquals(NeovimShortcutEffect.NONE, effect.value) }
         ui.onNodeWithText(appString(R.string.selection_haptics))
             .performScrollTo()
@@ -359,9 +367,10 @@ class NeovimShortcutUiTest {
                 }
             }
         }
-        val button = ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+        val button =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
         val before = button.fetchSemanticsNode().boundsInRoot
-        captureMenu("closed-command-button", appString(R.string.neovim_shortcuts))
+        captureMenu("closed-command-button", appString(R.string.a11y_shortcuts_format, "Neovim"))
         button.performTouchInput { swipe(center, center + Offset(100f, -90f), 300) }
         val after = button.fetchSemanticsNode().boundsInRoot
         assertTrue(after.left > before.left)
@@ -393,8 +402,9 @@ class NeovimShortcutUiTest {
                 NeovimShortcutButton(items, "one", true, { item, _ -> selected += item }, {})
             }
         }
-        captureMenu("button", appString(R.string.neovim_shortcuts))
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        captureMenu("button", appString(R.string.a11y_shortcuts_format, "Neovim"))
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         val grid =
             ui.onNodeWithContentDescription(
                 appString(R.string.a11y_shortcut_pages_format, "Neovim"),
@@ -449,7 +459,8 @@ class NeovimShortcutUiTest {
                 NeovimShortcutButton(items, "one", true, { item, _ -> selected += item }, {})
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         val bounds =
             ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
                 .fetchSemanticsNode()
@@ -508,7 +519,8 @@ class NeovimShortcutUiTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_pages_format, "Neovim"))
             .performTouchInput { swipeUp() }
         ui.waitForIdle()
@@ -546,7 +558,8 @@ class NeovimShortcutUiTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         val bounds =
             ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
                 .fetchSemanticsNode()
@@ -610,9 +623,8 @@ class NeovimShortcutUiTest {
             .performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertDoesNotExist()
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performTouchInput {
-            click()
-        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_close_shortcuts_named, "Neovim"))
@@ -667,7 +679,8 @@ class NeovimShortcutUiTest {
                 .boundsInWindow
         val windowOffset = Offset(area.left - logicalArea.left, area.top - logicalArea.top)
         val rest = nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim"))
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.waitForIdle()
         fun checkCentered(resting: Rect) {
             assertEquals(
@@ -710,7 +723,8 @@ class NeovimShortcutUiTest {
             }
         }
         val topRight = nativeBounds(appString(R.string.a11y_shortcuts_format, "Neovim"))
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.waitForIdle()
         checkCentered(topRight)
         captureMenu("anchored-wheel-top-right")
@@ -755,14 +769,15 @@ class NeovimShortcutUiTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_group_label, "Git"))
             .performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_pages_format, "Neovim"))
             .performTouchInput { swipeUp() }
         ui.onNodeWithText("2/2").assertIsDisplayed()
         val center = nativeBounds("Back to all shortcuts")
-        val action = nativeBounds("Neovim shortcut Action 9")
+        val action = nativeBounds(appString(R.string.a11y_shortcut_entry, "Neovim", "Action 9"))
         val before = nativeBounds(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
         nativeDrag(
             center.exactCenterX(),
@@ -830,14 +845,15 @@ class NeovimShortcutUiTest {
         ui.waitForIdle()
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertIsDisplayed()
-        val action = nativeBounds("Neovim shortcut :w")
+        val action = nativeBounds(appString(R.string.a11y_shortcut_entry, "Neovim", ":w"))
         nativeWheelEvent(
             MotionEvent.ACTION_MOVE,
             action.exactCenterX(),
             action.exactCenterY(),
             down,
         )
-        ui.onNodeWithContentDescription("Neovim shortcut :w").assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_entry, "Neovim", ":w"))
+            .assertIsSelected()
         captureMenu("steering-selected")
         ui.mainClock.advanceTimeBy(900)
         ui.runOnIdle { assertTrue("Hovering never repeats commands", sent.isEmpty()) }
@@ -893,9 +909,10 @@ class NeovimShortcutUiTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         val center = nativeBounds(appString(R.string.a11y_close_shortcuts_named, "Neovim"))
-        val action = nativeBounds("Neovim shortcut :w")
+        val action = nativeBounds(appString(R.string.a11y_shortcut_entry, "Neovim", ":w"))
         val down = SystemClock.uptimeMillis()
         nativeWheelEvent(
             MotionEvent.ACTION_DOWN,
@@ -950,10 +967,11 @@ class NeovimShortcutUiTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         val center = nativeBounds(appString(R.string.a11y_close_shortcuts_named, "Neovim"))
-        val first = nativeBounds("Neovim shortcut :w")
-        val second = nativeBounds("Neovim shortcut :q")
+        val first = nativeBounds(appString(R.string.a11y_shortcut_entry, "Neovim", ":w"))
+        val second = nativeBounds(appString(R.string.a11y_shortcut_entry, "Neovim", ":q"))
         ui.runOnIdle { assertTrue(feedback.isEmpty()) }
         val down = SystemClock.uptimeMillis()
         nativeWheelEvent(
@@ -1059,7 +1077,10 @@ class NeovimShortcutUiTest {
                 }
             repeat(3) { ui.mainClock.advanceTimeByFrame() }
             ui.waitForIdle()
-            val action = ui.onNodeWithContentDescription("Neovim shortcut :w")
+            val action =
+                ui.onNodeWithContentDescription(
+                    appString(R.string.a11y_shortcut_entry, "Neovim", ":w"),
+                )
             val staleAction =
                 action
                     .fetchSemanticsNode()
@@ -1120,7 +1141,8 @@ class NeovimShortcutUiTest {
             ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
         menu.assertExists()
         val bounds = menu.fetchSemanticsNode().boundsInRoot
-        val action = ui.onNodeWithContentDescription("Neovim shortcut :w")
+        val action =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_entry, "Neovim", ":w"))
         val staleAction =
             action
                 .fetchSemanticsNode()
@@ -1147,7 +1169,7 @@ class NeovimShortcutUiTest {
         menu.assert(
             androidx.compose.ui.test.SemanticsMatcher.expectValue(
                 androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
-                "Closing",
+                appString(R.string.a11y_closing),
             ),
         )
         action.assertIsNotEnabled()
@@ -1214,7 +1236,8 @@ class NeovimShortcutUiTest {
                 }
             }
         }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim")).performClick()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
         ui.onNodeWithContentDescription(appString(R.string.a11y_close_shortcuts_named, "Neovim"))
             .assertIsDisplayed()
         ui.mainClock.autoAdvance = false
