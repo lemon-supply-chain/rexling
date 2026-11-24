@@ -1,14 +1,5 @@
 package dev.lemon.rex
 
-import android.os.SystemClock
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.stateIn
-
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
@@ -194,28 +185,47 @@ internal fun ChromeSymbol(
                 box(3f, 4f, 18f, 16f)
                 line(12f, 4f, 12f, 20f)
             }
-            ChromeIcon.SPLIT_RIGHT, ChromeIcon.SPLIT_BELOW -> {
+            ChromeIcon.SPLIT_RIGHT,
+            ChromeIcon.SPLIT_BELOW -> {
                 val right = icon == ChromeIcon.SPLIT_RIGHT
                 val fillOrigin = if (right) Offset(12f * u, 5f * u) else Offset(4f * u, 12f * u)
                 val fillSize = if (right) Size(8f * u, 14f * u) else Size(16f * u, 7f * u)
-                drawRoundRect(color.copy(alpha = color.alpha * .23f), fillOrigin, fillSize, CornerRadius(u))
+                drawRoundRect(
+                    color.copy(alpha = color.alpha * .23f),
+                    fillOrigin,
+                    fillSize,
+                    CornerRadius(u),
+                )
                 box(3f, 4f, 18f, 16f)
                 if (right) line(12f, 4f, 12f, 20f) else line(3f, 12f, 21f, 12f)
             }
             ChromeIcon.MOVE -> {
-                line(4f, 12f, 20f, 12f); line(12f, 4f, 12f, 20f)
-                line(4f, 12f, 7f, 9f); line(4f, 12f, 7f, 15f)
-                line(20f, 12f, 17f, 9f); line(20f, 12f, 17f, 15f)
-                line(12f, 4f, 9f, 7f); line(12f, 4f, 15f, 7f)
-                line(12f, 20f, 9f, 17f); line(12f, 20f, 15f, 17f)
+                line(4f, 12f, 20f, 12f)
+                line(12f, 4f, 12f, 20f)
+                line(4f, 12f, 7f, 9f)
+                line(4f, 12f, 7f, 15f)
+                line(20f, 12f, 17f, 9f)
+                line(20f, 12f, 17f, 15f)
+                line(12f, 4f, 9f, 7f)
+                line(12f, 4f, 15f, 7f)
+                line(12f, 20f, 9f, 17f)
+                line(12f, 20f, 15f, 17f)
             }
             ChromeIcon.ZOOM -> {
-                line(13f, 11f, 20f, 4f); line(15f, 4f, 20f, 4f); line(20f, 4f, 20f, 9f)
-                line(11f, 13f, 4f, 20f); line(4f, 15f, 4f, 20f); line(4f, 20f, 9f, 20f)
+                line(13f, 11f, 20f, 4f)
+                line(15f, 4f, 20f, 4f)
+                line(20f, 4f, 20f, 9f)
+                line(11f, 13f, 4f, 20f)
+                line(4f, 15f, 4f, 20f)
+                line(4f, 20f, 9f, 20f)
             }
             ChromeIcon.UNZOOM -> {
-                line(20f, 4f, 13f, 11f); line(13f, 6f, 13f, 11f); line(13f, 11f, 18f, 11f)
-                line(4f, 20f, 11f, 13f); line(6f, 13f, 11f, 13f); line(11f, 13f, 11f, 18f)
+                line(20f, 4f, 13f, 11f)
+                line(13f, 6f, 13f, 11f)
+                line(13f, 11f, 18f, 11f)
+                line(4f, 20f, 11f, 13f)
+                line(6f, 13f, 11f, 13f)
+                line(11f, 13f, 11f, 18f)
             }
             ChromeIcon.SEARCH -> {
                 drawCircle(color, 6f * u, Offset(10f * u, 10f * u), style = Stroke(width))
@@ -733,7 +743,7 @@ internal fun SessionHeader(
                         scaleX = 1f - .06f * progress
                         scaleY = scaleX
                         alpha = 1f - .25f * progress
-                    }
+                    },
                 ) {
                     ProgramStack(
                         programs,
@@ -749,14 +759,15 @@ internal fun SessionHeader(
             Spacer(Modifier.width(7.dp))
         }
         Column(
-            Modifier.weight(1f).then(
-                if (onCollapse != null)
-                    Modifier.clickable(
-                        onClickLabel = stringResource(R.string.a11y_collapse_top_bar),
-                        onClick = onCollapse,
-                    )
-                else Modifier
-            ),
+            Modifier.weight(1f)
+                .then(
+                    if (onCollapse != null)
+                        Modifier.clickable(
+                            onClickLabel = stringResource(R.string.a11y_collapse_top_bar),
+                            onClick = onCollapse,
+                        )
+                    else Modifier,
+                ),
             verticalArrangement = Arrangement.Center,
         ) {
             if (!expanded) {
@@ -778,7 +789,7 @@ internal fun SessionHeader(
                                     constraints.copy(
                                         minHeight = 0,
                                         maxHeight = Constraints.Infinity,
-                                    )
+                                    ),
                                 )
                             layout(
                                 text.width,
@@ -803,7 +814,7 @@ internal fun SessionHeader(
                 )
             }
             BoxWithConstraints(
-                Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight)
+                Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight),
             ) {
                 val pageWidth = if (expanded) 160.dp else maxWidth.coerceAtLeast(40.dp)
                 val pagePadding =
@@ -861,7 +872,7 @@ internal fun SessionHeader(
                                         if (connected) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.outline,
                                         RoundedCornerShape(4.dp),
-                                    )
+                                    ),
                             )
                             serverIcons[item?.id]?.let {
                                 ServerGlyph(it, Modifier.size(if (expanded) 13.dp else 11.dp))
@@ -869,7 +880,7 @@ internal fun SessionHeader(
                             Text(
                                 item?.label
                                     ?: stringResource(
-                                        if (connected) R.string.sessions else R.string.connect
+                                        if (connected) R.string.sessions else R.string.connect,
                                     ),
                                 fontFamily = MonoUi,
                                 fontWeight = if (expanded) FontWeight.Bold else FontWeight.Normal,
@@ -879,8 +890,8 @@ internal fun SessionHeader(
                                     androidx.compose.ui.text.TextStyle(
                                         platformStyle =
                                             androidx.compose.ui.text.PlatformTextStyle(
-                                                includeFontPadding = false
-                                            )
+                                                includeFontPadding = false,
+                                            ),
                                     ),
                                 letterSpacing = 0.sp,
                                 maxLines = 1,
@@ -895,7 +906,7 @@ internal fun SessionHeader(
                                                     (if (expanded) 50.dp else 24.dp) -
                                                     (if (serverIcons[item?.id] != null) 15.dp
                                                     else 0.dp))
-                                                .coerceAtLeast(10.dp)
+                                                .coerceAtLeast(10.dp),
                                     ),
                             )
                             ChromeSymbol(
@@ -946,28 +957,38 @@ internal fun CompactSessionHeader(
     val expandDescription = stringResource(R.string.a11y_expand_top_bar)
     val fullText = if (directory.isNotBlank()) "$displayTitle - $directory" else displayTitle
     val annotatedText = buildAnnotatedString {
-        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) {
+        withStyle(
+            SpanStyle(
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+        ) {
             append(displayTitle)
         }
         if (directory.isNotBlank()) {
             withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                 append(" - ")
             }
-            withStyle(SpanStyle(fontFamily = MonoUi, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+            withStyle(
+                SpanStyle(
+                    fontFamily = MonoUi,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            ) {
                 append(directory)
             }
         }
     }
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 34.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClickLabel = expandDescription) { onExpand() }
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .semantics {
-                contentDescription = fullText
-            },
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .heightIn(min = 34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClickLabel = expandDescription) { onExpand() }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .semantics { contentDescription = fullText },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -980,7 +1001,7 @@ internal fun CompactSessionHeader(
                 Box(
                     Modifier.size(6.dp)
                         .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .rainbowMarquee(marquee, corner = 3.dp, thickness = 1.dp)
+                        .rainbowMarquee(marquee, corner = 3.dp, thickness = 1.dp),
                 )
             }
             Text(
@@ -1015,7 +1036,7 @@ internal fun rememberWorkingPhase(working: Boolean): State<Float> {
                     androidx.compose.animation.core.tween(
                         1200,
                         easing = androidx.compose.animation.core.LinearEasing,
-                    )
+                    ),
             ),
         label = "Working highlight",
     )
@@ -1027,7 +1048,7 @@ internal fun TerminalControlButton(controlled: Boolean, enabled: Boolean, onClic
     val label =
         stringResource(
             if (controlled) R.string.a11y_release_terminal_control
-            else R.string.a11y_take_terminal_control
+            else R.string.a11y_take_terminal_control,
         )
     androidx.compose.material3.TooltipBox(
         positionProvider =
@@ -1037,8 +1058,8 @@ internal fun TerminalControlButton(controlled: Boolean, enabled: Boolean, onClic
                 Text(
                     stringResource(
                         if (controlled) R.string.a11y_release_control
-                        else R.string.a11y_take_control
-                    )
+                        else R.string.a11y_take_control,
+                    ),
                 )
             }
         },
@@ -1054,7 +1075,7 @@ internal fun TerminalControlButton(controlled: Boolean, enabled: Boolean, onClic
                     RoundedCornerShape(16.dp),
                 )
                 .background(
-                    if (controlled) MaterialTheme.colorScheme.primary else Color.Transparent
+                    if (controlled) MaterialTheme.colorScheme.primary else Color.Transparent,
                 )
                 .semantics {
                     contentDescription = label
@@ -1092,7 +1113,7 @@ internal fun PositionDots(index: Int, count: Int, modifier: Modifier = Modifier)
                         if (active) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         RoundedCornerShape(3.dp),
-                    )
+                    ),
             )
         }
     }
@@ -1137,7 +1158,7 @@ internal fun TerminalTabs(
     val context = androidx.compose.ui.platform.LocalContext.current
     val marquee =
         rememberRainbowMarquee(
-            animateWorking && windows.any { paneWorking(it) || paneProgress(it)?.busy == true }
+            animateWorking && windows.any { paneWorking(it) || paneProgress(it)?.busy == true },
         )
     val drag = remember(reorderKey) { TabDrag() }
     var menuId by remember(reorderKey) { mutableStateOf<String?>(null) }
@@ -1290,7 +1311,7 @@ internal fun TerminalTabs(
                             animateWorking &&
                                 active &&
                                 if (progress != null) progress.busy && progress.percent == null
-                                else busy
+                                else busy,
                         )
                     val programs = panePrograms(w)
                     val pane = selectedPane(w)
@@ -1317,7 +1338,7 @@ internal fun TerminalTabs(
                                     else androidx.compose.animation.core.spring(),
                             )
                             .zIndex(if (drag.id == w.id) 1f else 0f)
-                            .graphicsLayer { translationX = drag.translation(w.id, list) * sign }
+                            .graphicsLayer { translationX = drag.translation(w.id, list) * sign },
                     ) {
                         val barTrack =
                             tintOver(indicatorColor, MaterialTheme.colorScheme.surface, .18f)
@@ -1363,7 +1384,7 @@ internal fun TerminalTabs(
                                 .background(
                                     if (drag.id == w.id && drag.moved)
                                         MaterialTheme.colorScheme.surfaceVariant
-                                    else Color.Transparent
+                                    else Color.Transparent,
                                 )
                                 .semantics(mergeDescendants = true) {
                                     contentDescription = tabContentDescription
@@ -1386,13 +1407,13 @@ internal fun TerminalTabs(
                                                 add(
                                                     CustomAccessibilityAction(leftLabel) {
                                                         moveBy(-1)
-                                                    }
+                                                    },
                                                 )
                                             if (windowIndex < windows.lastIndex)
                                                 add(
                                                     CustomAccessibilityAction(rightLabel) {
                                                         moveBy(1)
-                                                    }
+                                                    },
                                                 )
                                         }
                                     }
@@ -1440,7 +1461,7 @@ internal fun TerminalTabs(
                                                     MaterialTheme.colorScheme.primary,
                                                     androidx.compose.foundation.shape.CircleShape,
                                                 )
-                                                .semantics { testTag = "Tab unread dot ${w.id}" }
+                                                .semantics { testTag = "Tab unread dot ${w.id}" },
                                         )
                                     }
                                 }
@@ -1454,8 +1475,8 @@ internal fun TerminalTabs(
                                             androidx.compose.ui.text.TextStyle(
                                                 platformStyle =
                                                     androidx.compose.ui.text.PlatformTextStyle(
-                                                        includeFontPadding = false
-                                                    )
+                                                        includeFontPadding = false,
+                                                    ),
                                             ),
                                         fontWeight =
                                             if (active) FontWeight.Bold else FontWeight.Normal,
@@ -1556,7 +1577,7 @@ internal fun TerminalActions(
             Box(
                 Modifier.matchParentSize()
                     .clip(RoundedCornerShape(23.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             )
             Box(
                 Modifier.size(36.dp)
@@ -1590,7 +1611,7 @@ internal fun TerminalActions(
                         )
                         .padding(1.dp)
                         .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
-                        .semantics { testTag = "Activity unread dot" }
+                        .semantics { testTag = "Activity unread dot" },
                 )
         }
     }
@@ -1627,7 +1648,7 @@ internal fun KeyboardBar(
     val hideExtraKeys = stringResource(R.string.a11y_hide_extra_keys)
     val extraKeysState =
         stringResource(
-            if (expanded) R.string.a11y_state_expanded else R.string.a11y_state_collapsed
+            if (expanded) R.string.a11y_state_expanded else R.string.a11y_state_collapsed,
         )
     val terminalKeysDescription = stringResource(R.string.a11y_terminal_keys)
     val pasteKeyDescription = stringResource(R.string.a11y_paste_key)
@@ -1638,7 +1659,7 @@ internal fun KeyboardBar(
                 !controlled -> R.string.a11y_take_control_and_show_keyboard
                 keyboardVisible -> R.string.a11y_hide_keyboard
                 else -> R.string.a11y_show_keyboard
-            }
+            },
         )
     // The extra-key trigger lives just before Esc, outside the initial viewport.
     val keyScroll = rememberScrollState(initial = Int.MAX_VALUE)
@@ -1658,8 +1679,8 @@ internal fun KeyboardBar(
                         MaterialTheme.colorScheme.outline,
                         MaterialTheme.colorScheme.surface,
                         .4f,
-                    )
-                )
+                    ),
+                ),
         )
         Row(
             Modifier.fillMaxWidth().height(45.dp).padding(vertical = 4.dp),
@@ -1878,7 +1899,7 @@ private fun DockKey(
             .clip(RoundedCornerShape(11.dp))
             .background(
                 if (active) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
+                else MaterialTheme.colorScheme.surfaceVariant,
             )
             .semantics(mergeDescendants = true) {
                 contentDescription = description
@@ -1890,7 +1911,7 @@ private fun DockKey(
                     Modifier.clickable(enabled = enabled, role = Role.Button) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onClick()
-                    }
+                    },
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -1936,7 +1957,7 @@ private fun ShiftDockKey(
             .clip(RoundedCornerShape(11.dp))
             .background(
                 if (active) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
+                else MaterialTheme.colorScheme.surfaceVariant,
             )
             .semantics {
                 contentDescription = shiftDescription

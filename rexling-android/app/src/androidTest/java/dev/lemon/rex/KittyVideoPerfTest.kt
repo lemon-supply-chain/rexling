@@ -8,7 +8,9 @@ import org.junit.Test
 
 /** Fresh 720p image generations, not repeated draws of one cached still. */
 class KittyVideoPerfTest {
-    /** Optional: run only against an explicitly selected disposable server, with mpv still playing. */
+    /**
+     * Optional: run only against an explicitly selected disposable server, with mpv still playing.
+     */
     @Test
     fun switchAwayDuringLiveVideo() {
         val args = InstrumentationRegistry.getArguments()
@@ -30,7 +32,8 @@ class KittyVideoPerfTest {
         fun until(stage: String, predicate: (AppState) -> Boolean) {
             val end = android.os.SystemClock.elapsedRealtime() + 10000
             while (android.os.SystemClock.elapsedRealtime() < end) {
-                if (NativeBridge.awaitUpdate(handle, updates.revision, 100) <= updates.revision) continue
+                if (NativeBridge.awaitUpdate(handle, updates.revision, 100) <= updates.revision)
+                    continue
                 val state = updates.decode(NativeBridge.readUpdate(handle, updates.revision))
                 if (predicate(state)) return
             }
@@ -45,9 +48,24 @@ class KittyVideoPerfTest {
             until("eight live image generations") { state ->
                 val screen = state.screen
                 val image = screen?.images?.lastOrNull()?.image
-                if (state.selectedBlock == video && screen != null && image != null && image !== seen) {
+                if (
+                    state.selectedBlock == video &&
+                        screen != null &&
+                        image != null &&
+                        image !== seen
+                ) {
                     harness.runOnMainSync {
-                        for (layer in 0..2) renderer.draw(canvas, screen, layer, 0f, 0f, 640f, 360f, 8f, 16f)
+                        for (layer in 0..2) renderer.draw(
+                            canvas,
+                            screen,
+                            layer,
+                            0f,
+                            0f,
+                            640f,
+                            360f,
+                            8f,
+                            16f,
+                        )
                     }
                     seen = image
                     distinct++
@@ -57,7 +75,8 @@ class KittyVideoPerfTest {
             val start = System.nanoTime()
             harness.runOnMainSync { command("block", "id" to other, "navigationId" to 2) }
             until("text tab after navigation") {
-                it.selectedBlock == other && it.screen?.plainText()?.contains("VIDEO_SWITCH_OK") == true
+                it.selectedBlock == other &&
+                    it.screen?.plainText()?.contains("VIDEO_SWITCH_OK") == true
             }
             val ms = (System.nanoTime() - start) / 1e6
             harness.sendStatus(0, Bundle().apply { putString("kitty_switch_ms", ms.toString()) })
@@ -81,7 +100,14 @@ class KittyVideoPerfTest {
         repeat(72) { i ->
             rgba[0] = i.toByte()
             val start = System.nanoTime()
-            val image = TerminalImage(7, i.toLong(), w, h, prepareTerminalBitmap(w, h, java.nio.ByteBuffer.wrap(rgba)))
+            val image =
+                TerminalImage(
+                    7,
+                    i.toLong(),
+                    w,
+                    h,
+                    prepareTerminalBitmap(w, h, java.nio.ByteBuffer.wrap(rgba)),
+                )
             val screen =
                 TerminalScreen(
                     1,
@@ -93,7 +119,7 @@ class KittyVideoPerfTest {
                     emptyList(),
                     images =
                         listOf(
-                            TerminalImagePlacement(image, 2, 0, 0, 0, 0, 0, w, h, 0, 0, w, h)
+                            TerminalImagePlacement(image, 2, 0, 0, 0, 0, 0, w, h, 0, 0, w, h),
                         ),
                 )
             if (i >= 12) prep += System.nanoTime() - start
@@ -108,7 +134,9 @@ class KittyVideoPerfTest {
             ns.sorted().let { "p50=${it[it.size / 2] / 1e6} p95=${it[it.size * 95 / 100] / 1e6}" }
         harness.sendStatus(
             0,
-            Bundle().apply { putString("kitty_video_ms", "prepare ${stats(prep)} draw ${stats(draws)}") },
+            Bundle().apply {
+                putString("kitty_video_ms", "prepare ${stats(prep)} draw ${stats(draws)}")
+            },
         )
     }
 }

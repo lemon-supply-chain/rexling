@@ -23,8 +23,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.drop
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.drop
 
 internal data class SwitcherRowAction(
     val label: String,
@@ -34,7 +34,8 @@ internal data class SwitcherRowAction(
     val run: () -> Unit,
 )
 
-@Composable internal fun SwitcherSwipeRow(
+@Composable
+internal fun SwitcherSwipeRow(
     revealed: Boolean,
     onReveal: (Boolean) -> Unit,
     actions: List<SwitcherRowAction>,
@@ -49,53 +50,83 @@ internal data class SwitcherRowAction(
     val islandGap = if (regular.isNotEmpty() && destructive.isNotEmpty()) 6.dp else 0.dp
     val colors = MaterialTheme.colorScheme
     val threshold = with(LocalDensity.current) { 36.dp.toPx() }
-    val fling = AnchoredDraggableDefaults.flingBehavior(state, positionalThreshold = { minOf(threshold, it / 2) })
+    val fling =
+        AnchoredDraggableDefaults.flingBehavior(
+            state,
+            positionalThreshold = { minOf(threshold, it / 2) },
+        )
 
-    LaunchedEffect(state) {
-        snapshotFlow { state.settledValue }.drop(1).collect { notify(it) }
-    }
+    LaunchedEffect(state) { snapshotFlow { state.settledValue }.drop(1).collect { notify(it) } }
     LaunchedEffect(revealed, canSwipe) {
         if ((!revealed || !canSwipe) && state.settledValue) state.animateTo(false)
     }
 
-    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-        .background(colors.surfaceVariant.copy(alpha = .35f)).anchoredDraggable(
-        state, Orientation.Horizontal, enabled = canSwipe, flingBehavior = fling,
-    )) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.surfaceVariant.copy(alpha = .35f))
+            .anchoredDraggable(
+                state,
+                Orientation.Horizontal,
+                enabled = canSwipe,
+                flingBehavior = fling,
+            ),
+    ) {
         Box(Modifier.matchParentSize(), contentAlignment = Alignment.CenterEnd) {
             Row(
-                Modifier.width(46.dp * actions.size + islandGap + 12.dp).onSizeChanged { size ->
-                    state.updateAnchors(DraggableAnchors {
-                        false at 0f
-                        if (actions.isNotEmpty() && size.width > 0) true at -size.width.toFloat()
-                    })
-                }.padding(horizontal = 6.dp),
+                Modifier.width(46.dp * actions.size + islandGap + 12.dp)
+                    .onSizeChanged { size ->
+                        state.updateAnchors(
+                            DraggableAnchors {
+                                false at 0f
+                                if (actions.isNotEmpty() && size.width > 0)
+                                    true at -size.width.toFloat()
+                            },
+                        )
+                    }
+                    .padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(islandGap),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val visible = state.settledValue && revealed
                 if (regular.isNotEmpty()) {
                     SwipeActionIsland(
-                        regular, colors.primaryContainer, colors.onPrimaryContainer,
-                        visible, enabled, onReveal, Modifier.weight(regular.size.toFloat()),
+                        regular,
+                        colors.primaryContainer,
+                        colors.onPrimaryContainer,
+                        visible,
+                        enabled,
+                        onReveal,
+                        Modifier.weight(regular.size.toFloat()),
                     )
                 }
                 if (destructive.isNotEmpty()) {
                     SwipeActionIsland(
-                        destructive, colors.errorContainer, colors.onErrorContainer,
-                        visible, enabled, onReveal, Modifier.weight(destructive.size.toFloat()),
+                        destructive,
+                        colors.errorContainer,
+                        colors.onErrorContainer,
+                        visible,
+                        enabled,
+                        onReveal,
+                        Modifier.weight(destructive.size.toFloat()),
                     )
                 }
             }
         }
-        Box(Modifier.offset { IntOffset(state.offset.takeUnless { it.isNaN() }?.roundToInt() ?: 0, 0) }
-            .background(colors.surface)) {
+        Box(
+            Modifier.offset {
+                    IntOffset(state.offset.takeUnless { it.isNaN() }?.roundToInt() ?: 0, 0)
+                }
+                .background(colors.surface),
+        ) {
             content()
         }
     }
 }
 
-@Composable private fun SwipeActionIsland(
+@Composable
+private fun SwipeActionIsland(
     actions: List<SwitcherRowAction>,
     background: Color,
     tint: Color,
@@ -107,14 +138,24 @@ internal data class SwitcherRowAction(
     Row(modifier.height(40.dp).clip(RoundedCornerShape(percent = 50)).background(background)) {
         for (action in actions) {
             Box(
-                Modifier.weight(1f).fillMaxHeight()
-                    .then(if (visible) Modifier.clickable(enabled && action.enabled, role = Role.Button) {
-                        onReveal(false)
-                        action.run()
-                    }.semantics { contentDescription = action.label } else Modifier),
+                Modifier.weight(1f)
+                    .fillMaxHeight()
+                    .then(
+                        if (visible)
+                            Modifier.clickable(enabled && action.enabled, role = Role.Button) {
+                                    onReveal(false)
+                                    action.run()
+                                }
+                                .semantics { contentDescription = action.label }
+                        else Modifier,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                ChromeSymbol(action.icon, Modifier.size(20.dp), if (action.enabled) tint else tint.copy(alpha = .38f))
+                ChromeSymbol(
+                    action.icon,
+                    Modifier.size(20.dp),
+                    if (action.enabled) tint else tint.copy(alpha = .38f),
+                )
             }
         }
     }

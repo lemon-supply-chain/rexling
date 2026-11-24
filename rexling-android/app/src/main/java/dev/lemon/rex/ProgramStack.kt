@@ -64,7 +64,7 @@ internal fun ProgramStack(
         Modifier.size(slotWidth, if (framed) 35.dp else 25.dp).clearAndSetSemantics {
             contentDescription =
                 active.label + (if (items.size > 1) ", ${items.size} panes" else "")
-        }
+        },
     ) {
         for ((layer, index) in others.reversed().withIndex()) {
             val shift = step * (others.size - layer)
@@ -106,7 +106,7 @@ internal fun PaneProgramTile(
                 .graphicsLayer { rotationZ = rotation }
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f), shape)
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f), shape),
         )
         return
     }
@@ -120,7 +120,7 @@ internal fun PaneProgramTile(
         Canvas(
             modifier
                 .graphicsLayer { rotationZ = rotation }
-                .rainbowMarquee(marquee, if (large) 7.dp else 5.dp)
+                .rainbowMarquee(marquee, if (large) 7.dp else 5.dp),
         ) {
             val canvas = drawContext.canvas.nativeCanvas
             picture.drawTile(canvas, size.width, size.height, 0f)

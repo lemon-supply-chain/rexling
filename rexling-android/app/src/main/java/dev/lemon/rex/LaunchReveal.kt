@@ -19,8 +19,12 @@ import kotlin.math.hypot
 internal fun Activity.installLaunchReveal() {
     splashScreen.setOnExitAnimationListener { splash ->
         val icon = splash.iconView
-        if (icon == null || icon is SurfaceView || icon.width == 0 || icon.height == 0 ||
-            !ValueAnimator.areAnimatorsEnabled()
+        if (
+            icon == null ||
+                icon is SurfaceView ||
+                icon.width == 0 ||
+                icon.height == 0 ||
+                !ValueAnimator.areAnimatorsEnabled()
         ) {
             splash.remove()
             return@setOnExitAnimationListener
@@ -30,26 +34,32 @@ internal fun Activity.installLaunchReveal() {
         val splashPosition = IntArray(2)
         icon.getLocationInWindow(iconPosition)
         splash.getLocationInWindow(splashPosition)
-        val logo = Picture().apply {
-            val recording = beginRecording(icon.width, icon.height)
-            try {
-                icon.draw(recording)
-            } finally {
-                endRecording()
+        val logo =
+            Picture().apply {
+                val recording = beginRecording(icon.width, icon.height)
+                try {
+                    icon.draw(recording)
+                } finally {
+                    endRecording()
+                }
             }
-        }
-        val paper = LaunchPaper(
-            this,
-            getColor(R.color.launch_paper),
-            logo,
-            (iconPosition[0] - splashPosition[0]).toFloat(),
-            (iconPosition[1] - splashPosition[1]).toFloat(),
-        )
+        val paper =
+            LaunchPaper(
+                this,
+                getColor(R.color.launch_paper),
+                logo,
+                (iconPosition[0] - splashPosition[0]).toFloat(),
+                (iconPosition[1] - splashPosition[1]).toFloat(),
+            )
         splash.background = null
-        splash.addView(paper, 0, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT,
-        ))
+        splash.addView(
+            paper,
+            0,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
         icon.visibility = View.INVISIBLE
 
         ValueAnimator.ofFloat(0f, 1f).apply {
@@ -78,7 +88,8 @@ private class LaunchPaper(
     private val lower = Piece(1)
     private val centerX = logoX + logo.width / 2f
     private val centerY = logoY + logo.height / 2f
-    private val grain = floatArrayOf(0.2f, -0.5f, 0.7f, -0.9f, -0.3f, 1f, 0.5f, -0.8f, 0.3f, 0.9f, -0.6f)
+    private val grain =
+        floatArrayOf(0.2f, -0.5f, 0.7f, -0.9f, -0.3f, 1f, 0.5f, -0.8f, 0.3f, 0.9f, -0.6f)
     private val angle = 130f
     var progress = 0f
         set(value) {
@@ -114,7 +125,8 @@ private class LaunchPaper(
         piece.outline.moveTo(-extent, wall)
         for (step in 0..96) {
             val x = extent * (step / 48f - 1f)
-            val open = minOf((x - start) / (span * 0.11f), (front - x) / (span * 0.17f)).coerceIn(0f, 1f)
+            val open =
+                minOf((x - start) / (span * 0.11f), (front - x) / (span * 0.17f)).coerceIn(0f, 1f)
             val crack = grain[(step * 7 + step / 5) % grain.size] * span * 0.012f
             val y = crack + side * (span * (0.023f + 0.045f * tearing) * open - 0.6f)
             piece.outline.lineTo(x, y)
@@ -145,7 +157,10 @@ private class LaunchPaper(
         val save = canvas.save()
         canvas.translate(centerX, centerY)
         canvas.rotate(angle + piece.side * 10f * departure)
-        canvas.translate(piece.side * extent * departure * 0.09f, piece.side * extent * departure * 0.87f)
+        canvas.translate(
+            piece.side * extent * departure * 0.09f,
+            piece.side * extent * departure * 0.87f,
+        )
 
         canvas.clipPath(piece.outline)
         canvas.clipOutPath(piece.puncture)

@@ -16,7 +16,12 @@ internal fun TerminalMenuItem(label: String, icon: ChromeIcon, onClick: () -> Un
 }
 
 @Composable
-internal fun TerminalMenuItem(label: String, icon: ChromeIcon, enabled: Boolean, onClick: () -> Unit) {
+internal fun TerminalMenuItem(
+    label: String,
+    icon: ChromeIcon,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     TerminalMenuItem(label, icon, enabled, false, onClick)
 }
 
@@ -27,15 +32,17 @@ internal fun TerminalMenuItem(
     icon: ChromeIcon,
     enabled: Boolean = true,
     destructive: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val iconColor = if (!enabled) scheme.onSurfaceVariant else if (destructive) scheme.error else scheme.onSurfaceVariant
+    val iconColor =
+        if (!enabled) scheme.onSurfaceVariant
+        else if (destructive) scheme.error else scheme.onSurfaceVariant
     DropdownMenuItem(
         text = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ChromeSymbol(icon, color = iconColor)
                 Text(label)
@@ -43,6 +50,9 @@ internal fun TerminalMenuItem(
         },
         enabled = enabled,
         onClick = onClick,
-        colors = MenuDefaults.itemColors(textColor = if (destructive) scheme.error else scheme.onSurface)
+        colors =
+            MenuDefaults.itemColors(
+                textColor = if (destructive) scheme.error else scheme.onSurface,
+            ),
     )
 }

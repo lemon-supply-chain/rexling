@@ -16,16 +16,19 @@ import org.junit.Test
  * Contrast and role-separation guards for every shipped theme.
  *
  * Two classes of failure this test exists to prevent:
- *  - a role pair below its WCAG floor after a palette or opacity change, and
- *  - three accents collapsing back into one, so action, selection and working
- *    status cannot be told apart.
+ * - a role pair below its WCAG floor after a palette or opacity change, and
+ * - three accents collapsing back into one, so action, selection and working status cannot be told
+ *   apart.
  */
 class ColorContrastTest {
     private val themes = ThemeCatalog.parse(readCatalog())
     private val presets = themes.drop(2)
 
     private fun readCatalog(): String =
-        listOf("src/main/assets/themes/rex-builtins.json", "app/src/main/assets/themes/rex-builtins.json")
+        listOf(
+                "src/main/assets/themes/rex-builtins.json",
+                "app/src/main/assets/themes/rex-builtins.json",
+            )
             .first { File(it).exists() }
             .let { File(it).readText() }
 
@@ -46,20 +49,45 @@ class ColorContrastTest {
 
     @Test
     fun everyTextRoleClearsItsContrastFloor() {
-        val textPairs = listOf(
-            RolePair("onSurface on surface", { it.onSurface }, { it.surface }),
-            RolePair("onSurfaceVariant on surface", { it.onSurfaceVariant }, { it.surface }),
-            RolePair("onSurfaceVariant on surfaceContainer", { it.onSurfaceVariant }, { it.surfaceContainer }),
-            RolePair("onSurfaceVariant on surfaceContainerHigh", { it.onSurfaceVariant }, { it.surfaceContainerHigh }),
-            RolePair("onPrimary on primary", { it.onPrimary }, { it.primary }),
-            RolePair("onSecondary on secondary", { it.onSecondary }, { it.secondary }),
-            RolePair("onSecondaryContainer on secondaryContainer", { it.onSecondaryContainer }, { it.secondaryContainer }),
-            RolePair("onTertiary on tertiary", { it.onTertiary }, { it.tertiary }),
-            RolePair("onTertiaryContainer on tertiaryContainer", { it.onTertiaryContainer }, { it.tertiaryContainer }),
-            RolePair("onPrimaryContainer on primaryContainer", { it.onPrimaryContainer }, { it.primaryContainer }),
-            RolePair("onError on error", { it.onError }, { it.error }),
-            RolePair("onErrorContainer on errorContainer", { it.onErrorContainer }, { it.errorContainer }),
-        )
+        val textPairs =
+            listOf(
+                RolePair("onSurface on surface", { it.onSurface }, { it.surface }),
+                RolePair("onSurfaceVariant on surface", { it.onSurfaceVariant }, { it.surface }),
+                RolePair(
+                    "onSurfaceVariant on surfaceContainer",
+                    { it.onSurfaceVariant },
+                    { it.surfaceContainer },
+                ),
+                RolePair(
+                    "onSurfaceVariant on surfaceContainerHigh",
+                    { it.onSurfaceVariant },
+                    { it.surfaceContainerHigh },
+                ),
+                RolePair("onPrimary on primary", { it.onPrimary }, { it.primary }),
+                RolePair("onSecondary on secondary", { it.onSecondary }, { it.secondary }),
+                RolePair(
+                    "onSecondaryContainer on secondaryContainer",
+                    { it.onSecondaryContainer },
+                    { it.secondaryContainer },
+                ),
+                RolePair("onTertiary on tertiary", { it.onTertiary }, { it.tertiary }),
+                RolePair(
+                    "onTertiaryContainer on tertiaryContainer",
+                    { it.onTertiaryContainer },
+                    { it.tertiaryContainer },
+                ),
+                RolePair(
+                    "onPrimaryContainer on primaryContainer",
+                    { it.onPrimaryContainer },
+                    { it.primaryContainer },
+                ),
+                RolePair("onError on error", { it.onError }, { it.error }),
+                RolePair(
+                    "onErrorContainer on errorContainer",
+                    { it.onErrorContainer },
+                    { it.errorContainer },
+                ),
+            )
         schemes.forEach { (name, scheme) ->
             textPairs.forEach { pair ->
                 val ratio = contrast(pair.foreground(scheme), pair.background(scheme))
@@ -70,12 +98,21 @@ class ColorContrastTest {
 
     @Test
     fun everyControlRoleClearsThreeToOne() {
-        val controlPairs = listOf(
-            RolePair("primary on surface", { it.primary }, { it.surface }),
-            RolePair("primary on surfaceContainerHigh", { it.primary }, { it.surfaceContainerHigh }),
-            RolePair("tertiary on surface", { it.tertiary }, { it.surface }),
-            RolePair("tertiary on surfaceContainerHigh", { it.tertiary }, { it.surfaceContainerHigh }),
-        )
+        val controlPairs =
+            listOf(
+                RolePair("primary on surface", { it.primary }, { it.surface }),
+                RolePair(
+                    "primary on surfaceContainerHigh",
+                    { it.primary },
+                    { it.surfaceContainerHigh },
+                ),
+                RolePair("tertiary on surface", { it.tertiary }, { it.surface }),
+                RolePair(
+                    "tertiary on surfaceContainerHigh",
+                    { it.tertiary },
+                    { it.surfaceContainerHigh },
+                ),
+            )
         schemes.forEach { (name, scheme) ->
             controlPairs.forEach { pair ->
                 val ratio = contrast(pair.foreground(scheme), pair.background(scheme))
@@ -97,7 +134,9 @@ class ColorContrastTest {
             val c = value.toDouble()
             return if (c <= 0.04045) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
         }
-        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+        return 0.2126 * channel(color.red) +
+            0.7152 * channel(color.green) +
+            0.0722 * channel(color.blue)
     }
 
     /** Chroma and hue in OKLCH, so "quiet" and "far apart" are perceptual, not RGB guesses. */
@@ -126,5 +165,6 @@ class ColorContrastTest {
 
     private fun hue(color: Color) = oklch(color).third
 
-    private fun hueDistance(first: Double, second: Double): Double = kotlin.math.abs((first - second + 180) % 360 - 180)
+    private fun hueDistance(first: Double, second: Double): Double =
+        kotlin.math.abs((first - second + 180) % 360 - 180)
 }

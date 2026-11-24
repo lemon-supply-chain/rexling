@@ -25,16 +25,20 @@ import org.junit.runner.RunWith
 class WorkspaceConnectionTest {
     @get:Rule val ui = createEmptyComposeRule()
 
-    @Test fun lastUsedServerReconnectsWithProgressInsteadOfTheServerForm() {
+    @Test
+    fun lastUsedServerReconnectsWithProgressInsteadOfTheServerForm() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assumeTrue(context.packageName.endsWith(".renderbench"))
         val preferences = context.getSharedPreferences("rex", 0)
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
             server.start(InetAddress.getByName("127.0.0.1"), 0)
-            val host = ServerProfile.create("Slow Rex", "http://127.0.0.1:${server.port}", "test-server")
+            val host =
+                ServerProfile.create("Slow Rex", "http://127.0.0.1:${server.port}", "test-server")
             val other = ServerProfile.create("Other Rex", "http://127.0.0.1:1", "other-server")
-            preferences.edit().clear()
+            preferences
+                .edit()
+                .clear()
                 .putString("servers", SavedServers.encode(listOf(other, host)))
                 .putString("active_server", host.id)
                 .putStringSet("connected_servers", setOf(host.id))
@@ -42,14 +46,23 @@ class WorkspaceConnectionTest {
             try {
                 ActivityScenario.launch(MainActivity::class.java).use {
                     val progress = hasText("Connecting…") or hasText("Reconnecting · input paused")
-                    ui.waitUntil(10_000) { ui.onAllNodes(progress).fetchSemanticsNodes().isNotEmpty() }
+                    ui.waitUntil(10_000) {
+                        ui.onAllNodes(progress).fetchSemanticsNodes().isNotEmpty()
+                    }
                     ui.onNode(progress).assertIsDisplayed()
-                    ui.onNode(SemanticsMatcher.expectValue(
-                        SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate,
-                    )).assertIsDisplayed()
+                    ui.onNode(
+                            SemanticsMatcher.expectValue(
+                                SemanticsProperties.ProgressBarRangeInfo,
+                                ProgressBarRangeInfo.Indeterminate,
+                            ),
+                        )
+                        .assertIsDisplayed()
                     ui.onNodeWithText("Connect over Tailscale").assertDoesNotExist()
                     ui.onNodeWithText("Rex server URL").assertDoesNotExist()
-                    assertNotNull("Saved connection should start automatically", server.takeRequest(5, TimeUnit.SECONDS))
+                    assertNotNull(
+                        "Saved connection should start automatically",
+                        server.takeRequest(5, TimeUnit.SECONDS),
+                    )
                 }
                 preferences.edit().remove("connected_servers").commit()
                 ActivityScenario.launch(MainActivity::class.java).use {

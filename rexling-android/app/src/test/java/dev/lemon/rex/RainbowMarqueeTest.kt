@@ -26,7 +26,8 @@ class RainbowMarqueeTest {
         glintState.floatValue = 0.25f
         assertEquals(0.17f, marquee.light, 1e-3f)
 
-        // At glint 0.75, sin(0.75 * 2 * PI) = sin(3 * PI / 2) = -1.0 -> min breath (0.0) -> light = 0.10
+        // At glint 0.75, sin(0.75 * 2 * PI) = sin(3 * PI / 2) = -1.0 -> min breath (0.0) -> light =
+        // 0.10
         glintState.floatValue = 0.75f
         assertEquals(0.10f, marquee.light, 1e-3f)
 

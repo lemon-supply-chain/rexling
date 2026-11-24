@@ -341,7 +341,7 @@ private constructor(
                 numbers
                     .findAll(
                         if (value.startsWith("color(display-p3")) value.substringAfter("display-p3")
-                        else value
+                        else value,
                     )
                     .map { it.value.toFloat() }
                     .toList()
@@ -435,7 +435,7 @@ private constructor(
                             0f,
                             0f,
                             1f,
-                        )
+                        ),
                     )
                 }
                 val gradientTransform = attributes.optString("gradientTransform")

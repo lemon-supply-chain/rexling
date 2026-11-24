@@ -47,7 +47,9 @@ class ProgramTileRenderingTest {
         val icons =
             org.json
                 .JSONObject(
-                    context.assets.open("program_tiles.json").bufferedReader().use { it.readText() }
+                    context.assets.open("program_tiles.json").bufferedReader().use {
+                        it.readText()
+                    },
                 )
                 .getJSONObject("icons")
         assertEquals(ProgramCatalog.iconKeys(context.assets), icons.keys().asSequence().toSet())
@@ -113,7 +115,7 @@ class ProgramTileRenderingTest {
                     difference +=
                         abs(
                             ((a ushr shift and 255) * Color.alpha(a) / 255) -
-                                ((b ushr shift and 255) * Color.alpha(b) / 255)
+                                ((b ushr shift and 255) * Color.alpha(b) / 255),
                         )
                 }
                 difference += abs(Color.alpha(a) - Color.alpha(b))

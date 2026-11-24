@@ -19,35 +19,58 @@ import org.junit.runner.RunWith
 class TerminalActionsDrawerTest {
     @get:Rule val ui = createComposeRule()
 
-    @Test fun actionsScrollWhileHeaderStaysVisible() {
+    @Test
+    fun actionsScrollWhileHeaderStaysVisible() {
         val open = mutableStateOf(true)
         val events = mutableListOf<String>()
         ui.setContent {
             RexTheme(true, ThemeCatalog.defaults[0]) {
-                if (open.value) TerminalActionsDrawer(
-                    title = "nvim",
-                    subtitle = "Work · Shipyard",
-                    status = "Viewing terminal",
-                    dimensions = 74 to 45,
-                    controlled = false,
-                    ownership = {},
-                    quickActions = listOf(
-                        TerminalDrawerAction("Paste", ChromeIcon.PASTE, enabled = false) {},
-                        TerminalDrawerAction("Image", ChromeIcon.IMAGE, enabled = false) {},
-                        TerminalDrawerAction("Attach file", ChromeIcon.FILE, enabled = false) {},
-                        TerminalDrawerAction("Copy viewport", ChromeIcon.COPY) {},
-                        TerminalDrawerAction("Light theme", ChromeIcon.SUN) {},
-                    ),
-                    actions = listOf(
-                        TerminalDrawerAction("New session", ChromeIcon.ADD, opensDrawer = true) {},
-                        TerminalDrawerAction("Port forwarding", ChromeIcon.SERVER, opensDrawer = true) {},
-                        TerminalDrawerAction("Servers", ChromeIcon.SERVER, opensDrawer = true) {},
-                        TerminalDrawerAction("Refresh sessions", ChromeIcon.REFRESH) {},
-                    ),
-                    onPreferences = {},
-                    onClosePane = { events += "close pane" },
-                    onDismiss = { open.value = false; events += "dismiss" },
-                )
+                if (open.value)
+                    TerminalActionsDrawer(
+                        title = "nvim",
+                        subtitle = "Work · Shipyard",
+                        status = "Viewing terminal",
+                        dimensions = 74 to 45,
+                        controlled = false,
+                        ownership = {},
+                        quickActions =
+                            listOf(
+                                TerminalDrawerAction("Paste", ChromeIcon.PASTE, enabled = false) {},
+                                TerminalDrawerAction("Image", ChromeIcon.IMAGE, enabled = false) {},
+                                TerminalDrawerAction(
+                                    "Attach file",
+                                    ChromeIcon.FILE,
+                                    enabled = false,
+                                ) {},
+                                TerminalDrawerAction("Copy viewport", ChromeIcon.COPY) {},
+                                TerminalDrawerAction("Light theme", ChromeIcon.SUN) {},
+                            ),
+                        actions =
+                            listOf(
+                                TerminalDrawerAction(
+                                    "New session",
+                                    ChromeIcon.ADD,
+                                    opensDrawer = true,
+                                ) {},
+                                TerminalDrawerAction(
+                                    "Port forwarding",
+                                    ChromeIcon.SERVER,
+                                    opensDrawer = true,
+                                ) {},
+                                TerminalDrawerAction(
+                                    "Servers",
+                                    ChromeIcon.SERVER,
+                                    opensDrawer = true,
+                                ) {},
+                                TerminalDrawerAction("Refresh sessions", ChromeIcon.REFRESH) {},
+                            ),
+                        onPreferences = {},
+                        onClosePane = { events += "close pane" },
+                        onDismiss = {
+                            open.value = false
+                            events += "dismiss"
+                        },
+                    )
             }
         }
 
@@ -55,8 +78,10 @@ class TerminalActionsDrawerTest {
         ui.onNodeWithText("74 × 45").assertIsDisplayed()
         ui.onNodeWithText("Paste").assertIsNotEnabled()
         ui.onNodeWithText("Attach file").assertIsDisplayed().assertIsNotEnabled()
-        val theme = ui.onNodeWithText("Light theme").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        val copy = ui.onNodeWithText("Copy viewport").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val theme =
+            ui.onNodeWithText("Light theme").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val copy =
+            ui.onNodeWithText("Copy viewport").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assertTrue(theme.left >= copy.right)
         ui.onNodeWithText("Close pane").performScrollTo().assertIsDisplayed()
         ui.onNodeWithContentDescription("Close terminal menu").assertIsDisplayed()

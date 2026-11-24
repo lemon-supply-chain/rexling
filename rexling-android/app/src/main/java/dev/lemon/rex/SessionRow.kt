@@ -16,28 +16,103 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-@Composable internal fun SessionRow(target: SessionTarget,active: Boolean,last: Boolean,closing: Boolean,
-    onSelect: ()->Unit,onClose: ()->Unit,onRename: ()->Unit={},revealed: Boolean,onReveal: (Boolean)->Unit) {
-    val actions=listOf(SwitcherRowAction(stringResource(R.string.rename_session),ChromeIcon.EDIT,run=onRename),
-        SwitcherRowAction(stringResource(R.string.close_session),ChromeIcon.CLOSE,destructive=true,run=onClose))
-    SwitcherSwipeRow(revealed,onReveal,actions,enabled=!closing) {
-        Row(Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=if(active) .8f else .35f))
-            .clickable(enabled=!closing,onClick=onSelect)
-            .semantics {
-                if(!closing) customActions=actions.map {action->CustomAccessibilityAction(action.label) {onReveal(false);action.run();true}}
-            }
-            .heightIn(min=56.dp).padding(start=10.dp,end=12.dp,top=4.dp,bottom=4.dp),
-            verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.size(6.dp).background(if(active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,RoundedCornerShape(4.dp)))
+@Composable
+internal fun SessionRow(
+    target: SessionTarget,
+    active: Boolean,
+    last: Boolean,
+    closing: Boolean,
+    onSelect: () -> Unit,
+    onClose: () -> Unit,
+    onRename: () -> Unit = {},
+    revealed: Boolean,
+    onReveal: (Boolean) -> Unit,
+) {
+    val actions =
+        listOf(
+            SwitcherRowAction(
+                stringResource(R.string.rename_session),
+                ChromeIcon.EDIT,
+                run = onRename,
+            ),
+            SwitcherRowAction(
+                stringResource(R.string.close_session),
+                ChromeIcon.CLOSE,
+                destructive = true,
+                run = onClose,
+            ),
+        )
+    SwitcherSwipeRow(revealed, onReveal, actions, enabled = !closing) {
+        Row(
+            Modifier.fillMaxWidth()
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = if (active) .8f else .35f,
+                    ),
+                )
+                .clickable(enabled = !closing, onClick = onSelect)
+                .semantics {
+                    if (!closing)
+                        customActions = actions.map { action ->
+                            CustomAccessibilityAction(action.label) {
+                                onReveal(false)
+                                action.run()
+                                true
+                            }
+                        }
+                }
+                .heightIn(min = 56.dp)
+                .padding(start = 10.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                Modifier.size(6.dp)
+                    .background(
+                        if (active) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(4.dp),
+                    ),
+            )
             Column(Modifier.weight(1f)) {
-                Text(target.session.label,style=SettingsType.row,fontWeight=if(active) FontWeight.SemiBold else FontWeight.Normal,maxLines=1,overflow=TextOverflow.Ellipsis)
-                Text((target.detail?.let {stringResource(R.string.session_details_format,it.attachment,it.tabs,it.panes)} ?: stringResource(R.string.details_not_loaded)),
-                    style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                Text(
+                    target.session.label,
+                    style = SettingsType.row,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    (target.detail?.let {
+                        stringResource(
+                            R.string.session_details_format,
+                            it.attachment,
+                            it.tabs,
+                            it.panes,
+                        )
+                    } ?: stringResource(R.string.details_not_loaded)),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            when {closing->CircularProgressIndicator(Modifier.size(15.dp),strokeWidth=1.5.dp)
-                active->Text(stringResource(R.string.session_current),color=MaterialTheme.colorScheme.primary,style=SettingsType.detail,fontWeight=FontWeight.SemiBold)
-                last->Text(stringResource(R.string.session_previous),color=MaterialTheme.colorScheme.onSurfaceVariant,style=SettingsType.detail)}
+            when {
+                closing -> CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 1.5.dp)
+                active ->
+                    Text(
+                        stringResource(R.string.session_current),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = SettingsType.detail,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                last ->
+                    Text(
+                        stringResource(R.string.session_previous),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = SettingsType.detail,
+                    )
+            }
         }
     }
 }
