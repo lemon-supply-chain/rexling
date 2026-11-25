@@ -2,14 +2,19 @@
 
 package dev.lemon.rex
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -254,18 +259,27 @@ internal fun rememberBackdropCapture(visible: Boolean): Boolean {
 }
 
 @Composable
-internal fun DrawerHandle() {
-    androidx.compose.foundation.layout.Box(
-        Modifier.fillMaxWidth().height(16.dp),
-        contentAlignment = androidx.compose.ui.Alignment.Center,
+internal fun DrawerHandle(active: Boolean = false, modifier: Modifier = Modifier) {
+    val motion = LocalMotionEnabled.current
+    val color by
+        animateColorAsState(
+            if (active) MaterialTheme.colorScheme.roles.action
+            else MaterialTheme.colorScheme.outlineVariant,
+            if (motion) RexTokens.motion.fastEffects() else snap(),
+            label = "DrawerHandle color",
+        )
+    val width by
+        animateDpAsState(
+            if (active) 36.dp else 28.dp,
+            if (motion) RexTokens.motion.fastSpatial() else snap(),
+            label = "DrawerHandle width",
+        )
+    Box(
+        modifier.fillMaxWidth().height(16.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.layout.Box(
-            Modifier.width(28.dp)
-                .height(3.dp)
-                .background(
-                    MaterialTheme.colorScheme.outlineVariant,
-                    androidx.compose.foundation.shape.RoundedCornerShape(3.dp),
-                ),
+        Box(
+            Modifier.width(width).height(3.dp).background(color, RoundedCornerShape(3.dp)),
         )
     }
 }

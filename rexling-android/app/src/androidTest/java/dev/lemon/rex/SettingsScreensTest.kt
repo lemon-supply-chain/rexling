@@ -4,7 +4,10 @@ import android.graphics.Bitmap
 import android.view.KeyEvent
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -78,6 +81,40 @@ class SettingsScreensTest {
         ui.waitForIdle()
         ui.runOnIdle { assertEquals(0, closed) }
         assertEquals(expandedTop, handleZone.fetchSemanticsNode().boundsInRoot.top, 2f)
+
+        val bodyArea = ui.onNodeWithTag("Preferences body area")
+        bodyArea.performTouchInput {
+            swipeDown(
+                startY = top + 120f,
+                endY = top + 620f,
+                durationMillis = 150,
+            )
+            // Swipe along the horizontal margin / blank edge too.
+        }
+        ui.waitForIdle()
+        ui.runOnIdle { assertEquals(0, closed) }
+        assertEquals(expandedTop, handleZone.fetchSemanticsNode().boundsInRoot.top, 2f)
+
+        bodyArea.performTouchInput {
+            val marginStart = Offset(left + 4f, top + 120f)
+            down(marginStart)
+            moveBy(Offset(0f, 400f))
+            up()
+        }
+        ui.waitForIdle()
+        ui.runOnIdle { assertEquals(0, closed) }
+        assertEquals(expandedTop, handleZone.fetchSemanticsNode().boundsInRoot.top, 2f)
+
+        bodyArea.performTouchInput {
+            val bottomBlankStart = Offset(centerX, (bottom - 8f).coerceAtLeast(top + 20f))
+            down(bottomBlankStart)
+            moveBy(Offset(0f, 300f))
+            up()
+        }
+        ui.waitForIdle()
+        ui.runOnIdle { assertEquals(0, closed) }
+        assertEquals(expandedTop, handleZone.fetchSemanticsNode().boundsInRoot.top, 2f)
+
         handleZone.performTouchInput {
             swipeDown(startY = centerY, endY = centerY + 900f, durationMillis = 100)
         }
@@ -85,6 +122,51 @@ class SettingsScreensTest {
         assertTrue(
             closed > 0 || handleZone.fetchSemanticsNode().boundsInRoot.top > expandedTop + 20f,
         )
+    }
+
+    @Test
+    fun drawerHandleLightsUpWhenPullingDownFromTop() {
+        var actionArgb = 0
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                actionArgb = MaterialTheme.colorScheme.roles.action.toArgb()
+                PreferencesSheet({}, {}, {}, {}, onClose = {})
+            }
+        }
+        val handleZone = ui.onNodeWithTag("Preferences handle zone")
+        val drawerHandle = ui.onNodeWithTag("Preferences drawer handle")
+        ui.awaitDisplayed(handleZone)
+        handleZone.performTouchInput {
+            swipeUp(startY = centerY, endY = centerY - 600f, durationMillis = 150)
+        }
+        ui.waitForIdle()
+
+        fun countActionPixels(bitmap: Bitmap): Int {
+            var count = 0
+            for (y in 0 until bitmap.height) {
+                for (x in 0 until bitmap.width) {
+                    if (bitmap.getPixel(x, y) == actionArgb) count++
+                }
+            }
+            return count
+        }
+
+        assertEquals(0, countActionPixels(drawerHandle.captureToImage().asAndroidBitmap()))
+
+        handleZone.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 80f))
+        }
+        ui.waitForIdle()
+        ui.waitUntil(2_000) {
+            countActionPixels(drawerHandle.captureToImage().asAndroidBitmap()) > 0
+        }
+
+        handleZone.performTouchInput { cancel() }
+        ui.waitForIdle()
+        ui.waitUntil(2_000) {
+            countActionPixels(drawerHandle.captureToImage().asAndroidBitmap()) == 0
+        }
     }
 
     @Test

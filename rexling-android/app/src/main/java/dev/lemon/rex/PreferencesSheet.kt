@@ -81,6 +81,7 @@ internal fun PreferencesSheet(
     val frost = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
     // Read only from pointer and nested-scroll callbacks, so this stays out of composition state.
     val gesture = remember { SheetGesture() }
+    var isPullingHandle by remember { mutableStateOf(false) }
     val sheetHolder = remember { SheetStateHolder() }
     val isExpanded by remember {
         derivedStateOf { sheetHolder.state?.currentValue == SheetValue.Expanded }
@@ -134,22 +135,34 @@ internal fun PreferencesSheet(
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val contentMaxHeight = (maxHeight - 64.dp).coerceAtLeast(200.dp)
                 Column(
-                    frost
-                        .fillMaxWidth()
-                        .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
-                        )
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                val down =
-                                    awaitFirstDown(
-                                        requireUnconsumed = false,
-                                        pass = PointerEventPass.Initial,
-                                    )
-                                gesture.startedInHandleZone =
-                                    down.position.y <= gesture.handleZoneBottomPx
+                    frost.fillMaxWidth().pointerInput(Unit) {
+                        val touchSlop = viewConfiguration.touchSlop
+                        awaitEachGesture {
+                            val down =
+                                awaitFirstDown(
+                                    requireUnconsumed = false,
+                                    pass = PointerEventPass.Initial,
+                                )
+                            val inHandle = down.position.y <= gesture.handleZoneBottomPx
+                            gesture.startedInHandleZone = inHandle
+                            val pointerId = down.id
+                            val startY = down.position.y
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull { it.id == pointerId }
+                                    if (inHandle && change != null && change.pressed) {
+                                        if (change.position.y - startY > touchSlop) {
+                                            isPullingHandle = true
+                                        }
+                                    }
+                                    if (event.changes.none { it.pressed }) break
+                                }
+                            } finally {
+                                isPullingHandle = false
                             }
-                        },
+                        }
+                    },
                 ) {
                     Column(
                         Modifier.fillMaxWidth()
@@ -158,7 +171,10 @@ internal fun PreferencesSheet(
                                 gesture.handleZoneBottomPx = it.size.height.toFloat()
                             },
                     ) {
-                        DrawerHandle()
+                        DrawerHandle(
+                            active = isPullingHandle,
+                            modifier = Modifier.testTag("Preferences drawer handle"),
+                        )
                         Row(
                             Modifier.fillMaxWidth()
                                 .heightIn(min = 48.dp)
@@ -179,647 +195,712 @@ internal fun PreferencesSheet(
                             )
                         }
                     }
-                    Column(
+                    Box(
                         Modifier.fillMaxWidth()
-                            .heightIn(max = contentMaxHeight)
-                            .nestedScroll(blockExpandedBodyDismiss)
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 8.dp, bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                            .testTag("Preferences body area")
+                            .pointerInput(Unit) {
+                                val touchSlop = viewConfiguration.touchSlop
+                                awaitEachGesture {
+                                    val down =
+                                        awaitFirstDown(
+                                            requireUnconsumed = false,
+                                            pass = PointerEventPass.Main,
+                                        )
+                                    val pointerId = down.id
+                                    val startY = down.position.y
+                                    var blockedDrag = false
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Main)
+                                        val change =
+                                            event.changes.firstOrNull { it.id == pointerId }
+                                        if (change != null && change.pressed) {
+                                            if (
+                                                !blockedDrag &&
+                                                    isExpanded &&
+                                                    !gesture.startedInHandleZone &&
+                                                    !change.isConsumed &&
+                                                    kotlin.math.abs(change.position.y - startY) >
+                                                        touchSlop
+                                            ) {
+                                                blockedDrag = true
+                                            }
+                                            if (blockedDrag) {
+                                                change.consume()
+                                            }
+                                        }
+                                        if (event.changes.none { it.pressed }) break
+                                    }
+                                }
+                            }
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
+                            ),
                     ) {
-                        SettingsSection(stringResource(R.string.section_display), compact = true) {
-                            SettingsRow(
-                                stringResource(R.string.appearance),
-                                stringResource(R.string.appearance_detail),
-                                SettingsGlyph.APPEARANCE,
-                                onAppearance,
-                            )
-                            SettingsDivider()
-                            SettingsRow(
-                                stringResource(R.string.font_size),
-                                stringResource(R.string.font_size_detail),
-                                SettingsGlyph.FONT,
-                                onFont,
-                            )
-                            SettingsDivider()
-                            SettingsRow(
-                                stringResource(R.string.language),
-                                when (language) {
-                                    "zh" -> stringResource(R.string.language_zh)
-                                    "en" -> stringResource(R.string.language_en)
-                                    else -> stringResource(R.string.language_system)
-                                },
-                                SettingsGlyph.LANGUAGE,
-                                onLanguage,
-                            )
-                            SettingsDivider()
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .heightIn(max = contentMaxHeight)
+                                .nestedScroll(blockExpandedBodyDismiss)
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp)
+                                .padding(top = 8.dp, bottom = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            SettingsSection(
+                                stringResource(R.string.section_display),
+                                compact = true,
                             ) {
-                                Text(
-                                    stringResource(R.string.terminal_padding),
-                                    style = SettingsType.row,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                SettingsRow(
+                                    stringResource(R.string.appearance),
+                                    stringResource(R.string.appearance_detail),
+                                    SettingsGlyph.APPEARANCE,
+                                    onAppearance,
                                 )
+                                SettingsDivider()
+                                SettingsRow(
+                                    stringResource(R.string.font_size),
+                                    stringResource(R.string.font_size_detail),
+                                    SettingsGlyph.FONT,
+                                    onFont,
+                                )
+                                SettingsDivider()
+                                SettingsRow(
+                                    stringResource(R.string.language),
+                                    when (language) {
+                                        "zh" -> stringResource(R.string.language_zh)
+                                        "en" -> stringResource(R.string.language_en)
+                                        else -> stringResource(R.string.language_system)
+                                    },
+                                    SettingsGlyph.LANGUAGE,
+                                    onLanguage,
+                                )
+                                SettingsDivider()
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.terminal_padding),
+                                        style = SettingsType.row,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        stringResource(R.string.terminal_padding_detail),
+                                        style = SettingsType.detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TerminalPadding.entries.forEach { option ->
+                                            val labelRes =
+                                                when (option) {
+                                                    TerminalPadding.NONE ->
+                                                        R.string.terminal_padding_none
+                                                    TerminalPadding.SMALL ->
+                                                        R.string.terminal_padding_small
+                                                    TerminalPadding.NORMAL ->
+                                                        R.string.terminal_padding_normal
+                                                }
+                                            FilterChip(
+                                                selected = terminalPadding == option,
+                                                onClick = { onTerminalPadding(option) },
+                                                label = {
+                                                    Text(
+                                                        stringResource(labelRes),
+                                                        style = SettingsType.row,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            extendPadding,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onExtendPadding,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.extend_padding),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(
+                                                if (extendPadding) R.string.extend_padding_detail_on
+                                                else R.string.extend_padding_detail_off,
+                                            ),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(checked = extendPadding, onCheckedChange = null)
+                                }
+                                SettingsDivider()
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.keep_screen_awake),
+                                        style = SettingsType.row,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        stringResource(R.string.keep_screen_awake_desc),
+                                        style = SettingsType.detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    KeepScreenAwake.entries.forEach { mode ->
+                                        Row(
+                                            Modifier.fillMaxWidth()
+                                                .selectable(
+                                                    mode == keepScreenAwake,
+                                                    role =
+                                                        androidx.compose.ui.semantics.Role
+                                                            .RadioButton,
+                                                    onClick = { onKeepScreenAwake(mode) },
+                                                )
+                                                .padding(vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            RadioButton(
+                                                selected = mode == keepScreenAwake,
+                                                onClick = null,
+                                            )
+                                            Column(Modifier.padding(start = 8.dp)) {
+                                                Text(
+                                                    stringResource(mode.labelRes),
+                                                    style = SettingsType.row,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                )
+                                                Text(
+                                                    stringResource(mode.detailRes),
+                                                    style = SettingsType.detail,
+                                                    color =
+                                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            SettingsSection(stringResource(R.string.section_tabs), compact = true) {
                                 Text(
-                                    stringResource(R.string.terminal_padding_detail),
+                                    stringResource(R.string.section_tabs_desc),
+                                    Modifier.padding(horizontal = 16.dp).padding(top = 10.dp),
                                     style = SettingsType.detail,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TerminalPadding.entries.forEach { option ->
-                                        val labelRes =
-                                            when (option) {
-                                                TerminalPadding.NONE ->
-                                                    R.string.terminal_padding_none
-                                                TerminalPadding.SMALL ->
-                                                    R.string.terminal_padding_small
-                                                TerminalPadding.NORMAL ->
-                                                    R.string.terminal_padding_normal
-                                            }
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            value = floatingTabs,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onFloatingTabs,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.tab_floating),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(R.string.tab_floating_detail),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(checked = floatingTabs, onCheckedChange = null)
+                                }
+                                SettingsDivider()
+                                TabWidthClass.entries.forEachIndexed { i, each ->
+                                    if (i > 0) SettingsDivider()
+                                    TabLayoutChoice(
+                                        each,
+                                        tabLayouts[each] ?: TabBarLayout(),
+                                        current =
+                                            if (each == tabWidth.first) tabWidth.second else null,
+                                    ) {
+                                        onTabLayout(each, it)
+                                    }
+                                }
+                            }
+                            SettingsSection(
+                                stringResource(R.string.section_panes),
+                                compact = true,
+                            ) {
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.panes_unfolded_title),
+                                        style = SettingsType.row,
+                                    )
+                                    Text(
+                                        stringResource(R.string.panes_unfolded_desc),
+                                        style = SettingsType.detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         FilterChip(
-                                            selected = terminalPadding == option,
-                                            onClick = { onTerminalPadding(option) },
+                                            selected = !multiPaneUnfolded,
+                                            onClick = { onMultiPaneUnfolded(false) },
                                             label = {
                                                 Text(
-                                                    stringResource(labelRes),
+                                                    stringResource(R.string.single_pane),
+                                                    style = SettingsType.row,
+                                                )
+                                            },
+                                        )
+                                        FilterChip(
+                                            selected = multiPaneUnfolded,
+                                            onClick = { onMultiPaneUnfolded(true) },
+                                            label = {
+                                                Text(
+                                                    stringResource(R.string.multiple_panes),
                                                     style = SettingsType.row,
                                                 )
                                             },
                                         )
                                     }
                                 }
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            minimizeFloatingPanes,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onMinimizeFloatingPanes,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.minimize_floating_panes),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(R.string.minimize_floating_panes_detail),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(checked = minimizeFloatingPanes, onCheckedChange = null)
+                                }
                             }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        extendPadding,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onExtendPadding,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            SettingsSection(
+                                stringResource(R.string.section_keyboard),
+                                compact = true,
                             ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                SettingsRow(
+                                    stringResource(R.string.keyboard_toolbar),
+                                    stringResource(R.string.keyboard_toolbar_detail),
+                                    SettingsGlyph.COMMAND,
+                                    onToolbar,
+                                )
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            toolbarWithKeyboardOnly,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onToolbarWithKeyboardOnly,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(
+                                                R.string.show_toolbar_only_with_keyboard,
+                                            ),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(
+                                                R.string.show_toolbar_only_with_keyboard_desc,
+                                            ),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = toolbarWithKeyboardOnly,
+                                        onCheckedChange = null,
+                                    )
+                                }
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            keyboardSuggestionsEnabled,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onKeyboardSuggestions,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
                                     Text(
-                                        stringResource(R.string.extend_padding),
+                                        stringResource(R.string.keyboard_suggestions),
+                                        Modifier.weight(1f),
+                                        style = SettingsType.row,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Switch(
+                                        checked = keyboardSuggestionsEnabled,
+                                        onCheckedChange = null,
+                                    )
+                                }
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            arrowJoystickEnabled,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onArrowJoystick,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.use_joystick),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(
+                                                if (arrowJoystickEnabled)
+                                                    R.string.use_joystick_detail_on
+                                                else R.string.use_joystick_detail_off,
+                                            ),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(checked = arrowJoystickEnabled, onCheckedChange = null)
+                                }
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            enterSubmits,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onEnterSubmits,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.keyboard_enter_sends),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(
+                                                if (enterSubmits)
+                                                    R.string.keyboard_enter_sends_detail_on
+                                                else R.string.keyboard_enter_sends_detail_off,
+                                            ),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(checked = enterSubmits, onCheckedChange = null)
+                                }
+                                SettingsDivider()
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.ctrl_shortcuts),
                                         style = SettingsType.row,
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
                                     Text(
-                                        stringResource(
-                                            if (extendPadding) R.string.extend_padding_detail_on
-                                            else R.string.extend_padding_detail_off,
-                                        ),
+                                        stringResource(R.string.ctrl_shortcuts_detail),
                                         style = SettingsType.detail,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                }
-                                Switch(checked = extendPadding, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.keep_screen_awake),
-                                    style = SettingsType.row,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    stringResource(R.string.keep_screen_awake_desc),
-                                    style = SettingsType.detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                KeepScreenAwake.entries.forEach { mode ->
-                                    Row(
-                                        Modifier.fillMaxWidth()
-                                            .selectable(
-                                                mode == keepScreenAwake,
-                                                role =
-                                                    androidx.compose.ui.semantics.Role.RadioButton,
-                                                onClick = { onKeepScreenAwake(mode) },
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        ControlShortcutGesture.entries.forEach { gesture ->
+                                            FilterChip(
+                                                selected = shortcutGesture == gesture,
+                                                onClick = { onShortcutGesture(gesture) },
+                                                label = {
+                                                    Text(
+                                                        if (gesture == ControlShortcutGesture.HOLD)
+                                                            stringResource(
+                                                                R.string.ctrl_gesture_hold,
+                                                            )
+                                                        else
+                                                            stringResource(
+                                                                R.string.ctrl_gesture_double_tap,
+                                                            ),
+                                                        style = SettingsType.row,
+                                                    )
+                                                },
                                             )
-                                            .padding(vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        RadioButton(
-                                            selected = mode == keepScreenAwake,
-                                            onClick = null,
-                                        )
-                                        Column(Modifier.padding(start = 8.dp)) {
+                                        }
+                                    }
+                                }
+                                SettingsDivider()
+                                SettingsRow(
+                                    stringResource(R.string.ctrl_shortcut_buttons),
+                                    stringResource(R.string.ctrl_shortcut_buttons_detail),
+                                    SettingsGlyph.COMMAND,
+                                    onControlItems,
+                                )
+                                SettingsDivider()
+                                SettingsRow(
+                                    stringResource(R.string.neovim_shortcuts),
+                                    stringResource(R.string.neovim_shortcuts_detail),
+                                    SettingsGlyph.COMMAND,
+                                    onNeovim,
+                                )
+                            }
+                            SettingsSection(
+                                stringResource(R.string.section_connections),
+                                compact = true,
+                            ) {
+                                SettingsRow(
+                                    stringResource(R.string.network),
+                                    stringResource(R.string.network_detail),
+                                    SettingsGlyph.NETWORK,
+                                    onNetwork,
+                                )
+                                SettingsDivider()
+                                SettingsRow(
+                                    stringResource(R.string.ssh_keys),
+                                    stringResource(R.string.ssh_keys_detail),
+                                    SettingsGlyph.KEY,
+                                    onSshKeys,
+                                )
+                                SettingsDivider()
+                                SettingsRow(
+                                    stringResource(R.string.background_alerts),
+                                    stringResource(R.string.background_alerts_detail),
+                                    SettingsGlyph.ALERTS,
+                                    onAlerts,
+                                )
+                            }
+                            SettingsSection(
+                                stringResource(R.string.section_port_forwarding),
+                                compact = true,
+                            ) {
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.port_conflict_title),
+                                        style = SettingsType.row,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        stringResource(R.string.port_conflict_desc),
+                                        style = SettingsType.detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    PortConflictPolicy.entries.forEach { choice ->
+                                        Row(
+                                            Modifier.fillMaxWidth()
+                                                .selectable(
+                                                    PortForwards.policy == choice,
+                                                    role =
+                                                        androidx.compose.ui.semantics.Role
+                                                            .RadioButton,
+                                                    onClick = { PortForwards.changePolicy(choice) },
+                                                )
+                                                .padding(vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            RadioButton(
+                                                selected = PortForwards.policy == choice,
+                                                onClick = null,
+                                            )
                                             Text(
-                                                stringResource(mode.labelRes),
+                                                stringResource(choice.labelRes),
+                                                Modifier.padding(start = 8.dp),
                                                 style = SettingsType.row,
                                                 color = MaterialTheme.colorScheme.onSurface,
-                                            )
-                                            Text(
-                                                stringResource(mode.detailRes),
-                                                style = SettingsType.detail,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                     }
                                 }
                             }
-                        }
-                        SettingsSection(stringResource(R.string.section_tabs), compact = true) {
-                            Text(
-                                stringResource(R.string.section_tabs_desc),
-                                Modifier.padding(horizontal = 16.dp).padding(top = 10.dp),
-                                style = SettingsType.detail,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        value = floatingTabs,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onFloatingTabs,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            SettingsSection(
+                                stringResource(R.string.section_experimental),
+                                compact = true,
                             ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.tab_floating),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.tab_floating_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = floatingTabs, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            TabWidthClass.entries.forEachIndexed { i, each ->
-                                if (i > 0) SettingsDivider()
-                                TabLayoutChoice(
-                                    each,
-                                    tabLayouts[each] ?: TabBarLayout(),
-                                    current = if (each == tabWidth.first) tabWidth.second else null,
-                                ) {
-                                    onTabLayout(each, it)
-                                }
-                            }
-                        }
-                        SettingsSection(stringResource(R.string.section_panes), compact = true) {
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.panes_unfolded_title),
-                                    style = SettingsType.row,
-                                )
-                                Text(
-                                    stringResource(R.string.panes_unfolded_desc),
-                                    style = SettingsType.detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilterChip(
-                                        selected = !multiPaneUnfolded,
-                                        onClick = { onMultiPaneUnfolded(false) },
-                                        label = {
-                                            Text(
-                                                stringResource(R.string.single_pane),
-                                                style = SettingsType.row,
-                                            )
-                                        },
-                                    )
-                                    FilterChip(
-                                        selected = multiPaneUnfolded,
-                                        onClick = { onMultiPaneUnfolded(true) },
-                                        label = {
-                                            Text(
-                                                stringResource(R.string.multiple_panes),
-                                                style = SettingsType.row,
-                                            )
-                                        },
-                                    )
-                                }
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        minimizeFloatingPanes,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onMinimizeFloatingPanes,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.minimize_floating_panes),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.minimize_floating_panes_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = minimizeFloatingPanes, onCheckedChange = null)
-                            }
-                        }
-                        SettingsSection(stringResource(R.string.section_keyboard), compact = true) {
-                            SettingsRow(
-                                stringResource(R.string.keyboard_toolbar),
-                                stringResource(R.string.keyboard_toolbar_detail),
-                                SettingsGlyph.COMMAND,
-                                onToolbar,
-                            )
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        toolbarWithKeyboardOnly,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onToolbarWithKeyboardOnly,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.show_toolbar_only_with_keyboard),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(
-                                            R.string.show_toolbar_only_with_keyboard_desc,
-                                        ),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = toolbarWithKeyboardOnly, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        keyboardSuggestionsEnabled,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onKeyboardSuggestions,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.keyboard_suggestions),
-                                    Modifier.weight(1f),
-                                    style = SettingsType.row,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Switch(checked = keyboardSuggestionsEnabled, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        arrowJoystickEnabled,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onArrowJoystick,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.use_joystick),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(
-                                            if (arrowJoystickEnabled)
-                                                R.string.use_joystick_detail_on
-                                            else R.string.use_joystick_detail_off,
-                                        ),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = arrowJoystickEnabled, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        enterSubmits,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onEnterSubmits,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.keyboard_enter_sends),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(
-                                            if (enterSubmits)
-                                                R.string.keyboard_enter_sends_detail_on
-                                            else R.string.keyboard_enter_sends_detail_off,
-                                        ),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = enterSubmits, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.ctrl_shortcuts),
-                                    style = SettingsType.row,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    stringResource(R.string.ctrl_shortcuts_detail),
-                                    style = SettingsType.detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    ControlShortcutGesture.entries.forEach { gesture ->
-                                        FilterChip(
-                                            selected = shortcutGesture == gesture,
-                                            onClick = { onShortcutGesture(gesture) },
-                                            label = {
-                                                Text(
-                                                    if (gesture == ControlShortcutGesture.HOLD)
-                                                        stringResource(R.string.ctrl_gesture_hold)
-                                                    else
-                                                        stringResource(
-                                                            R.string.ctrl_gesture_double_tap,
-                                                        ),
-                                                    style = SettingsType.row,
-                                                )
-                                            },
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            value = codexTitleAttention,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onCodexTitleAttention,
                                         )
-                                    }
-                                }
-                            }
-                            SettingsDivider()
-                            SettingsRow(
-                                stringResource(R.string.ctrl_shortcut_buttons),
-                                stringResource(R.string.ctrl_shortcut_buttons_detail),
-                                SettingsGlyph.COMMAND,
-                                onControlItems,
-                            )
-                            SettingsDivider()
-                            SettingsRow(
-                                stringResource(R.string.neovim_shortcuts),
-                                stringResource(R.string.neovim_shortcuts_detail),
-                                SettingsGlyph.COMMAND,
-                                onNeovim,
-                            )
-                        }
-                        SettingsSection(
-                            stringResource(R.string.section_connections),
-                            compact = true,
-                        ) {
-                            SettingsRow(
-                                stringResource(R.string.network),
-                                stringResource(R.string.network_detail),
-                                SettingsGlyph.NETWORK,
-                                onNetwork,
-                            )
-                            SettingsDivider()
-                            SettingsRow(
-                                stringResource(R.string.ssh_keys),
-                                stringResource(R.string.ssh_keys_detail),
-                                SettingsGlyph.KEY,
-                                onSshKeys,
-                            )
-                            SettingsDivider()
-                            SettingsRow(
-                                stringResource(R.string.background_alerts),
-                                stringResource(R.string.background_alerts_detail),
-                                SettingsGlyph.ALERTS,
-                                onAlerts,
-                            )
-                        }
-                        SettingsSection(
-                            stringResource(R.string.section_port_forwarding),
-                            compact = true,
-                        ) {
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.port_conflict_title),
-                                    style = SettingsType.row,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    stringResource(R.string.port_conflict_desc),
-                                    style = SettingsType.detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                PortConflictPolicy.entries.forEach { choice ->
-                                    Row(
-                                        Modifier.fillMaxWidth()
-                                            .selectable(
-                                                PortForwards.policy == choice,
-                                                role =
-                                                    androidx.compose.ui.semantics.Role.RadioButton,
-                                                onClick = { PortForwards.changePolicy(choice) },
-                                            )
-                                            .padding(vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
                                     ) {
-                                        RadioButton(
-                                            selected = PortForwards.policy == choice,
-                                            onClick = null,
-                                        )
                                         Text(
-                                            stringResource(choice.labelRes),
-                                            Modifier.padding(start = 8.dp),
+                                            stringResource(R.string.codex_title_attention),
                                             style = SettingsType.row,
                                             color = MaterialTheme.colorScheme.onSurface,
                                         )
-                                    }
-                                }
-                            }
-                        }
-                        SettingsSection(
-                            stringResource(R.string.section_experimental),
-                            compact = true,
-                        ) {
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        value = codexTitleAttention,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onCodexTitleAttention,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.codex_title_attention),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.codex_title_attention_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = codexTitleAttention, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        value = compactTopBar,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onCompactTopBar,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.compact_top_bar),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.compact_top_bar_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = compactTopBar, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        value = frostedEffectsEnabled,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onFrostedEffects,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.frosted_effects),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.frosted_effects_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = frostedEffectsEnabled, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.predictive_echo),
-                                    style = SettingsType.row,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    stringResource(R.string.predictive_echo_summary),
-                                    style = SettingsType.detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    PredictiveEcho.entries.forEach { mode ->
-                                        FilterChip(
-                                            selected = predictiveEcho == mode,
-                                            onClick = { onPredictiveEcho(mode) },
-                                            label = {
-                                                Text(
-                                                    stringResource(mode.labelRes),
-                                                    style = SettingsType.row,
-                                                )
-                                            },
+                                        Text(
+                                            stringResource(R.string.codex_title_attention_detail),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
+                                    Switch(checked = codexTitleAttention, onCheckedChange = null)
+                                }
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            value = compactTopBar,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onCompactTopBar,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.compact_top_bar),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(R.string.compact_top_bar_detail),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(checked = compactTopBar, onCheckedChange = null)
+                                }
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            value = frostedEffectsEnabled,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onFrostedEffects,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.frosted_effects),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(R.string.frosted_effects_detail),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(checked = frostedEffectsEnabled, onCheckedChange = null)
+                                }
+                                SettingsDivider()
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.predictive_echo),
+                                        style = SettingsType.row,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        stringResource(R.string.predictive_echo_summary),
+                                        style = SettingsType.detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        PredictiveEcho.entries.forEach { mode ->
+                                            FilterChip(
+                                                selected = predictiveEcho == mode,
+                                                onClick = { onPredictiveEcho(mode) },
+                                                label = {
+                                                    Text(
+                                                        stringResource(mode.labelRes),
+                                                        style = SettingsType.row,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        SettingsSection(stringResource(R.string.section_app), compact = true) {
-                            SettingsRow(
-                                stringResource(R.string.about_rexling),
-                                stringResource(R.string.about_rexling_detail),
-                                SettingsGlyph.INFO,
-                                onAbout,
-                            )
+                            SettingsSection(stringResource(R.string.section_app), compact = true) {
+                                SettingsRow(
+                                    stringResource(R.string.about_rexling),
+                                    stringResource(R.string.about_rexling_detail),
+                                    SettingsGlyph.INFO,
+                                    onAbout,
+                                )
+                            }
                         }
                     }
                 }
