@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
+internal val TerminalFontSizes = 8f..20f
+internal const val TerminalFontSizeStep = .5f
+
 class RexModel @JvmOverloads constructor(application: Application, preferenceName: String = "rex") :
     AndroidViewModel(application) {
     internal var activityVisible by mutableStateOf(false)
@@ -335,8 +338,25 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putBoolean("keyboard_suggestions", enabled) }
     }
 
-    var fontSize by mutableIntStateOf(preferences.getInt("font_size", 10).coerceIn(8, 20))
+    internal var fontSizes by
+        mutableStateOf(
+            TabWidthClass.entries.associateWith { profile ->
+                val key = fontSizeKey(profile)
+                val previous = preferences.getInt(key, preferences.getInt("font_size", 10))
+                // SharedPreferences stores integers and floats as different types.
+                preferences.getFloat("${key}_sp", previous.toFloat()).coerceIn(TerminalFontSizes)
+            },
+        )
         private set
+
+    private fun fontSizeKey(profile: TabWidthClass) = "font_size_${profile.name.lowercase()}"
+
+    internal fun changeFontSize(profile: TabWidthClass, size: Float) {
+        val clamped = size.coerceIn(TerminalFontSizes)
+        if (fontSizes[profile] == clamped) return
+        fontSizes = fontSizes + (profile to clamped)
+        preferences.edit { putFloat("${fontSizeKey(profile)}_sp", clamped) }
+    }
 
     internal fun theme(dark: Boolean): AppTheme {
         val id = if (dark) darkTheme else lightTheme
@@ -348,11 +368,6 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         val theme = themes.firstOrNull { it.id == id } ?: return
         if (theme.terminal.dark) darkTheme = id else lightTheme = id
         preferences.edit { putString(if (theme.terminal.dark) "dark_theme" else "light_theme", id) }
-    }
-
-    fun changeFontSize(size: Int) {
-        fontSize = size.coerceIn(8, 20)
-        preferences.edit { putInt("font_size", fontSize) }
     }
 
     var appearance by
@@ -541,14 +556,21 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         }
     }
 
-    /** Unfolded and full screen, show a tab's tiled panes side by side instead of one at a time. */
-    internal var multiPaneUnfolded by
-        mutableStateOf(preferences.getBoolean("multi_pane_unfolded", false))
+    /** Full-screen large layouts inherit the previous choice until configured per orientation. */
+    internal var paneLayouts by
+        mutableStateOf(
+            PaneOrientation.entries.associateWith { orientation ->
+                preferences.getBoolean(
+                    orientation.preferenceKey,
+                    preferences.getBoolean("multi_pane_unfolded", false),
+                )
+            },
+        )
         private set
 
-    internal fun changeMultiPaneUnfolded(value: Boolean) {
-        multiPaneUnfolded = value
-        preferences.edit { putBoolean("multi_pane_unfolded", value) }
+    internal fun changePaneLayout(orientation: PaneOrientation, multiple: Boolean) {
+        paneLayouts = paneLayouts + (orientation to multiple)
+        preferences.edit { putBoolean(orientation.preferenceKey, multiple) }
     }
 
     internal var enterSubmits by

@@ -1,29 +1,44 @@
 package dev.lemon.rex
 
 import android.os.Build
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PreferencesSheet(
     onAppearance: () -> Unit,
@@ -42,8 +57,9 @@ internal fun PreferencesSheet(
     onToolbarWithKeyboardOnly: (Boolean) -> Unit = {},
     toolbarSystemColors: Boolean = false,
     onToolbarSystemColors: (Boolean) -> Unit = {},
-    multiPaneUnfolded: Boolean = false,
-    onMultiPaneUnfolded: (Boolean) -> Unit = {},
+    paneLayouts: Map<PaneOrientation, Boolean> = emptyMap(),
+    paneOrientation: PaneOrientation = currentPaneOrientation(),
+    onPaneLayout: (PaneOrientation, Boolean) -> Unit = { _, _ -> },
     tabLayouts: Map<TabWidthClass, TabBarLayout> = emptyMap(),
     tabWidth: Pair<TabWidthClass, Int> = TabWidthClass.NARROW to 0,
     onTabLayout: (TabWidthClass, TabBarLayout) -> Unit = { _, _ -> },
@@ -195,30 +211,21 @@ internal fun PreferencesSheet(
                             SettingsDivider()
                             Column(
                                 Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Text(
                                     stringResource(R.string.compact_header_mode),
-                                    style = SettingsType.row,
+                                    style = SettingsType.paneTitle,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
-                                FlowRow(
-                                    Modifier.selectableGroup(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    CompactHeaderMode.entries.forEach { mode ->
-                                        FilterChip(
-                                            selected = mode == compactHeaderMode,
-                                            onClick = { onCompactHeaderMode(mode) },
-                                            label = {
-                                                Text(
-                                                    stringResource(mode.labelRes),
-                                                    style = SettingsType.row,
-                                                )
-                                            },
-                                        )
-                                    }
-                                }
+                                PreferenceSegments(
+                                    CompactHeaderMode.entries,
+                                    compactHeaderMode,
+                                    { stringResource(it.labelRes) },
+                                    showCheck = true,
+                                    onSelect = onCompactHeaderMode,
+                                )
                             }
                             SettingsDivider()
                             Row(
@@ -379,109 +386,20 @@ internal fun PreferencesSheet(
                                 }
                             }
                         }
-                        SettingsSection(stringResource(R.string.section_tabs), compact = true) {
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        value = floatingTabs,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onFloatingTabs,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.tab_floating),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.tab_floating_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = floatingTabs, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            TabLayoutPreferences(tabLayouts, tabWidth, onTabLayout)
-                        }
-                        SettingsSection(
-                            stringResource(R.string.section_panes),
-                            compact = true,
-                        ) {
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.panes_unfolded_title),
-                                    style = SettingsType.row,
-                                )
-                                Text(
-                                    stringResource(R.string.panes_unfolded_desc),
-                                    style = SettingsType.detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilterChip(
-                                        selected = !multiPaneUnfolded,
-                                        onClick = { onMultiPaneUnfolded(false) },
-                                        label = {
-                                            Text(
-                                                stringResource(R.string.single_pane),
-                                                style = SettingsType.row,
-                                            )
-                                        },
-                                    )
-                                    FilterChip(
-                                        selected = multiPaneUnfolded,
-                                        onClick = { onMultiPaneUnfolded(true) },
-                                        label = {
-                                            Text(
-                                                stringResource(R.string.multiple_panes),
-                                                style = SettingsType.row,
-                                            )
-                                        },
-                                    )
-                                }
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        minimizeFloatingPanes,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onMinimizeFloatingPanes,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.minimize_floating_panes),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.minimize_floating_panes_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = minimizeFloatingPanes, onCheckedChange = null)
-                            }
-                        }
+                        TabLayoutPreferences(
+                            tabLayouts,
+                            tabWidth,
+                            onTabLayout,
+                            floatingTabs,
+                            onFloatingTabs,
+                        )
+                        PaneLayoutPreferences(
+                            paneLayouts,
+                            paneOrientation,
+                            onPaneLayout,
+                            minimizeFloatingPanes,
+                            onMinimizeFloatingPanes,
+                        )
                         SettingsSection(
                             stringResource(R.string.section_keyboard),
                             compact = true,
@@ -659,7 +577,7 @@ internal fun PreferencesSheet(
                             ) {
                                 Text(
                                     stringResource(R.string.ctrl_shortcuts),
-                                    style = SettingsType.row,
+                                    style = SettingsType.paneTitle,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
@@ -667,27 +585,17 @@ internal fun PreferencesSheet(
                                     style = SettingsType.detail,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    ControlShortcutGesture.entries.forEach { gesture ->
-                                        FilterChip(
-                                            selected = shortcutGesture == gesture,
-                                            onClick = { onShortcutGesture(gesture) },
-                                            label = {
-                                                Text(
-                                                    if (gesture == ControlShortcutGesture.HOLD)
-                                                        stringResource(
-                                                            R.string.ctrl_gesture_hold,
-                                                        )
-                                                    else
-                                                        stringResource(
-                                                            R.string.ctrl_gesture_double_tap,
-                                                        ),
-                                                    style = SettingsType.row,
-                                                )
-                                            },
-                                        )
-                                    }
-                                }
+                                PreferenceSegments(
+                                    ControlShortcutGesture.entries,
+                                    shortcutGesture,
+                                    {
+                                        if (it == ControlShortcutGesture.HOLD)
+                                            stringResource(R.string.ctrl_gesture_hold)
+                                        else stringResource(R.string.ctrl_gesture_double_tap)
+                                    },
+                                    showCheck = true,
+                                    onSelect = onShortcutGesture,
+                                )
                             }
                             SettingsDivider()
                             SettingsRow(
@@ -990,71 +898,390 @@ internal fun LanguageDialog(
     onClose: () -> Unit,
 ) = LanguageSheet(language, onLanguage, hazeState, onClose)
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TabLayoutPreferences(
     layouts: Map<TabWidthClass, TabBarLayout>,
     window: Pair<TabWidthClass, Int>,
     onChange: (TabWidthClass, TabBarLayout) -> Unit,
+    floatingTabs: Boolean,
+    onFloatingTabs: (Boolean) -> Unit,
 ) {
-    var editing by rememberSaveable { mutableStateOf<TabWidthClass?>(null) }
     val (current, widthDp) = window
-    val profile = editing ?: current
-    val layout = layouts[profile] ?: TabBarLayout()
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        FlowRow(
-            Modifier.selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+    var editing by rememberSaveable(current) { mutableStateOf<TabWidthClass?>(current) }
+    PreferenceProfiles(
+        stringResource(R.string.tabs_by_window_width),
+        stringResource(R.string.tabs_by_window_width_detail),
+        Modifier.testTag("Tab width profiles"),
+    ) {
+        TabWidthClass.entries.forEachIndexed { index, profile ->
+            if (index > 0) ProfileDivider()
+            TabLayoutProfile(
+                profile,
+                layouts[profile] ?: TabBarLayout(),
+                profile == current,
+                widthDp,
+                profile == editing,
+                onToggle = { editing = if (editing == profile) null else profile },
+                onChange = { onChange(profile, it) },
+            )
+        }
+        ProfileDivider()
+        Row(
+            Modifier.fillMaxWidth()
+                .toggleable(
+                    value = floatingTabs,
+                    role = Role.Switch,
+                    onValueChange = onFloatingTabs,
+                )
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            TabWidthClass.entries.forEach { width ->
-                FilterChip(
-                    selected = width == profile,
-                    onClick = { editing = width },
-                    label = { Text(stringResource(width.titleRes), style = SettingsType.row) },
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    stringResource(R.string.tab_floating),
+                    style = SettingsType.paneTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    stringResource(R.string.tab_floating_detail),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = floatingTabs, onCheckedChange = null)
+        }
+    }
+}
+
+@Composable
+private fun PaneLayoutPreferences(
+    layouts: Map<PaneOrientation, Boolean>,
+    current: PaneOrientation,
+    onChange: (PaneOrientation, Boolean) -> Unit,
+    minimizeFloatingPanes: Boolean,
+    onMinimizeFloatingPanes: (Boolean) -> Unit,
+) {
+    var editing by rememberSaveable(current) { mutableStateOf<PaneOrientation?>(current) }
+    PreferenceProfiles(
+        stringResource(R.string.panes_by_orientation),
+        stringResource(R.string.panes_by_orientation_detail),
+    ) {
+        PaneOrientation.entries.forEachIndexed { index, orientation ->
+            if (index > 0) ProfileDivider()
+            val multiple = layouts[orientation] == true
+            val expanded = orientation == editing
+            PreferenceProfile(
+                stringResource(orientation.titleRes),
+                paneLayoutLabel(multiple),
+                orientation == current,
+                expanded,
+                onToggle = { editing = if (expanded) null else orientation },
+                icon = { PaneOrientationGlyph(orientation, expanded) },
+            ) {
+                PreferenceSegments(
+                    listOf(false, true),
+                    multiple,
+                    { paneLayoutLabel(it) },
+                    showCheck = true,
+                    onSelect = { onChange(orientation, it) },
                 )
             }
         }
+        ProfileDivider()
+        Row(
+            Modifier.fillMaxWidth()
+                .toggleable(
+                    minimizeFloatingPanes,
+                    role = Role.Switch,
+                    onValueChange = onMinimizeFloatingPanes,
+                )
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    stringResource(R.string.minimize_floating_panes),
+                    style = SettingsType.paneTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    stringResource(R.string.minimize_floating_panes_detail),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = minimizeFloatingPanes, onCheckedChange = null)
+        }
+    }
+}
+
+@Composable
+private fun paneLayoutLabel(multiple: Boolean) =
+    stringResource(if (multiple) R.string.multiple_panes else R.string.single_pane)
+
+@Composable
+private fun PreferenceProfiles(
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val border = tintOver(colors.outlineVariant, colors.surface, .65f)
+    Surface(
+        modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surface,
+        border = BorderStroke(.5.dp, border),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                Modifier.padding(horizontal = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(title, style = SettingsType.paneTitle, color = colors.primary)
+                Text(description, style = SettingsType.detail, color = colors.onSurfaceVariant)
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = tintOver(colors.surfaceVariant, colors.surface, .25f),
+                border = BorderStroke(.5.dp, border),
+            ) {
+                Column(Modifier.fillMaxWidth(), content = content)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileDivider() {
+    val colors = MaterialTheme.colorScheme
+    HorizontalDivider(
+        thickness = .5.dp,
+        color = tintOver(colors.outlineVariant, colors.surface, .65f),
+    )
+}
+
+@Composable
+private fun TabLayoutProfile(
+    profile: TabWidthClass,
+    layout: TabBarLayout,
+    current: Boolean,
+    widthDp: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onChange: (TabBarLayout) -> Unit,
+) {
+    val description =
+        stringResource(
+            when (profile) {
+                TabWidthClass.NARROW -> R.string.tab_width_narrow_devices
+                TabWidthClass.MEDIUM -> R.string.tab_width_medium_devices
+                TabWidthClass.WIDE -> R.string.tab_width_wide_devices
+            },
+        )
+    val summary =
+        if (layout.side)
+            stringResource(
+                R.string.tab_summary_side_format,
+                stringResource(layout.position.labelRes),
+                stringResource(layout.style.labelRes).lowercase(),
+            )
+        else stringResource(R.string.tab_summary_bottom)
+    PreferenceProfile(
+        stringResource(profile.titleRes),
+        summary,
+        current,
+        expanded,
+        onToggle,
+        description,
+        icon = { TabWidthGlyph(profile, expanded) },
+    ) {
         val range = stringResource(profile.rangeRes)
-        val widthLabel =
-            if (profile == current)
-                stringResource(R.string.tab_width_current_window_format, range, widthDp)
-            else range
+        Text(stringResource(R.string.position_label), style = SettingsType.paneTitle)
+        PreferenceSegments(
+            TabBarPosition.entries,
+            layout.position,
+            { stringResource(it.labelRes) },
+        ) {
+            onChange(layout.copy(position = it))
+        }
+        if (layout.side) {
+            Spacer(Modifier.height(2.dp))
+            Text(stringResource(R.string.sidebar_style), style = SettingsType.paneTitle)
+            PreferenceSegments(
+                TabRailStyle.entries,
+                layout.style,
+                { stringResource(it.labelRes) },
+            ) {
+                onChange(layout.copy(style = it))
+            }
+        }
         Text(
-            widthLabel,
-            style = SettingsType.detail,
+            if (current && widthDp > 0)
+                stringResource(R.string.tab_width_current_range_format, range, widthDp)
+            else range,
+            style = SettingsType.paneDetail,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    SettingsDivider()
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(stringResource(R.string.tab_position), style = SettingsType.row)
-        FlowRow(
-            Modifier.selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+}
+
+@Composable
+private fun PreferenceProfile(
+    title: String,
+    summary: String,
+    current: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    description: String? = null,
+    icon: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val stateLabel =
+        stringResource(
+            if (expanded) R.string.a11y_state_expanded else R.string.a11y_state_collapsed,
+        )
+    Column(
+        Modifier.fillMaxWidth().background(if (expanded) colors.surface else Color.Transparent),
+    ) {
+        Row(
+            Modifier.fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onToggle)
+                .semantics { stateDescription = stateLabel }
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            TabBarPosition.entries.forEach { position ->
-                FilterChip(
-                    selected = layout.position == position,
-                    onClick = { onChange(profile, layout.copy(position = position)) },
-                    label = { Text(stringResource(position.labelRes), style = SettingsType.row) },
+            icon()
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(title, style = SettingsType.paneTitle)
+                    if (current)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = colors.primaryContainer,
+                            contentColor = colors.onPrimaryContainer,
+                        ) {
+                            Text(
+                                stringResource(R.string.tab_width_now),
+                                Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                style = SettingsType.paneDetail,
+                            )
+                        }
+                }
+                description?.let {
+                    Text(it, style = SettingsType.detail, color = colors.onSurfaceVariant)
+                }
+                if (!expanded)
+                    Text(summary, style = SettingsType.paneDetail, color = colors.onSurfaceVariant)
+            }
+            ChromeSymbol(
+                ChromeIcon.CHEVRON,
+                Modifier.size(16.dp).rotate(if (expanded) 180f else 0f),
+                colors.onSurfaceVariant,
+            )
+        }
+        if (expanded)
+            Column(
+                Modifier.fillMaxWidth().padding(start = 62.dp, end = 12.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                content = content,
+            )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun <T> PreferenceSegments(
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    showCheck: Boolean = false,
+    onSelect: (T) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            val active = option == selected
+            SegmentedButton(
+                selected = active,
+                onClick = { onSelect(option) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                icon = { if (showCheck) SegmentedButtonDefaults.Icon(active) },
+                colors =
+                    SegmentedButtonDefaults.colors(
+                        activeContainerColor = colors.primaryContainer,
+                        activeContentColor = colors.onPrimaryContainer,
+                    ),
+            ) {
+                Text(
+                    label(option),
+                    style = SettingsType.paneDetail,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-        if (layout.side) {
-            Text(stringResource(R.string.sidebar_style), style = SettingsType.row)
-            FlowRow(
-                Modifier.selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TabRailStyle.entries.forEach { style ->
-                    FilterChip(
-                        selected = layout.style == style,
-                        onClick = { onChange(profile, layout.copy(style = style)) },
-                        label = { Text(stringResource(style.labelRes), style = SettingsType.row) },
-                    )
-                }
-            }
+    }
+}
+
+@Composable
+private fun TabWidthGlyph(width: TabWidthClass, active: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    val strokeColor = if (active) colors.primary else colors.onSurfaceVariant
+    Canvas(Modifier.size(40.dp, 32.dp)) {
+        val deviceWidth =
+            when (width) {
+                TabWidthClass.NARROW -> 12.dp
+                TabWidthClass.MEDIUM -> 20.dp
+                TabWidthClass.WIDE -> 34.dp
+            }.toPx()
+        val height = 26.dp.toPx()
+        val corner = CornerRadius(3.5.dp.toPx())
+        val stroke = 1.5.dp.toPx()
+        val origin = Offset((size.width - deviceWidth) / 2, (size.height - height) / 2)
+        val device = Size(deviceWidth, height)
+        if (active) drawRoundRect(colors.primaryContainer, origin, device, corner)
+        drawRoundRect(strokeColor, origin, device, corner, style = Stroke(stroke))
+        if (width != TabWidthClass.NARROW) {
+            val hinge = if (width == TabWidthClass.WIDE) center.x else origin.x + 4.dp.toPx()
+            val inset = if (width == TabWidthClass.WIDE) 0.dp else 3.dp
+            drawLine(
+                strokeColor,
+                Offset(hinge, origin.y + inset.toPx()),
+                Offset(hinge, origin.y + height - inset.toPx()),
+                stroke,
+            )
         }
+    }
+}
+
+@Composable
+private fun PaneOrientationGlyph(orientation: PaneOrientation, active: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    Canvas(Modifier.size(40.dp, 32.dp)) {
+        val portrait = orientation == PaneOrientation.PORTRAIT
+        val device =
+            if (portrait) Size(18.dp.toPx(), 28.dp.toPx()) else Size(28.dp.toPx(), 18.dp.toPx())
+        val origin = Offset((size.width - device.width) / 2, (size.height - device.height) / 2)
+        val corner = CornerRadius(3.5.dp.toPx())
+        if (active) drawRoundRect(colors.primaryContainer, origin, device, corner)
+        drawRoundRect(
+            if (active) colors.primary else colors.onSurfaceVariant,
+            origin,
+            device,
+            corner,
+            style = Stroke(1.5.dp.toPx()),
+        )
     }
 }
 

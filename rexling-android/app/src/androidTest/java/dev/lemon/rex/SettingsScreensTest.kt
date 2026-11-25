@@ -1,5 +1,7 @@
 package dev.lemon.rex
 
+import android.app.Application
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
 import android.view.KeyEvent
@@ -9,9 +11,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
+import androidx.lifecycle.ViewModelStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -208,7 +214,7 @@ class SettingsScreensTest {
                 TabWidthClass.WIDE to TabBarLayout(),
             )
         ui.setContent {
-            MaterialTheme {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
                 PreferencesSheet(
                     {},
                     {},
@@ -221,23 +227,90 @@ class SettingsScreensTest {
                 )
             }
         }
-        ui.onNodeWithText(appString(R.string.tab_width_medium)).performScrollTo().assertIsSelected()
+        val medium = ui.onNodeWithText(appString(R.string.tab_width_medium))
+        val wide = ui.onNodeWithText(appString(R.string.tab_width_wide))
+        val expanded =
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                appString(R.string.a11y_state_expanded),
+            )
+        val collapsed =
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                appString(R.string.a11y_state_collapsed),
+            )
+        medium.performScrollTo().assert(expanded)
+        ui.onNode(
+                hasText(appString(R.string.tab_width_medium)) and
+                    hasText(appString(R.string.tab_width_now)),
+            )
+            .assertExists()
         ui.onNodeWithText(appString(R.string.tab_position_left))
             .performScrollTo()
             .assertIsSelected()
-        ui.onNodeWithText(appString(R.string.tab_width_wide))
+        ui.onNodeWithText(
+                appString(
+                    R.string.tab_width_current_range_format,
+                    appString(R.string.tab_width_medium_range),
+                    555,
+                ),
+            )
             .performScrollTo()
-            .performClick()
+            .assertIsDisplayed()
+        medium.performScrollTo().performClick().assert(collapsed)
+        ui.onNode(
+                hasText(appString(R.string.tab_width_medium)) and
+                    hasText(
+                        appString(
+                            R.string.tab_summary_side_format,
+                            appString(R.string.tab_position_left),
+                            appString(R.string.tab_rail_style_icons).lowercase(),
+                        ),
+                    ),
+            )
+            .assertExists()
+        ui.onNodeWithText(appString(R.string.position_label)).assertDoesNotExist()
+        wide.performScrollTo().performClick().assert(expanded)
+        ui.onNode(
+                hasText(appString(R.string.tab_width_medium)) and
+                    hasText(appString(R.string.tab_width_now)),
+            )
+            .assertExists()
+        ui.onNodeWithText(appString(R.string.tab_position_bottom))
+            .performScrollTo()
             .assertIsSelected()
-        ui.onNodeWithText(appString(R.string.tab_position_bottom)).assertIsSelected()
         ui.onNodeWithText(appString(R.string.sidebar_style)).assertDoesNotExist()
         ui.onNodeWithText(appString(R.string.tab_position_right)).performClick()
         ui.onNodeWithText(appString(R.string.tab_rail_style_titles))
             .performScrollTo()
             .performClick()
             .assertIsSelected()
-        ui.onNodeWithText(appString(R.string.tab_width_medium)).performScrollTo().performClick()
-        ui.onNodeWithText(appString(R.string.tab_position_left)).assertIsSelected()
+        medium.performScrollTo().performClick().assert(expanded)
+        ui.onNodeWithText(appString(R.string.tab_position_left))
+            .performScrollTo()
+            .assertIsSelected()
+        ui.onNode(
+                hasText(appString(R.string.tab_width_wide)) and
+                    hasText(
+                        appString(
+                            R.string.tab_summary_side_format,
+                            appString(R.string.tab_position_right),
+                            appString(R.string.tab_rail_style_titles).lowercase(),
+                        ),
+                    ),
+            )
+            .assertExists()
+        val profiles =
+            ui.onNodeWithTag("Tab width profiles")
+                .performScrollTo()
+                .captureToImage()
+                .asAndroidBitmap()
+        File(
+                InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
+                "tab-width-profiles.png",
+            )
+            .outputStream()
+            .use { profiles.compress(Bitmap.CompressFormat.PNG, 100, it) }
         ui.runOnIdle {
             assertEquals(TabBarLayout(TabBarPosition.LEFT), layouts[TabWidthClass.MEDIUM])
             assertEquals(
@@ -248,8 +321,96 @@ class SettingsScreensTest {
     }
 
     @Test
-    fun compactTopBarOptionsSwitchBetweenAllThreeModes() {
+    fun paneProfilesInheritAndSaveChoicesIndependently() {
+        val app =
+            InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+                as Application
+        val name = "pane-profile-test-${System.nanoTime()}"
+        val prefs = app.getSharedPreferences(name, 0)
+        prefs.edit(commit = true) { putBoolean("multi_pane_unfolded", true) }
+        val store = ViewModelStore()
+        lateinit var model: RexModel
+        ui.runOnUiThread {
+            model = RexModel(app, name)
+            store.put("panes", model)
+        }
+        var windowOrientation by mutableIntStateOf(Configuration.ORIENTATION_PORTRAIT)
+        try {
+            ui.setContent {
+                RexTheme(false, ThemeCatalog.defaults[1]) {
+                    val configuration =
+                        Configuration(LocalConfiguration.current).apply {
+                            orientation = windowOrientation
+                        }
+                    CompositionLocalProvider(LocalConfiguration provides configuration) {
+                        PreferencesSheet(
+                            {},
+                            {},
+                            {},
+                            {},
+                            {},
+                            paneLayouts = model.paneLayouts,
+                            onPaneLayout = model::changePaneLayout,
+                        )
+                    }
+                }
+            }
+            val selectable = SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)
+            val single = ui.onNode(hasText(appString(R.string.single_pane)) and selectable)
+            val multiple = ui.onNode(hasText(appString(R.string.multiple_panes)) and selectable)
+            ui.onNode(
+                    hasText(appString(R.string.pane_orientation_portrait)) and
+                        hasText(appString(R.string.tab_width_now)),
+                )
+                .performScrollTo()
+                .assertIsDisplayed()
+            ui.onNode(
+                    hasText(appString(R.string.pane_orientation_landscape)) and
+                        hasText(appString(R.string.multiple_panes)),
+                )
+                .assertExists()
+            multiple.performScrollTo().assertIsSelected()
+            ui.onNodeWithText(appString(R.string.pane_orientation_landscape))
+                .performScrollTo()
+                .performClick()
+            single.performScrollTo().performClick().assertIsSelected()
+            ui.onNode(
+                    hasText(appString(R.string.pane_orientation_portrait)) and
+                        hasText(appString(R.string.tab_width_now)) and
+                        hasText(appString(R.string.multiple_panes)),
+                )
+                .assertExists()
+            ui.onNodeWithText(appString(R.string.pane_orientation_portrait))
+                .performScrollTo()
+                .performClick()
+            multiple.performScrollTo().assertIsSelected()
+
+            ui.runOnIdle { windowOrientation = Configuration.ORIENTATION_LANDSCAPE }
+            ui.onNode(
+                    hasText(appString(R.string.pane_orientation_landscape)) and
+                        hasText(appString(R.string.tab_width_now)),
+                )
+                .performScrollTo()
+                .assertIsDisplayed()
+            single.performScrollTo().assertIsSelected()
+            ui.runOnIdle {
+                val reopened = RexModel(app, name).also { store.put("panes-reopened", it) }
+                assertEquals(
+                    mapOf(PaneOrientation.PORTRAIT to true, PaneOrientation.LANDSCAPE to false),
+                    reopened.paneLayouts,
+                )
+                assertFalse(prefs.contains(PaneOrientation.PORTRAIT.preferenceKey))
+            }
+        } finally {
+            ui.runOnUiThread { store.clear() }
+            app.deleteSharedPreferences(name)
+        }
+    }
+
+    @Test
+    fun compactTopBarAndCtrlShortcutUseSegmentedChoices() {
         var mode by mutableStateOf(CompactHeaderMode.NEVER)
+        var gesture by mutableStateOf(ControlShortcutGesture.HOLD)
         ui.setContent {
             MaterialTheme {
                 PreferencesSheet(
@@ -258,6 +419,8 @@ class SettingsScreensTest {
                     {},
                     {},
                     {},
+                    shortcutGesture = gesture,
+                    onShortcutGesture = { gesture = it },
                     compactHeaderMode = mode,
                     onCompactHeaderMode = { mode = it },
                 )
@@ -278,6 +441,14 @@ class SettingsScreensTest {
                     .assertIsSelected()
                 ui.runOnIdle { assertEquals(next, mode) }
             }
+        ui.onNodeWithText(appString(R.string.ctrl_gesture_hold))
+            .performScrollTo()
+            .assertIsSelected()
+        ui.onNodeWithText(appString(R.string.ctrl_gesture_double_tap))
+            .performScrollTo()
+            .performClick()
+            .assertIsSelected()
+        ui.runOnIdle { assertEquals(ControlShortcutGesture.DOUBLE_TAP, gesture) }
     }
 
     @Test

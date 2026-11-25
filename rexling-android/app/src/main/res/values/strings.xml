@@ -88,7 +88,7 @@
     <string name="appearance">Appearance</string>
     <string name="appearance_detail">Themes and light or dark mode</string>
     <string name="font_size">Font size</string>
-    <string name="font_size_detail">Terminal text size</string>
+    <string name="font_size_detail">Terminal text size by window width</string>
     <string name="language">Language</string>
     <string name="close_language">Close language settings</string>
     <string name="language_system">System default</string>
@@ -785,4 +785,20 @@
     <string name="a11y_scroll_to_latest">Scroll to latest</string>
     <string name="toolbar_system_colors">Use system colors for toolbar</string>
     <string name="toolbar_system_colors_detail">Fade to Android’s light or dark palette when the keyboard opens.</string>
+    <string name="tabs_by_window_width">Tabs by window width</string>
+    <string name="tabs_by_window_width_detail">Follows the width available to Rexling, including in split screen.</string>
+    <string name="tab_width_narrow_devices">Phones and small split-screen windows</string>
+    <string name="tab_width_medium_devices">Folded foldables and larger split-screen windows</string>
+    <string name="tab_width_wide_devices">Tablets and unfolded foldables</string>
+    <string name="tab_width_now">Now</string>
+    <string name="tab_width_current_range_format">%1$s · This window is %2$d dp</string>
+    <string name="tab_summary_side_format">%1$s tabs · %2$s</string>
+    <string name="tab_summary_bottom">Bottom tabs</string>
+    <string name="position_label">Position</string>
+    <string name="panes_by_orientation">Panes by orientation</string>
+    <string name="panes_by_orientation_detail">Applies in full screen on an unfolded foldable or tablet.</string>
+    <string name="pane_orientation_portrait">Portrait</string>
+    <string name="pane_orientation_landscape">Landscape</string>
+    <string name="font_size_window_format">This window uses %1$s</string>
+    <string name="font_size_sp_format">%1$s sp</string>
 </resources>

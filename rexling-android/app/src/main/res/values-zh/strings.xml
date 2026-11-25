@@ -88,7 +88,7 @@
     <string name="appearance">外观</string>
     <string name="appearance_detail">主题及明暗模式</string>
     <string name="font_size">字体大小</string>
-    <string name="font_size_detail">终端文本字号</string>
+    <string name="font_size_detail">按窗口宽度设置终端字号</string>
     <string name="language">语言</string>
     <string name="close_language">关闭语言设置</string>
     <string name="language_system">跟随系统</string>
@@ -781,4 +781,20 @@
     <string name="a11y_scroll_to_latest">滚动到最新</string>
     <string name="toolbar_system_colors">工具栏跟随系统配色</string>
     <string name="toolbar_system_colors_detail">键盘弹出时平滑切换为 Android 浅色或深色系统配色。</string>
+    <string name="tabs_by_window_width">按窗口宽度设置标签栏</string>
+    <string name="tabs_by_window_width_detail">随 Rexling 可用宽度自动切换，分屏时同样生效。</string>
+    <string name="tab_width_narrow_devices">手机竖屏与窄分屏窗口</string>
+    <string name="tab_width_medium_devices">折叠屏外屏与较宽分屏窗口</string>
+    <string name="tab_width_wide_devices">平板与展开后的折叠屏内屏</string>
+    <string name="tab_width_now">当前</string>
+    <string name="tab_width_current_range_format">%1$s · 当前窗口 %2$d dp</string>
+    <string name="tab_summary_side_format">%1$s标签 · %2$s</string>
+    <string name="tab_summary_bottom">底部标签</string>
+    <string name="position_label">位置</string>
+    <string name="panes_by_orientation">按屏幕方向设置窗格</string>
+    <string name="panes_by_orientation_detail">在展开的折叠屏内屏或平板全屏模式下生效。</string>
+    <string name="pane_orientation_portrait">竖屏</string>
+    <string name="pane_orientation_landscape">横屏</string>
+    <string name="font_size_window_format">当前窗口使用%1$s</string>
+    <string name="font_size_sp_format">%1$s sp</string>
 </resources>

@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -50,6 +51,20 @@ import androidx.compose.ui.zIndex
 import androidx.core.app.MultiWindowModeChangedInfo
 import androidx.core.util.Consumer
 import dev.chrisbanes.haze.HazeState
+
+internal enum class PaneOrientation(
+    @androidx.annotation.StringRes val titleRes: Int,
+    val preferenceKey: String,
+) {
+    PORTRAIT(R.string.pane_orientation_portrait, "multi_pane_unfolded_portrait"),
+    LANDSCAPE(R.string.pane_orientation_landscape, "multi_pane_unfolded_landscape"),
+}
+
+@Composable
+internal fun currentPaneOrientation(): PaneOrientation =
+    if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        PaneOrientation.LANDSCAPE
+    else PaneOrientation.PORTRAIT
 
 internal enum class PaneDropPosition {
     CENTER,

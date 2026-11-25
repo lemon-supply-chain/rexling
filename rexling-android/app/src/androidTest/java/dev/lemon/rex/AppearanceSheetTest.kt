@@ -53,21 +53,57 @@ class AppearanceSheetTest {
     }
 
     @Test
-    fun fontSizeChangesOneSpAtATime() {
-        val size = mutableIntStateOf(10)
+    fun fontSizeChangesHalfAnSpAtATimeForTheSelectedWidth() {
+        val sizes =
+            mutableStateMapOf(
+                TabWidthClass.NARROW to 8f,
+                TabWidthClass.MEDIUM to 10f,
+                TabWidthClass.WIDE to 12f,
+            )
+        var current by mutableStateOf(TabWidthClass.MEDIUM)
         ui.setContent {
-            MaterialTheme { FontSizeDialog(size.intValue, { size.intValue = it }, onClose = {}) }
+            MaterialTheme {
+                FontSizeDialog(
+                    sizes,
+                    current,
+                    { width, size -> sizes[width] = size },
+                    onClose = {},
+                )
+            }
         }
+        ui.onNodeWithText(appString(R.string.tab_width_medium)).assertIsSelected()
+        ui.runOnIdle { current = TabWidthClass.WIDE }
+        ui.onNodeWithText(
+                appString(R.string.font_size_window_format, appString(R.string.tab_width_wide)),
+            )
+            .assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.tab_width_wide)).assertIsSelected()
+        ui.onNodeWithText(appString(R.string.font_size_sp_format, "12")).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.tab_width_medium)).performClick().assertIsSelected()
         ui.onNodeWithContentDescription(appString(R.string.a11y_increase_font_size)).performClick()
-        ui.onNodeWithText("11 sp").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.font_size_sp_format, "10.5")).assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_decrease_font_size)).performClick()
-        ui.onNodeWithText("10 sp").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.font_size_sp_format, "10")).assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_font_size)).performSemanticsAction(
             androidx.compose.ui.semantics.SemanticsActions.SetProgress,
         ) {
-            it(9f)
+            it(11.5f)
         }
-        ui.onNodeWithText("9 sp").assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.font_size_sp_format, "11.5")).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.tab_width_narrow)).performClick().assertIsSelected()
+        ui.onNodeWithText(appString(R.string.font_size_sp_format, "8")).assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_decrease_font_size))
+            .assertIsNotEnabled()
+        ui.runOnIdle {
+            assertEquals(
+                mapOf(
+                    TabWidthClass.NARROW to 8f,
+                    TabWidthClass.MEDIUM to 11.5f,
+                    TabWidthClass.WIDE to 12f,
+                ),
+                sizes.toMap(),
+            )
+        }
     }
 
     @Test
@@ -78,11 +114,25 @@ class AppearanceSheetTest {
             InstrumentationRegistry.getInstrumentation().runOnMainSync(block)
         try {
             main {
+                app.getSharedPreferences(name, 0)
+                    .edit()
+                    .putInt("font_size", 12)
+                    .putInt("font_size_medium", 13)
+                    .apply()
                 val first = RexModel(app, name)
                 store.put("theme", first)
+                assertEquals(
+                    mapOf(
+                        TabWidthClass.NARROW to 12f,
+                        TabWidthClass.MEDIUM to 13f,
+                        TabWidthClass.WIDE to 12f,
+                    ),
+                    first.fontSizes,
+                )
                 first.chooseTheme("merino-dark")
                 first.chooseTheme("merino-light")
-                first.changeFontSize(11)
+                first.changeFontSize(TabWidthClass.NARROW, 11.5f)
+                first.changeFontSize(TabWidthClass.WIDE, 21f)
                 first.changeAppearance(Appearance.DARK)
                 assertTrue(first.arrowJoystickEnabled)
                 first.changeArrowJoystick(false)
@@ -116,7 +166,14 @@ class AppearanceSheetTest {
                 store.put("theme2", second)
                 assertEquals("merino-dark", second.theme(true).id)
                 assertEquals("merino-light", second.theme(false).id)
-                assertEquals(11, second.fontSize)
+                assertEquals(
+                    mapOf(
+                        TabWidthClass.NARROW to 11.5f,
+                        TabWidthClass.MEDIUM to 13f,
+                        TabWidthClass.WIDE to 20f,
+                    ),
+                    second.fontSizes,
+                )
                 assertEquals(Appearance.DARK, second.appearance)
                 assertFalse(second.arrowJoystickEnabled)
                 assertTrue(second.toolbarSystemColors)

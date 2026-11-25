@@ -333,7 +333,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     var forwards by remember { mutableStateOf(false) }
     var closeTarget by remember { mutableStateOf<TerminalCloseTarget?>(null) }
-    val fontSize = model.fontSize
     var terminalView by remember { mutableStateOf<TerminalView?>(null) }
     val context = LocalContext.current
     var networkAction by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -432,9 +431,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     @OptIn(ExperimentalLayoutApi::class) val keyboardShown = WindowInsets.isImeVisible
     val toolbarHidden = model.toolbarWithKeyboardOnly && !keyboardShown
     val tabWidth = currentTabWidth()
+    val fontSize = model.fontSizes.getValue(tabWidth.first)
     val panelShown = state.connected || state.phase == "preview" || client.hasScreen
     if (!panelShown || model.toolbarWithKeyboardOnly) AppGestureBarContrast(!palette.dark)
     val unfoldedFullScreen = isUnfoldedFullScreen()
+    val paneOrientation = currentPaneOrientation()
+    val multiplePanes = model.paneLayouts[paneOrientation] == true
     val hasHinge =
         remember(context) {
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE)
@@ -490,7 +492,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 .orEmpty()
                 .ifBlank { visibleBlocks.firstOrNull()?.id.orEmpty() }
     val tiles =
-        if (model.multiPaneUnfolded && unfoldedFullScreen)
+        if (multiplePanes && unfoldedFullScreen)
             multiPaneTiles(window, chosen, allowFloatingOverlay)
         else null
     val alignHeaderToRail =
@@ -1344,7 +1346,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             controlled,
                                             state.programs,
                                             state.mirrorWaiting,
-                                            fontSize.toFloat(),
+                                            fontSize,
                                             onFocus = { id, grid ->
                                                 client.selectBlock(id, grid, keepTiled = true)
                                             },
@@ -1385,7 +1387,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             liveBlock,
                                             state.programs,
                                             controlled,
-                                            fontSize.toFloat(),
+                                            fontSize,
                                             client::type,
                                             client::scroll,
                                             client::wheel,
@@ -1812,13 +1814,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             }
                         },
                         if (unfoldedFullScreen) {
-                            val multiple = model.multiPaneUnfolded
                             TerminalDrawerAction(
-                                if (multiple) stringResource(R.string.single_pane)
+                                if (multiplePanes) stringResource(R.string.single_pane)
                                 else stringResource(R.string.multiple_panes),
-                                if (multiple) ChromeIcon.ZOOM else ChromeIcon.SPLIT,
+                                if (multiplePanes) ChromeIcon.ZOOM else ChromeIcon.SPLIT,
                             ) {
-                                model.changeMultiPaneUnfolded(!multiple)
+                                model.changePaneLayout(paneOrientation, !multiplePanes)
                             }
                         } else null,
                         TerminalDrawerAction(
@@ -1904,8 +1905,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     onToolbarWithKeyboardOnly = model::changeToolbarWithKeyboardOnly,
                     toolbarSystemColors = model.toolbarSystemColors,
                     onToolbarSystemColors = model::changeToolbarSystemColors,
-                    multiPaneUnfolded = model.multiPaneUnfolded,
-                    onMultiPaneUnfolded = model::changeMultiPaneUnfolded,
+                    paneLayouts = model.paneLayouts,
+                    paneOrientation = paneOrientation,
+                    onPaneLayout = model::changePaneLayout,
                     tabLayouts = model.tabLayouts,
                     tabWidth = tabWidth,
                     onTabLayout = model::changeTabLayout,
@@ -1954,7 +1956,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     closeSettings()
                 }
             SettingsRoute.FontSize ->
-                FontSizeDialog(fontSize, model::changeFontSize, hazeState = workspaceHaze) {
+                FontSizeDialog(
+                    model.fontSizes,
+                    tabWidth.first,
+                    model::changeFontSize,
+                    hazeState = workspaceHaze,
+                ) {
                     closeSettings()
                 }
             SettingsRoute.Language ->
