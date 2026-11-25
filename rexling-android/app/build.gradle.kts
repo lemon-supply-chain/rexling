@@ -47,7 +47,7 @@ android {
         applicationId = "dev.lemon.rex"
         minSdk = 28
         targetSdk = 37
-        versionCode = 171
+        versionCode = 177
         versionName = dateVersion
         buildConfigField("String", "GIT_REVISION", "\"$revision\"")
         buildConfigField("boolean", "LOCAL_CHANGES", modified.toString())
