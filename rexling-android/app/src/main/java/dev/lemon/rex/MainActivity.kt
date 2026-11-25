@@ -1283,8 +1283,28 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                     inCorner
                                                 }
                                         view.onOpenLink = { url ->
+                                            val remotePath = TerminalLinks.filePath(url)
                                             val loopback = LoopbackLink.parse(url)
-                                            if (loopback == null)
+                                            if (remotePath != null) {
+                                                if (
+                                                    ready &&
+                                                        chosen == liveBlock &&
+                                                        displayedSession.isNotBlank()
+                                                ) {
+                                                    model.downloads.offer(
+                                                        FileDownloadTarget(
+                                                            model.activeServer,
+                                                            displayedSession,
+                                                            chosen,
+                                                            remotePath,
+                                                        ),
+                                                    )
+                                                } else
+                                                    model.downloads.notice =
+                                                        context.getString(
+                                                            R.string.download_wait_pane_connect,
+                                                        )
+                                            } else if (loopback == null)
                                                 PortForwards.openBrowser(context, url)
                                             else if (
                                                 ready &&
@@ -2052,6 +2072,11 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     }
                 },
             )
+        FileDownloadDialogs(model.downloads) { action ->
+            withUploadNetwork(action) {
+                model.downloads.notice = context.getString(R.string.download_allow_local_network)
+            }
+        }
         if (forwards)
             PortForwardSheet(
                 model.forwardServers(),

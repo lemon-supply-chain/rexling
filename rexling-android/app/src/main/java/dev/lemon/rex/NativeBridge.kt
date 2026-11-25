@@ -21,6 +21,12 @@ object NativeBridge {
 
     @JvmStatic external fun uploadDestroy(handle: Long)
 
+    @JvmStatic external fun downloadCreate(request: String): Long
+
+    @JvmStatic external fun downloadPoll(handle: Long): String
+
+    @JvmStatic external fun downloadDestroy(handle: Long)
+
     @JvmStatic external fun forwardCreate(request: String): Long
 
     @JvmStatic external fun forwardPoll(handle: Long): String

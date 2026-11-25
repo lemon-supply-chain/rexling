@@ -797,4 +797,20 @@
     <string name="pane_orientation_landscape">横屏</string>
     <string name="font_size_window_format">当前窗口使用%1$s</string>
     <string name="font_size_sp_format">%1$s sp</string>
+    <string name="download_file">下载文件</string>
+    <string name="terminal_link">终端链接</string>
+    <string name="download_prompt_title">下载文件？</string>
+    <string name="download_prompt_message_format">从 %2$s 保存 %1$s？</string>
+    <string name="download_save_as">另存为…</string>
+    <string name="download_progress_title">正在下载文件</string>
+    <string name="download_notice_title">文件下载</string>
+    <string name="download_saved_toast_format">已保存 %1$s</string>
+    <string name="download_error_save_failed">无法保存该文件。</string>
+    <string name="download_error_start_failed">无法启动 Rex 下载。</string>
+    <string name="download_error_server_outdated">请更新此 Rex 服务端以下载文件。</string>
+    <string name="download_error_failed">Rex 无法下载此文件。</string>
+    <string name="download_error_open_destination">Android 无法打开所选保存位置。</string>
+    <string name="download_error_open_picker">Android 无法打开文件选择器。</string>
+    <string name="download_wait_pane_connect">请等待此窗格连接完成后再下载其中的文件。</string>
+    <string name="download_allow_local_network">请允许本地网络权限，以便从此服务器下载文件。</string>
 </resources>

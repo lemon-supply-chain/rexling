@@ -1246,13 +1246,13 @@ class TerminalView(context: Context) : View(context) {
     }
 
     internal fun selectedLinkAction(action: TerminalLinkAction): Boolean {
-        val url = selectionLink?.url?.let(TerminalLinks::webUrl) ?: return false
+        val url = selectionLink?.url?.let(TerminalLinks::openableUrl) ?: return false
         when (action) {
             TerminalLinkAction.OPEN -> onOpenLink(url)
             TerminalLinkAction.COPY_ADDRESS ->
                 (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(
-                        ClipData.newPlainText(context.getString(R.string.a11y_web_link), url),
+                        ClipData.newPlainText(context.getString(R.string.terminal_link), url),
                     )
             TerminalLinkAction.SHARE -> onShareLink(url)
         }
@@ -1588,16 +1588,21 @@ class TerminalView(context: Context) : View(context) {
                                 .add(0, 0x524505, 4, "Copy output")
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                         }
-                        if (selectionLink != null) {
+                        selectionLink?.let { link ->
+                            val isFile = TerminalLinks.filePath(link.url) != null
+                            val openLabel =
+                                if (isFile) context.getString(R.string.download_file)
+                                else "Open link"
                             menu
-                                .add(0, 0x524501, 2, "Open link")
+                                .add(0, 0x524501, 2, openLabel)
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                             menu
                                 .add(0, 0x524502, 3, "Copy link address")
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                            menu
-                                .add(0, 0x524503, 4, context.getString(R.string.share_link))
-                                .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                            if (!isFile)
+                                menu
+                                    .add(0, 0x524503, 4, context.getString(R.string.share_link))
+                                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                         }
                         return true
                     }

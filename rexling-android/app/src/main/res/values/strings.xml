@@ -801,4 +801,20 @@
     <string name="pane_orientation_landscape">Landscape</string>
     <string name="font_size_window_format">This window uses %1$s</string>
     <string name="font_size_sp_format">%1$s sp</string>
+    <string name="download_file">Download file</string>
+    <string name="terminal_link">Terminal link</string>
+    <string name="download_prompt_title">Download file?</string>
+    <string name="download_prompt_message_format">Save %1$s from %2$s?</string>
+    <string name="download_save_as">Save as…</string>
+    <string name="download_progress_title">Downloading file</string>
+    <string name="download_notice_title">File download</string>
+    <string name="download_saved_toast_format">Saved %1$s</string>
+    <string name="download_error_save_failed">Could not save the file.</string>
+    <string name="download_error_start_failed">Could not start the Rex download.</string>
+    <string name="download_error_server_outdated">Update this Rex server to download files.</string>
+    <string name="download_error_failed">Rex could not download this file.</string>
+    <string name="download_error_open_destination">Android couldn’t open the selected destination.</string>
+    <string name="download_error_open_picker">Android couldn’t open the file picker.</string>
+    <string name="download_wait_pane_connect">Wait for this pane to connect before downloading its file.</string>
+    <string name="download_allow_local_network">Allow local network access to download from this server.</string>
 </resources>

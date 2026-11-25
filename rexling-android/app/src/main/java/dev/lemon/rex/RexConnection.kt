@@ -1555,6 +1555,7 @@ internal class RexConnection(
                 text.isEmpty()
         )
             return
+        boundView?.get()?.keyboardPan?.followCursor()
         val input = TerminalInput.modified(text, controlModifier, altModifier, shiftModifier)
         controlModifier = false
         altModifier = false

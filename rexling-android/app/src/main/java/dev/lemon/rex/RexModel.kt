@@ -157,6 +157,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     private var serverSwitchSerial = 0L
     internal var pendingImageTarget: ImageTarget? = null
     internal val images = ImageUploads(application, viewModelScope)
+    internal val downloads = FileDownloads(application, viewModelScope)
 
     internal fun imageTarget(): ImageTarget? {
         val client = activeClient
