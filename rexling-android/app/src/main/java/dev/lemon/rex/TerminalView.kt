@@ -144,6 +144,7 @@ class TerminalView(context: Context) : View(context) {
     private var startY = 0f
     private var dragging = false
     private var scrolling = false
+    private var draggedKeyboardViewport = false
     private var lastScrollY = 0f
     private var scrollPixels = 0f
     private var lastFlingY = 0
@@ -159,6 +160,7 @@ class TerminalView(context: Context) : View(context) {
     internal var onInputConnectionReady: () -> Unit = {}
     var onScroll: (Int) -> Unit = {}
     var onWheel: (Int, Int, Int, Int, Int) -> Unit = { lines, _, _, _, _ -> onScroll(lines) }
+    internal var keyboardPan: TerminalImePanState? = null
     var onActivate: (Boolean) -> Unit = {}
     var onMouseClick: (Int, Int, Int, Int) -> Unit = { _, _, _, _ -> }
     internal var onSemanticCopy: ((TerminalScreen, Int, Int, Boolean) -> Boolean)? = null
@@ -1040,6 +1042,22 @@ class TerminalView(context: Context) : View(context) {
         }
     }
 
+    private fun dragScroll(pixels: Float) {
+        val frame = screen ?: return
+        // Scrollback can reveal earlier text on its own. Application wheel events cannot expose
+        // the clipped part of this terminal view, so give the local viewport first use of the drag.
+        val remaining =
+            if (
+                pixels > 0 ||
+                    frame.scroll.offset == 0L ||
+                    (frame.applicationScroll && frame.scroll.below == 0L)
+            )
+                keyboardPan?.consumeDrag(pixels) ?: pixels
+            else pixels
+        if (remaining != pixels) draggedKeyboardViewport = true
+        if (remaining != 0f) scrollByPixels(remaining)
+    }
+
     internal val scrollTranslation: Float
         get() = screen?.let { slideFor(it) } ?: 0f
 
@@ -1258,6 +1276,7 @@ class TerminalView(context: Context) : View(context) {
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             touchVelocity?.recycle()
             touchVelocity = VelocityTracker.obtain()
+            draggedKeyboardViewport = false
         }
         val sample = MotionEvent.obtain(event)
         sample.offsetLocation(event.rawX - event.x, event.rawY - event.y)
@@ -1315,7 +1334,7 @@ class TerminalView(context: Context) : View(context) {
                         paneGesture.cancel()
                     }
                     if (scrolling) {
-                        scrollByPixels(lastScrollY - event.rawY)
+                        dragScroll(lastScrollY - event.rawY)
                         lastScrollY = event.rawY
                     } else if (dragging) onPaneDrag?.invoke(dx, true)
                 }
@@ -1339,7 +1358,7 @@ class TerminalView(context: Context) : View(context) {
                     val frame = screen
                     val history =
                         frame?.scroll?.takeUnless { frame.applicationScroll && it.below == 0L }
-                    if (history != null && history.available > 0) {
+                    if (!draggedKeyboardViewport && history != null && history.available > 0) {
                         val minimum =
                             -(history.offset.toDouble() * cellHeight)
                                 .coerceAtMost(1000000.0)

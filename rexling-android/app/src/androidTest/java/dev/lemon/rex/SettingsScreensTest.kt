@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import android.graphics.Bitmap
+import android.os.Build
 import android.view.KeyEvent
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,6 +16,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -276,6 +278,28 @@ class SettingsScreensTest {
                     .assertIsSelected()
                 ui.runOnIdle { assertEquals(next, mode) }
             }
+    }
+
+    @Test
+    fun toolbarSystemColorsAreOptIn() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        var enabled by mutableStateOf(false)
+        ui.setContent {
+            MaterialTheme {
+                PreferencesSheet(
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    toolbarSystemColors = enabled,
+                    onToolbarSystemColors = { enabled = it },
+                )
+            }
+        }
+        val setting = ui.onNodeWithText(appString(R.string.toolbar_system_colors)).performScrollTo()
+        setting.assertIsOff().performClick().assertIsOn()
+        setting.performClick().assertIsOff()
     }
 
     @Test

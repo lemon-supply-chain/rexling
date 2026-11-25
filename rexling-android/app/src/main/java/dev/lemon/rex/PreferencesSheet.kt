@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import android.os.Build
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -39,6 +40,8 @@ internal fun PreferencesSheet(
     onEnterSubmits: (Boolean) -> Unit = {},
     toolbarWithKeyboardOnly: Boolean = false,
     onToolbarWithKeyboardOnly: (Boolean) -> Unit = {},
+    toolbarSystemColors: Boolean = false,
+    onToolbarSystemColors: (Boolean) -> Unit = {},
     multiPaneUnfolded: Boolean = false,
     onMultiPaneUnfolded: (Boolean) -> Unit = {},
     tabLayouts: Map<TabWidthClass, TabBarLayout> = emptyMap(),
@@ -524,6 +527,40 @@ internal fun PreferencesSheet(
                                     checked = toolbarWithKeyboardOnly,
                                     onCheckedChange = null,
                                 )
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                SettingsDivider()
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .toggleable(
+                                            toolbarSystemColors,
+                                            role = androidx.compose.ui.semantics.Role.Switch,
+                                            onValueChange = onToolbarSystemColors,
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.toolbar_system_colors),
+                                            style = SettingsType.row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            stringResource(R.string.toolbar_system_colors_detail),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = toolbarSystemColors,
+                                        onCheckedChange = null,
+                                    )
+                                }
                             }
                             SettingsDivider()
                             Row(

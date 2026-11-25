@@ -87,6 +87,8 @@ class AppearanceSheetTest {
                 assertTrue(first.arrowJoystickEnabled)
                 first.changeArrowJoystick(false)
                 assertEquals(ControlShortcutGesture.HOLD, first.shortcutGesture)
+                assertFalse(first.toolbarSystemColors)
+                first.changeToolbarSystemColors(true)
                 first.changeShortcutGesture(ControlShortcutGesture.DOUBLE_TAP)
                 val neovim = first.shortcutProfiles.first { it.id == ShortcutProfiles.NEOVIM }
                 assertNull(
@@ -117,6 +119,7 @@ class AppearanceSheetTest {
                 assertEquals(11, second.fontSize)
                 assertEquals(Appearance.DARK, second.appearance)
                 assertFalse(second.arrowJoystickEnabled)
+                assertTrue(second.toolbarSystemColors)
                 assertEquals(ControlShortcutGesture.DOUBLE_TAP, second.shortcutGesture)
                 assertEquals(
                     NeovimShortcuts.parse(

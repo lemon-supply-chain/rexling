@@ -1844,11 +1844,17 @@ internal fun TerminalActions(
     onKeyboard: (() -> Unit)? = null,
     vertical: Boolean = false,
     @Suppress("UNUSED_PARAMETER") sideRail: Boolean = false,
+    keyboard: (@Composable () -> Unit)? = null,
 ) {
     val activityDescription = stringResource(R.string.activity)
     val activityState =
         if (attentionCount > 0) stringResource(R.string.a11y_activity_new_items, attentionCount)
         else stringResource(R.string.a11y_activity_all_seen)
+    val renderedKeyboard: (@Composable () -> Unit)? =
+        keyboard
+            ?: onKeyboard?.let { click ->
+                { ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = click) }
+            }
     // The icon-only side rail stacks these actions.
     @Composable
     fun Group(content: @Composable () -> Unit) =
@@ -1861,7 +1867,7 @@ internal fun TerminalActions(
             }
         else
             BoxWithConstraints {
-                val buttonCount = if (onKeyboard == null) 1 else 2
+                val buttonCount = if (renderedKeyboard == null) 1 else 2
                 val spacing =
                     if (constraints.hasBoundedWidth)
                         with(LocalDensity.current) {
@@ -1879,10 +1885,6 @@ internal fun TerminalActions(
                     content()
                 }
             }
-    val keyboardButton: @Composable () -> Unit = {
-        if (onKeyboard != null)
-            ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = onKeyboard)
-    }
     val switcherButton: @Composable () -> Unit = {
         ChromeButton(
             ChromeIcon.SPLIT,
@@ -1939,11 +1941,40 @@ internal fun TerminalActions(
         }
     }
     Group {
-        // Stands in for the key toolbar's keyboard button while the toolbar is hidden.
-        if (!vertical) keyboardButton()
+        if (!vertical) renderedKeyboard?.invoke()
         switcherButton()
         activityButton()
-        if (vertical) keyboardButton()
+        if (vertical) renderedKeyboard?.invoke()
+    }
+}
+
+@Composable
+internal fun TerminalKeyboardButton(
+    controlled: Boolean,
+    enabled: Boolean,
+    keyboardVisible: Boolean,
+    readable: Boolean = enabled,
+    inputKey: String = "",
+    onPaste: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val keyboardDescription =
+        stringResource(
+            when {
+                !controlled -> R.string.a11y_take_control_and_show_keyboard
+                keyboardVisible -> R.string.a11y_hide_keyboard
+                else -> R.string.a11y_show_keyboard
+            },
+        )
+    key(inputKey) {
+        ChromeButton(
+            if (keyboardVisible) ChromeIcon.HIDE_KEYBOARD else ChromeIcon.KEYBOARD,
+            keyboardDescription,
+            enabled,
+            readable = readable,
+            onLongClick = if (controlled && enabled) onPaste else null,
+            onClick = onClick,
+        )
     }
 }
 
@@ -1970,7 +2001,8 @@ internal fun KeyboardBar(
     onPrompt: ((Int) -> Unit)? = null,
     toolbarKeys: List<ToolbarKey> = ToolbarLayout.defaults,
     controlItems: List<ControlShortcut> = ControlShortcutConfig.defaults,
-    onKeyboard: () -> Unit,
+    showTopDivider: Boolean = true,
+    onKeyboard: (() -> Unit)?,
 ) {
     val toolbar = ToolbarLayout.normalize(toolbarKeys)
     var expanded by remember { mutableStateOf(false) }
@@ -1983,14 +2015,6 @@ internal fun KeyboardBar(
     val terminalKeysDescription = stringResource(R.string.a11y_terminal_keys)
     val pasteKeyDescription = stringResource(R.string.a11y_paste_key)
     val tabKeyDescription = stringResource(R.string.a11y_tab_key)
-    val keyboardDescription =
-        stringResource(
-            when {
-                !controlled -> R.string.a11y_take_control_and_show_keyboard
-                keyboardVisible -> R.string.a11y_hide_keyboard
-                else -> R.string.a11y_show_keyboard
-            },
-        )
     // The extra-key trigger lives just before Esc, outside the initial viewport.
     val keyScroll = rememberScrollState(initial = Int.MAX_VALUE)
     LaunchedEffect(keyboardVisible) {
@@ -2001,15 +2025,19 @@ internal fun KeyboardBar(
     }
     LaunchedEffect(expanded, toolbar) { if (!expanded) keyScroll.scrollTo(keyScroll.maxValue) }
     Column(Modifier.fillMaxWidth()) {
-        Box(
+        Spacer(
             Modifier.fillMaxWidth()
                 .height(1.dp)
-                .background(
-                    tintOver(
-                        MaterialTheme.colorScheme.outline,
-                        MaterialTheme.colorScheme.surface,
-                        .4f,
-                    ),
+                .then(
+                    if (showTopDivider)
+                        Modifier.background(
+                            tintOver(
+                                MaterialTheme.colorScheme.outline,
+                                MaterialTheme.colorScheme.surface,
+                                .4f,
+                            ),
+                        )
+                    else Modifier,
                 ),
         )
         Row(
@@ -2160,16 +2188,16 @@ internal fun KeyboardBar(
                         }
                     }
                 }
-            key(inputKey) {
-                ChromeButton(
-                    if (keyboardVisible) ChromeIcon.HIDE_KEYBOARD else ChromeIcon.KEYBOARD,
-                    keyboardDescription,
+            if (onKeyboard != null)
+                TerminalKeyboardButton(
+                    controlled,
                     enabled,
-                    readable = readable,
-                    onLongClick = if (controlled && enabled) onPaste else null,
-                    onClick = onKeyboard,
+                    keyboardVisible,
+                    readable,
+                    inputKey,
+                    onPaste,
+                    onKeyboard,
                 )
-            }
         }
         if (expanded) {
             val extra =

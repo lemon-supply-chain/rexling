@@ -783,4 +783,6 @@
     <string name="a11y_sessions_by_server">Sessions by server</string>
     <string name="no_sessions_available">No sessions available</string>
     <string name="a11y_scroll_to_latest">Scroll to latest</string>
+    <string name="toolbar_system_colors">Use system colors for toolbar</string>
+    <string name="toolbar_system_colors_detail">Fade to Android’s light or dark palette when the keyboard opens.</string>
 </resources>

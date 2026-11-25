@@ -1,27 +1,39 @@
 package dev.lemon.rex
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -34,6 +46,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -404,8 +417,47 @@ class KeyboardBarTest {
     }
 
     @Test
+    fun controlRowKeepsAllKeysWhenTheKeyboardToggleLivesInTheSidebar() {
+        ui.setContent {
+            MaterialTheme {
+                KeyboardBar(
+                    true,
+                    true,
+                    false,
+                    false,
+                    false,
+                    true,
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    { sent += it },
+                    onKeyboard = null,
+                )
+            }
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard)).assertDoesNotExist()
+        for (label in
+            listOf(
+                "Escape",
+                appString(R.string.a11y_control),
+                "Alt",
+                "Shift",
+                appString(R.string.a11y_tab_key),
+                appString(R.string.a11y_arrow_keys),
+                "Enter",
+            )) {
+            ui.onNodeWithContentDescription(label).assertIsDisplayed()
+        }
+        ui.onNodeWithContentDescription("Enter").performClick()
+        ui.runOnIdle { assertEquals(listOf("enter"), sent) }
+    }
+
+    @Test
     fun navigationPendingKeepsTheEntireKeyRowCrispWhileInputIsDisabled() {
         val ready = mutableStateOf(true)
+        val showTopDivider = mutableStateOf(true)
         ui.setContent {
             MaterialTheme {
                 Box(Modifier.width(360.dp).testTag("Keyboard test area")) {
@@ -423,6 +475,7 @@ class KeyboardBarTest {
                         {},
                         { sent += it },
                         readable = true,
+                        showTopDivider = showTopDivider.value,
                         onKeyboard = {},
                     )
                 }
@@ -456,6 +509,131 @@ class KeyboardBarTest {
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
         ui.runOnIdle { ready.value = true }
         ui.onNodeWithContentDescription("Escape").assertIsEnabled()
+        ui.runOnIdle { showTopDivider.value = false }
+        val seamless = ui.onNodeWithTag("Keyboard test area").captureToImage().toPixelMap()
+        assertEquals(before.height, seamless.height)
+        for (x in 0 until seamless.width) assertEquals(
+            seamless[0, seamless.height / 2],
+            seamless[x, 0],
+        )
+    }
+
+    @Test
+    fun toolbarColorTracksTheKeyboardInsetsInBothDirections() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        var enabled by mutableStateOf(false)
+        var keyboardBottom by mutableIntStateOf(0)
+        var keyboardSource by mutableIntStateOf(0)
+        var keyboardTarget by mutableIntStateOf(0)
+        var dark by mutableStateOf(false)
+        val appSurface = Color.Magenta
+        ui.setContent {
+            val configuration =
+                Configuration(LocalConfiguration.current).apply {
+                    uiMode =
+                        (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                            if (dark) Configuration.UI_MODE_NIGHT_YES
+                            else Configuration.UI_MODE_NIGHT_NO
+                }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                MaterialTheme(colorScheme = lightColorScheme(surface = appSurface)) {
+                    Column(
+                        Modifier.width(360.dp).background(MaterialTheme.colorScheme.surface),
+                    ) {
+                        Spacer(Modifier.size(12.dp).testTag("Outside keyboard toolbar"))
+                        Box(
+                            Modifier.testTag("Keyboard toolbar")
+                                .consumeWindowInsets(WindowInsets(bottom = keyboardBottom)),
+                        ) {
+                            KeyboardToolbarTheme(
+                                enabled,
+                                coverNavigation = true,
+                                ime = WindowInsets(bottom = keyboardBottom),
+                                source = WindowInsets(bottom = keyboardSource),
+                                target = WindowInsets(bottom = keyboardTarget),
+                                navigation = WindowInsets(bottom = 24),
+                            ) {
+                                KeyboardBar(
+                                    true,
+                                    true,
+                                    false,
+                                    false,
+                                    false,
+                                    keyboardBottom > 0,
+                                    {},
+                                    {},
+                                    {},
+                                    {},
+                                    {},
+                                    {},
+                                    showTopDivider = false,
+                                    onKeyboard = {},
+                                )
+                            }
+                        }
+                        Spacer(Modifier.size(12.dp).testTag("Below keyboard toolbar"))
+                    }
+                }
+            }
+        }
+        fun background(tag: String) = ui.onNodeWithTag(tag).captureToImage().toPixelMap()[0, 0]
+        fun toolbarPixels() = ui.onNodeWithTag("Keyboard toolbar").captureToImage().toPixelMap()
+        fun toolbarColor() = toolbarPixels()[0, 0]
+        ui.runOnIdle {
+            enabled = true
+            keyboardTarget = 320
+        }
+        assertEquals(appSurface, toolbarColor())
+        val light = dynamicLightColorScheme(context).surfaceContainer
+        val night = dynamicDarkColorScheme(context).surfaceContainer
+        val opening =
+            listOf(72, 160, 248).map { inset ->
+                ui.runOnIdle { keyboardBottom = inset }
+                val pixels = toolbarPixels()
+                assertEquals(pixels[0, 0], pixels[0, pixels.height - 1])
+                pixels[0, 0]
+            }
+        assertEquals(opening.size, opening.distinct().size)
+        assertTrue(opening.none { it == appSurface || it == light })
+        ui.runOnIdle { keyboardBottom = 320 }
+        assertEquals(light, toolbarColor())
+        ui.runOnIdle {
+            dark = true
+            keyboardSource = 320
+            keyboardTarget = 380
+        }
+        assertEquals(night, toolbarColor())
+        ui.runOnIdle { keyboardBottom = 380 }
+        assertEquals(night, toolbarColor())
+        val openHeight = ui.onNodeWithTag("Keyboard toolbar").captureToImage().height
+        assertEquals(appSurface, background("Outside keyboard toolbar"))
+        assertEquals(appSurface, background("Below keyboard toolbar"))
+        ui.runOnIdle {
+            keyboardSource = 380
+            keyboardTarget = 0
+        }
+        assertEquals(night, toolbarColor())
+        ui.runOnIdle { keyboardBottom = 195 }
+        val closing = toolbarColor()
+        assertNotEquals(night, closing)
+        assertNotEquals(appSurface, closing)
+        ui.runOnIdle { keyboardBottom = 12 }
+        val handoff = toolbarPixels()
+        assertEquals(openHeight + 12, handoff.height)
+        assertEquals(appSurface, handoff[0, 0])
+        assertEquals(handoff[0, 0], handoff[0, handoff.height - 1])
+        ui.runOnIdle { keyboardBottom = 0 }
+        val closed = toolbarPixels()
+        assertEquals(openHeight + 24, closed.height)
+        assertEquals(appSurface, closed[0, closed.height - 1])
+        assertEquals(appSurface, toolbarColor())
+        ui.runOnIdle {
+            enabled = false
+            keyboardBottom = 320
+            keyboardTarget = 320
+        }
+        assertEquals(appSurface, toolbarColor())
     }
 
     @Test

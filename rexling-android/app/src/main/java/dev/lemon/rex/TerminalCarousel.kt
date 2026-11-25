@@ -222,6 +222,7 @@ internal fun TerminalCarousel(
                     val trackFloating =
                         center && paneLayout.any { it.id == block.id && it.floating }
                     var keyboardFocus by remember { mutableStateOf<TerminalKeyboardFocus?>(null) }
+                    val keyboardPan = remember { TerminalImePanState() }
                     Box(
                         Modifier.width(cardWidth)
                             .fillMaxHeight()
@@ -268,6 +269,7 @@ internal fun TerminalCarousel(
                                                     keyboardChrome = keyboardChrome,
                                                     headerHeightSaved = headerHeightSaved,
                                                     headerOverlap = headerOverlap,
+                                                    pan = keyboardPan,
                                                 ) {
                                                     keyboardFocus
                                                 }
@@ -283,6 +285,10 @@ internal fun TerminalCarousel(
                                             }
                                             view.onKeyboardFocus = { keyboardFocus = it }
                                             keyboardFocus = view.keyboardFocus
+                                            view.keyboardPan = keyboardPan.takeIf {
+                                                center && block.id == liveBlock
+                                            }
+                                            if (view.keyboardPan == null) keyboardPan.followCursor()
                                             view.onDimensions =
                                                 if (center && block.id == liveBlock) onDimensions
                                                 else { _, _ -> }

@@ -2,13 +2,17 @@ package dev.lemon.rex
 
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 internal data class TerminalKeyboardFocus(
     val top: Float,
@@ -23,6 +27,7 @@ internal class TerminalImePanState {
     private var previousCoverage = -1
     private var previousOcclusion = -1
     private var offset = 0
+    private var manualOffset by mutableStateOf<Float?>(null)
 
     fun position(
         focus: TerminalKeyboardFocus?,
@@ -59,7 +64,23 @@ internal class TerminalImePanState {
                     else -> cursor
                 }.coerceIn(-topOcclusion, covered)
         }
-        return offset
+        if (covered == 0 && topOcclusion == 0) followCursor()
+        return manualOffset?.coerceIn(-topOcclusion.toFloat(), offset.toFloat())?.roundToInt()
+            ?: offset
+    }
+
+    /** Move only the visible part of the pane and return any drag left for terminal scrollback. */
+    fun consumeDrag(pixels: Float): Float {
+        val top = -previousOcclusion.coerceAtLeast(0).toFloat()
+        val end = offset.toFloat()
+        val before = manualOffset?.coerceIn(top, end) ?: end
+        val after = (before + pixels).coerceIn(top, end)
+        if (after != before) manualOffset = after.takeIf { it < end }
+        return pixels - (after - before)
+    }
+
+    fun followCursor() {
+        manualOffset = null
     }
 }
 
@@ -86,6 +107,7 @@ internal fun Modifier.terminalImeViewport(
     extendsUnderNavigation: Boolean = false,
     headerHeightSaved: () -> Int = { 0 },
     headerOverlap: () -> Int = { 0 },
+    pan: TerminalImePanState = remember { TerminalImePanState() },
     focus: () -> TerminalKeyboardFocus?,
 ): Modifier {
     if (anchor == ImeAnchor.RESIZE) {
@@ -113,6 +135,7 @@ internal fun Modifier.terminalImeViewport(
             )
         },
         topOcclusion = { headerOverlap() },
+        pan = pan,
         focus = focus,
     )
 }
@@ -135,9 +158,9 @@ internal fun Modifier.stableTerminalViewport(
     panToCursor: Boolean = true,
     coverage: androidx.compose.ui.unit.Density.() -> Int,
     topOcclusion: androidx.compose.ui.unit.Density.() -> Int = { 0 },
+    pan: TerminalImePanState = remember(panToCursor) { TerminalImePanState() },
     focus: () -> TerminalKeyboardFocus?,
 ): Modifier {
-    val pan = remember(panToCursor) { TerminalImePanState() }
     return layout { measurable, constraints ->
         if (!constraints.hasBoundedHeight) {
             val child = measurable.measure(constraints)

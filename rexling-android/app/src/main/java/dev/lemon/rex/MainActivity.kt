@@ -13,6 +13,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -40,10 +41,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -126,10 +130,8 @@ class MainActivity : ComponentActivity() {
             val immersive = model.immersiveStatusBar
             LaunchedEffect(immersive) { window.applyImmersiveStatusBar(immersive) }
             SideEffect {
-                WindowCompat.getInsetsController(window, window.decorView).apply {
-                    isAppearanceLightStatusBars = !dark
-                    isAppearanceLightNavigationBars = !dark
-                }
+                WindowCompat.getInsetsController(window, window.decorView)
+                    .isAppearanceLightStatusBars = !dark
             }
             CompositionLocalProvider(LocalImmersiveStatusBar provides immersive) {
                 RexTheme(
@@ -431,6 +433,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     val toolbarHidden = model.toolbarWithKeyboardOnly && !keyboardShown
     val tabWidth = currentTabWidth()
     val panelShown = state.connected || state.phase == "preview" || client.hasScreen
+    if (!panelShown || model.toolbarWithKeyboardOnly) AppGestureBarContrast(!palette.dark)
     val unfoldedFullScreen = isUnfoldedFullScreen()
     val hasHinge =
         remember(context) {
@@ -441,6 +444,11 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     // Floating tabs are a pure overlay: they take no layout space, so moving them never resizes the
     // terminal. The docked rail and bottom strip step aside while this is on.
     val floatingTabs = model.floatingTabs
+    // A foldable's cover screen can fall in the medium tab width class.
+    val squarePaneCorners =
+        (tabLayout.side && !floatingTabs) ||
+            tabWidth.first == TabWidthClass.NARROW ||
+            (hasHinge && !unfoldedFullScreen)
     val extendUnderNav =
         panelShown && tabLayout.side && !floatingTabs && model.toolbarWithKeyboardOnly
     val navigationClearance =
@@ -523,6 +531,38 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     var dockFloatingPane by remember(displayedSession, window?.id) { mutableStateOf<String?>(null) }
     val controlled = state.controlled && ready && client.hasScreen
+    fun showKeyboard() {
+        if (!controlled) client.takeControl() else terminalView?.keyboard()
+    }
+    fun toggleKeyboard() {
+        if (controlled && keyboardVisible) terminalView?.hideKeyboard() else showKeyboard()
+    }
+    val keyboardAction: (@Composable () -> Unit)? =
+        when {
+            tabLayout.side && !floatingTabs -> ({
+                    TerminalKeyboardButton(
+                        controlled,
+                        ready,
+                        keyboardVisible,
+                        readable = state.connected,
+                        inputKey = keyTarget,
+                        onPaste = { pasteClipboard() },
+                        onClick = ::toggleKeyboard,
+                    )
+                })
+            toolbarHidden -> ({
+                    ChromeButton(
+                        ChromeIcon.KEYBOARD,
+                        stringResource(
+                            if (controlled) R.string.a11y_show_keyboard
+                            else R.string.a11y_take_control_and_show_keyboard,
+                        ),
+                        enabled = state.connected && state.selectedSession.isNotBlank(),
+                        onClick = ::showKeyboard,
+                    )
+                })
+            else -> null
+        }
     val paneObscured =
         menu ||
             model.activityVisible ||
@@ -1036,21 +1076,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     { model.showActivity(true) },
                                     { picker = "tabs" },
                                     attentionCount = activityBadges.elsewhere,
-                                    keyboardLabel =
-                                        if (!controlled)
-                                            stringResource(
-                                                R.string.a11y_take_control_and_show_keyboard,
-                                            )
-                                        else stringResource(R.string.a11y_show_keyboard),
-                                    onKeyboard =
-                                        if (toolbarHidden)
-                                            ({
-                                                if (!controlled) client.takeControl()
-                                                else terminalView?.keyboard()
-                                            })
-                                        else null,
                                     vertical = vertical,
                                     sideRail = sideRail,
+                                    keyboard = keyboardAction,
                                 )
                             }
                         val tabRail: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
@@ -1385,9 +1413,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             },
                                             headerHeightSaved = currentHeaderSavings,
                                             headerOverlap = currentHeaderOverlap,
-                                            squareCorners =
-                                                (tabLayout.side && !floatingTabs) ||
-                                                    tabWidth.first == TabWidthClass.NARROW,
+                                            squareCorners = squarePaneCorners,
                                             extendsUnderNavigation = extendUnderNav,
                                             navigationClearance = singlePaneNavigationClearance,
                                             bottomOverlayInset = bottomOverlayInset,
@@ -1691,11 +1717,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 keyTarget,
                                 toolbarHeight,
                                 onPaste = ::pasteClipboard,
-                                onKeyboard = {
-                                    if (!controlled) client.takeControl()
-                                    else if (keyboardVisible) terminalView?.hideKeyboard()
-                                    else terminalView?.keyboard()
-                                },
+                                onKeyboard = ::toggleKeyboard,
                                 tabs =
                                     if (floatingTabs) null
                                     else {
@@ -1880,6 +1902,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     onEnterSubmits = model::changeEnterSubmits,
                     toolbarWithKeyboardOnly = model.toolbarWithKeyboardOnly,
                     onToolbarWithKeyboardOnly = model::changeToolbarWithKeyboardOnly,
+                    toolbarSystemColors = model.toolbarSystemColors,
+                    onToolbarSystemColors = model::changeToolbarSystemColors,
                     multiPaneUnfolded = model.multiPaneUnfolded,
                     onMultiPaneUnfolded = model::changeMultiPaneUnfolded,
                     tabLayouts = model.tabLayouts,
@@ -2281,15 +2305,14 @@ private fun WorkspaceBottomBar(
     onKeyboard: () -> Unit,
     tabs: (@Composable () -> Unit)?,
 ) {
+    val navigation = WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
+    val toolbarCoversNavigation = !model.toolbarWithKeyboardOnly && !extendUnderNav
     Column(
         Modifier.fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
             .then(
-                if (extendUnderNav) Modifier
-                else
-                    Modifier.windowInsetsPadding(
-                        WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
-                    ),
+                if (extendUnderNav || toolbarCoversNavigation) Modifier
+                else Modifier.windowInsetsPadding(navigation),
             ),
     ) {
         if (!sideTabs && tabs != null) tabs()
@@ -2303,33 +2326,119 @@ private fun WorkspaceBottomBar(
                     else Modifier,
                 ),
         ) {
-            KeyboardBar(
-                controlled,
-                ready,
-                client.controlModifier,
-                client.altModifier,
-                client.shiftModifier,
-                keyboardVisible,
-                client::toggleControl,
-                client::toggleAlt,
-                client::toggleShift,
-                client::pressShift,
-                client::releaseShift,
-                { client.keyForTarget(it, keyTarget) },
-                readable = state.connected,
-                onControlShortcut = { client.controlShortcut(it, keyTarget) },
-                inputKey = keyTarget,
-                shortcutGesture = model.shortcutGesture,
-                arrowJoystickEnabled = model.arrowJoystickEnabled,
-                onPaste = { onPaste() },
-                onPrompt =
-                    if (client.hasSemanticPrompts && !changingSession) client::scrollPrompt
-                    else null,
-                toolbarKeys = model.toolbarKeys,
-                controlItems = model.controlItems,
-                onKeyboard = onKeyboard,
-            )
+            KeyboardToolbarTheme(
+                model.toolbarSystemColors,
+                coverNavigation = toolbarCoversNavigation,
+            ) {
+                KeyboardBar(
+                    controlled,
+                    ready,
+                    client.controlModifier,
+                    client.altModifier,
+                    client.shiftModifier,
+                    keyboardVisible,
+                    client::toggleControl,
+                    client::toggleAlt,
+                    client::toggleShift,
+                    client::pressShift,
+                    client::releaseShift,
+                    { client.keyForTarget(it, keyTarget) },
+                    readable = state.connected,
+                    onControlShortcut = { client.controlShortcut(it, keyTarget) },
+                    inputKey = keyTarget,
+                    shortcutGesture = model.shortcutGesture,
+                    arrowJoystickEnabled = model.arrowJoystickEnabled,
+                    onPaste = { onPaste() },
+                    onPrompt =
+                        if (client.hasSemanticPrompts && !changingSession) client::scrollPrompt
+                        else null,
+                    toolbarKeys = model.toolbarKeys,
+                    controlItems = model.controlItems,
+                    showTopDivider = sideTabs,
+                    onKeyboard = onKeyboard.takeUnless { sideTabs },
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun AppGestureBarContrast(useDarkHandle: Boolean) {
+    val window = LocalActivity.current?.window ?: return
+    LaunchedEffect(window, useDarkHandle) {
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars =
+            useDarkHandle
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun KeyboardToolbarTheme(
+    enabled: Boolean,
+    coverNavigation: Boolean = false,
+    ime: WindowInsets = WindowInsets.ime,
+    source: WindowInsets = WindowInsets.imeAnimationSource,
+    target: WindowInsets = WindowInsets.imeAnimationTarget,
+    navigation: WindowInsets = WindowInsets.navigationBars,
+    content: @Composable () -> Unit,
+) {
+    val navigationPadding =
+        if (coverNavigation) Modifier.windowInsetsPadding(navigation.only(WindowInsetsSides.Bottom))
+        else Modifier
+    val appDark = LocalTerminalPalette.current.dark
+    if (!enabled || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        if (coverNavigation) AppGestureBarContrast(!appDark)
+        Box(navigationPadding) { content() }
+        return
+    }
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val dark = isSystemInDarkTheme()
+    val systemColors =
+        remember(context, configuration, dark) {
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+    val appColors = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    // Keep the fade in step with the keyboard's movement.
+    val blend by
+        remember(ime, source, target, navigation, density) {
+            derivedStateOf {
+                val nav = navigation.getBottom(density)
+                val current = (ime.getBottom(density) - nav).coerceAtLeast(0)
+                val before = (source.getBottom(density) - nav).coerceAtLeast(0)
+                val after = (target.getBottom(density) - nav).coerceAtLeast(0)
+                when {
+                    current == 0 -> 0f
+                    before > 0 && after > 0 -> 1f
+                    else -> (current.toFloat() / maxOf(1, before, after)).coerceAtMost(1f)
+                }
+            }
+        }
+    val toolbarColors =
+        when (blend) {
+            0f -> appColors
+            1f -> systemColors
+            else ->
+                appColors.copy(
+                    surface = lerp(appColors.surface, systemColors.surface, blend),
+                    surfaceVariant =
+                        lerp(appColors.surfaceVariant, systemColors.surfaceVariant, blend),
+                    surfaceContainer =
+                        lerp(appColors.surfaceContainer, systemColors.surfaceContainer, blend),
+                    onSurface = lerp(appColors.onSurface, systemColors.onSurface, blend),
+                    onSurfaceVariant =
+                        lerp(appColors.onSurfaceVariant, systemColors.onSurfaceVariant, blend),
+                    primary = lerp(appColors.primary, systemColors.primary, blend),
+                    onPrimary = lerp(appColors.onPrimary, systemColors.onPrimary, blend),
+                    outline = lerp(appColors.outline, systemColors.outline, blend),
+                )
+        }
+    val background = lerp(appColors.surface, systemColors.surfaceContainer, blend)
+    if (coverNavigation)
+        AppGestureBarContrast(if (blend == 0f) !appDark else background.luminance() > .18f)
+    MaterialTheme(colorScheme = toolbarColors) {
+        Box(Modifier.background(background).then(navigationPadding)) { content() }
     }
 }
 

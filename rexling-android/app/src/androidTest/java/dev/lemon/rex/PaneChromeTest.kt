@@ -446,6 +446,7 @@ class PaneChromeTest {
             )
         val actions = mutableListOf<String>()
         val unread = mutableIntStateOf(0)
+        var keyboardVisible by mutableStateOf(false)
         // Hoisted so the fixture can switch the action bar between the side rail and the bottom
         // bar.
         val sideRail = mutableStateOf(true)
@@ -481,11 +482,13 @@ class PaneChromeTest {
                             true,
                             { actions += "activity" },
                             { actions += "switcher" },
-                            keyboardLabel = appString(R.string.a11y_show_keyboard),
-                            onKeyboard = { actions += "keyboard" },
                             vertical = style == TabRailStyle.ICONS,
                             sideRail = sideRail.value,
-                        )
+                        ) {
+                            TerminalKeyboardButton(true, true, keyboardVisible) {
+                                actions += "keyboard"
+                            }
+                        }
                     }
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
                 }
@@ -663,6 +666,12 @@ class PaneChromeTest {
                 .boundsInRoot
         assertTrue(activity.bottom <= keyboard.top && keyboard.bottom <= collapsedToggle.top)
         assertEquals(keyboard.center.x, collapsedToggle.center.x, 1f)
+        ui.runOnIdle { keyboardVisible = true }
+        val hideKeyboard =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard))
+                .assertIsDisplayed()
+        assertEquals(keyboard, hideKeyboard.fetchSemanticsNode().boundsInRoot)
+        ui.runOnIdle { keyboardVisible = false }
         expand.performClick()
         assertEquals(expandedToggle, collapse.fetchSemanticsNode().boundsInRoot)
         ui.runOnIdle {

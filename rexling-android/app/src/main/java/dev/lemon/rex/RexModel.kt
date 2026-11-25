@@ -448,6 +448,15 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putBoolean("keyboard_toolbar_auto_hide", value) }
     }
 
+    internal var toolbarSystemColors by
+        mutableStateOf(preferences.getBoolean("keyboard_toolbar_system_colors", false))
+        private set
+
+    internal fun changeToolbarSystemColors(value: Boolean) {
+        toolbarSystemColors = value
+        preferences.edit { putBoolean("keyboard_toolbar_system_colors", value) }
+    }
+
     internal var compactHeaderMode by
         mutableStateOf(
             preferences.getString("compact_header_mode", null)?.let { saved ->

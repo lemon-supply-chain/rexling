@@ -1,11 +1,18 @@
 package dev.lemon.rex
 
+import android.content.res.Configuration
+import android.os.Build
+import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
@@ -565,8 +572,10 @@ class TerminalImeViewportTest {
         var cursorBottom by mutableStateOf<TerminalKeyboardFocus?>(null)
         var headerHeightSaved = 0
         var headerOverlap = 0
+        val appSurface = Color.Magenta
+        val toolbarSurfaces = mutableListOf<Color>()
         ui.setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = lightColorScheme(surface = appSurface)) {
                 val ime = WindowInsets.ime
                 val navigation = WindowInsets.navigationBars
                 // Production shape for a shown panel: top/horizontal safe insets only, the
@@ -626,7 +635,13 @@ class TerminalImeViewportTest {
                             update = { cursorBottom = it.keyboardFocus },
                         )
                     }
-                    Spacer(Modifier.height(48.dp))
+                    KeyboardToolbarTheme(true) {
+                        val surface = MaterialTheme.colorScheme.surface
+                        SideEffect {
+                            if (toolbarSurfaces.lastOrNull() != surface) toolbarSurfaces += surface
+                        }
+                        Spacer(Modifier.height(48.dp))
+                    }
                 }
             }
         }
@@ -666,6 +681,26 @@ class TerminalImeViewportTest {
         }
         try {
             waitForKeyboard(height)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val context = view.context
+                val night =
+                    context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                        Configuration.UI_MODE_NIGHT_YES
+                val systemSurface =
+                    (if (night) dynamicDarkColorScheme(context)
+                        else dynamicLightColorScheme(context))
+                        .surface
+                ui.waitUntil(7000) {
+                    ui.runOnUiThread { toolbarSurfaces.lastOrNull() == systemSurface }
+                }
+                ui.runOnIdle {
+                    assertEquals(appSurface, toolbarSurfaces.first())
+                    assertTrue(
+                        "The actual IME transition should produce intermediate toolbar colors: $toolbarSurfaces",
+                        toolbarSurfaces.any { it != appSurface && it != systemSurface },
+                    )
+                }
+            }
             ui.runOnIdle {
                 assertTrue("Keyboard should reduce the visible viewport", visibleHeight < height)
                 assertTrue(
@@ -777,5 +812,103 @@ class TerminalImeViewportTest {
         ui.runOnIdle { view.screen = view.screen!!.copy(cursorAnchorY = view.screen!!.rows - 3) }
         ui.waitForIdle()
         ui.runOnIdle { assertEquals(count, sizes.size) }
+    }
+
+    @Test
+    fun draggingAnImePannedMenuRevealsItsClippedRowsWithoutResizing() {
+        var covered by mutableIntStateOf(0)
+        var focus by mutableStateOf<TerminalKeyboardFocus?>(null)
+        val sizes = mutableListOf<Pair<Int, Int>>()
+        lateinit var view: TerminalView
+        var viewportTop = 0f
+        var wheelLines = 0
+        val headerOverlap = 32
+        val pan = TerminalImePanState()
+        fun terminalTop(): Int = IntArray(2).also { view.getLocationInWindow(it) }[1]
+        ui.setContent {
+            val height = 480.dp - with(LocalDensity.current) { covered.toDp() }
+            Box(
+                Modifier.width(320.dp).height(height).clipToBounds().onGloballyPositioned {
+                    viewportTop = it.positionInWindow().y
+                },
+            ) {
+                AndroidView(
+                    factory = {
+                        TerminalView(it).also { terminal ->
+                            view = terminal
+                            terminal.allowHiddenCursorInput =
+                                ProgramProfile.resolve(ProgramIdentity.resolve(listOf("codex")))
+                                    .hiddenCursorInput
+                            terminal.onKeyboardFocus = { focus = it }
+                            terminal.keyboardPan = pan
+                            terminal.onWheel = { lines, _, _, _, _ -> wheelLines += lines }
+                            terminal.onDimensions = { cols, rows ->
+                                sizes += cols to rows
+                                val menu =
+                                    listOf(
+                                        "Update available",
+                                        "1. Update now",
+                                        "2. Skip",
+                                        "3. Skip until next version",
+                                    )
+                                val cells = menu.mapIndexed { index, text ->
+                                    TerminalCell(0, index + 1, text, -1, 0, 0, 1)
+                                }
+                                terminal.screen =
+                                    TerminalScreen(
+                                        cols,
+                                        rows,
+                                        null,
+                                        null,
+                                        -1,
+                                        0,
+                                        cells,
+                                        inputFlags = 7,
+                                        cursorAnchorX = 2,
+                                        cursorAnchorY = rows - 2,
+                                    )
+                            }
+                        }
+                    },
+                    modifier =
+                        Modifier.fillMaxSize().terminalImeViewport(
+                            WindowInsets(bottom = covered),
+                            WindowInsets(0, 0, 0, 0),
+                            headerOverlap = { if (covered > 0) headerOverlap else 0 },
+                            pan = pan,
+                        ) {
+                            focus
+                        },
+                )
+            }
+        }
+        val count = ui.runOnIdle { sizes.size }
+        ui.runOnIdle { covered = 280 }
+        val automaticTop = ui.runOnIdle { terminalTop().also { assertTrue(it < viewportTop) } }
+        val distance = (viewportTop + headerOverlap - automaticTop).toInt()
+        fun drag(delta: Int) {
+            val down = android.os.SystemClock.uptimeMillis()
+            val start = if (delta > 0) 40f else 40f - delta
+            val end = start + delta
+            fun send(action: Int, time: Long, y: Float) {
+                val event = MotionEvent.obtain(down, down + time, action, 40f, y, 0)
+                try {
+                    view.onTouchEvent(event)
+                } finally {
+                    event.recycle()
+                }
+            }
+            send(MotionEvent.ACTION_DOWN, 0, start)
+            send(MotionEvent.ACTION_MOVE, 50, end)
+            send(MotionEvent.ACTION_UP, 100, end)
+        }
+        ui.runOnIdle { drag(distance) }
+        ui.runOnIdle { assertEquals(viewportTop + headerOverlap, terminalTop().toFloat(), 1f) }
+        ui.runOnIdle { drag(-distance) }
+        ui.runOnIdle {
+            assertEquals(automaticTop, terminalTop())
+            assertEquals(count, sizes.size)
+            assertEquals(0, wheelLines)
+        }
     }
 }
