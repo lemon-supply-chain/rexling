@@ -147,6 +147,7 @@ internal fun TerminalTabRail(
     onFanAnchorBounds: (Rect) -> Unit = {},
     onFanBarBounds: (Rect) -> Unit = {},
     onFanAnchorGone: (String) -> Unit = {},
+    onMenuOpenChange: (Boolean) -> Unit = {},
     actions: @Composable () -> Unit,
 ) {
     val titles = style == TabRailStyle.TITLES
@@ -176,8 +177,13 @@ internal fun TerminalTabRail(
     var menuId by remember(reorderKey) { mutableStateOf<String?>(null) }
     val ids = windows.map { it.id }
     val index = ids.indexOf(selectedId)
+    val currentOnMenuOpenChange by rememberUpdatedState(onMenuOpenChange)
     LaunchedEffect(ids) { menuId = null }
-    LaunchedEffect(floating, menuId) { if (floating && menuId != null) onFanDismiss() }
+    LaunchedEffect(floating, menuId) {
+        if (floating && menuId != null) onFanDismiss()
+        currentOnMenuOpenChange(floating && menuId != null)
+    }
+    DisposableEffect(floating) { onDispose { if (floating) currentOnMenuOpenChange(false) } }
     LaunchedEffect(selectedId, reorderKey, index) {
         if (index >= 0) list.animateScrollToItem(index)
     }

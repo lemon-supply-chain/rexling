@@ -505,6 +505,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     var fannedTabId by remember { mutableStateOf<String?>(null) }
     var fanAnchorBounds by remember { mutableStateOf(Rect.Zero) }
     var fanBarBounds by remember { mutableStateOf(Rect.Zero) }
+    var floatingTabMenuOpen by remember { mutableStateOf(false) }
     fun resolveFannedWindow() =
         if (floatingTabs) windows.firstOrNull { it.id == fannedTabId && it.blocks.size > 1 }
         else null
@@ -519,6 +520,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         if (!floatingTabs) {
             fanAnchorBounds = Rect.Zero
             fanBarBounds = Rect.Zero
+            floatingTabMenuOpen = false
         }
     }
     LaunchedEffect(fannedTabId, windows, floatingTabs) {
@@ -1015,6 +1017,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             onFanAnchorBounds = { if (isFloatingRail) fanAnchorBounds = it },
                             onFanBarBounds = { if (isFloatingRail) fanBarBounds = it },
                             onFanAnchorGone = { id -> if (fannedTabId == id) fannedTabId = null },
+                            onMenuOpenChange = { if (isFloatingRail) floatingTabMenuOpen = it },
                         ) {
                             tabActions(tabLayout.style == TabRailStyle.ICONS, true)
                         }
@@ -1073,6 +1076,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             onFanAnchorBounds = { if (isFloatingStrip) fanAnchorBounds = it },
                             onFanBarBounds = { if (isFloatingStrip) fanBarBounds = it },
                             onFanAnchorGone = { id -> if (fannedTabId == id) fannedTabId = null },
+                            onMenuOpenChange = { if (isFloatingStrip) floatingTabMenuOpen = it },
                             actions = { tabActions(false, false) },
                         )
                     }
@@ -1385,11 +1389,15 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                 // Only the left and right rails tuck themselves
                                                 // away.
                                                 hideAtEdges = tabLayout.side,
-                                                keepVisible = fannedWindow != null && !paneObscured,
+                                                keepVisible =
+                                                    (fannedWindow != null && !paneObscured) ||
+                                                        floatingTabMenuOpen,
                                                 onDragStart = { fannedTabId = null },
                                             ) { handle ->
                                                 if (tabLayout.position == TabBarPosition.BOTTOM)
-                                                    Box(Modifier.width(FloatingTabBarWidth)) {
+                                                    Box(
+                                                        Modifier.widthIn(max = FloatingTabBarWidth),
+                                                    ) {
                                                         tabStrip(handle)
                                                     }
                                                 else tabRail(handle)

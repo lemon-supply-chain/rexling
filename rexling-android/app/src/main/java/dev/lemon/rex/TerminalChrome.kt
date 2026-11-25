@@ -1174,8 +1174,11 @@ internal fun TerminalTabs(
     onFanAnchorBounds: (Rect) -> Unit = {},
     onFanBarBounds: (Rect) -> Unit = {},
     onFanAnchorGone: (String) -> Unit = {},
+    onMenuOpenChange: (Boolean) -> Unit = {},
     actions: @Composable () -> Unit,
 ) {
+    val currentOnMenuOpenChange by rememberUpdatedState(onMenuOpenChange)
+    DisposableEffect(floating) { onDispose { if (floating) currentOnMenuOpenChange(false) } }
     // A floating bar is a fixed-length rounded card over the terminal, so its tabs scroll inside
     // it.
     val barShape = RexTokens.shape.tabCell
@@ -1260,6 +1263,7 @@ internal fun TerminalTabs(
     }
     LaunchedEffect(floating, drag.id, menuId) {
         if (floating && (drag.id != null || menuId != null)) onFanDismiss()
+        currentOnMenuOpenChange(floating && menuId != null)
     }
     LaunchedEffect(drag.id) {
         var previous = withFrameNanos { it }

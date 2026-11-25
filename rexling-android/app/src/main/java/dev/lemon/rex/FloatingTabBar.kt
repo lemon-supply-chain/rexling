@@ -95,6 +95,7 @@ internal fun FloatingTabBar(
         var size by remember { mutableStateOf(IntSize.Zero) }
         var drag by remember { mutableStateOf<Offset?>(null) }
         var moving by remember { mutableStateOf(false) }
+        var touching by remember { mutableStateOf(false) }
         var hidden by remember { mutableStateOf(false) }
         // Bumped by any touch on the bar, so the idle timer starts over.
         var interaction by remember { mutableIntStateOf(0) }
@@ -104,16 +105,22 @@ internal fun FloatingTabBar(
         val freeHeight = (areaHeight - size.height - margin * 2).coerceAtLeast(0f)
         val resting = Offset(margin + position.x * freeWidth, margin + position.y * freeHeight)
         val at = drag ?: resting
-        fun clamped(at: Offset) =
+        fun clamped(at: Offset, marginPx: Float, freeW: Float, freeH: Float) =
             Offset(
-                at.x.coerceIn(margin, margin + freeWidth),
-                at.y.coerceIn(margin, margin + freeHeight),
+                at.x.coerceIn(marginPx, marginPx + freeW),
+                at.y.coerceIn(marginPx, marginPx + freeH),
             )
-        fun parked(at: Offset) =
+        fun parked(at: Offset, marginPx: Float, freeW: Float, freeH: Float) =
             Offset(
-                if (freeWidth > 0f) ((at.x - margin) / freeWidth).coerceIn(0f, 1f) else 0f,
-                if (freeHeight > 0f) ((at.y - margin) / freeHeight).coerceIn(0f, 1f) else 0f,
+                if (freeW > 0f) ((at.x - marginPx) / freeW).coerceIn(0f, 1f) else 0f,
+                if (freeH > 0f) ((at.y - marginPx) / freeH).coerceIn(0f, 1f) else 0f,
             )
+        val currentResting by rememberUpdatedState(resting)
+        val currentMargin by rememberUpdatedState(margin)
+        val currentFreeWidth by rememberUpdatedState(freeWidth)
+        val currentFreeHeight by rememberUpdatedState(freeHeight)
+        val currentOnPosition by rememberUpdatedState(onPosition)
+        val currentOnDragStart by rememberUpdatedState(onDragStart)
         fun reveal(scale: Float): EnterTransition =
             if (motion) fadeIn(tween(160)) + scaleIn(tween(160), initialScale = scale)
             else EnterTransition.None
@@ -122,18 +129,22 @@ internal fun FloatingTabBar(
             else ExitTransition.None
         val edge =
             when {
-                !hideAtEdges -> null
+                !hideAtEdges || size.width == 0 -> null
                 resting.x <= margin + edgeZone -> FloatingEdge.LEFT
                 resting.x + size.width >= areaWidth - margin - edgeZone -> FloatingEdge.RIGHT
                 else -> null
             }
-        LaunchedEffect(edge, interaction, moving, keepVisible) {
+        var lastEdge by remember { mutableStateOf(FloatingEdge.RIGHT) }
+        SideEffect { if (edge != null) lastEdge = edge }
+        val renderEdge = edge ?: lastEdge
+        LaunchedEffect(edge, interaction, moving, touching, keepVisible) {
             hidden = false
-            if (edge == null || moving || keepVisible) return@LaunchedEffect
+            if (edge == null || moving || touching || keepVisible) return@LaunchedEffect
             delay(idleHideMillis)
             hidden = true
         }
         // The bar keeps a margin from the workspace edges, so the grip never leaves the screen.
+        val contentMaxWidth = (maxWidth - FloatingTabBarMargin * 2).coerceAtLeast(48.dp)
         val contentMax = (maxHeight - FloatingTabBarMargin * 2).coerceAtLeast(48.dp)
         val gripColor by
             animateColorAsState(
@@ -159,30 +170,52 @@ internal fun FloatingTabBar(
             Box(
                 Modifier.size(FloatingTabBarHandle)
                     .testTag("Floating tab handle")
-                    .pointerInput(position, margin, freeWidth, freeHeight) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = {
-                                moving = true
-                                drag = resting
-                                onDragStart()
-                                haptic.performHapticFeedback(
-                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                                )
-                            },
-                            onDrag = { change, amount ->
-                                change.consume()
-                                drag = drag?.let { clamped(it + amount) }
-                            },
-                            onDragEnd = {
-                                drag?.let { onPosition(parked(it)) }
-                                drag = null
-                                moving = false
-                            },
-                            onDragCancel = {
-                                drag = null
-                                moving = false
-                            },
-                        )
+                    .pointerInput(Unit) {
+                        try {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    moving = true
+                                    drag = currentResting
+                                    currentOnDragStart()
+                                    haptic.performHapticFeedback(
+                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType
+                                            .LongPress,
+                                    )
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    drag = drag?.let {
+                                        clamped(
+                                            it + amount,
+                                            currentMargin,
+                                            currentFreeWidth,
+                                            currentFreeHeight,
+                                        )
+                                    }
+                                },
+                                onDragEnd = {
+                                    drag?.let {
+                                        currentOnPosition(
+                                            parked(
+                                                it,
+                                                currentMargin,
+                                                currentFreeWidth,
+                                                currentFreeHeight,
+                                            ),
+                                        )
+                                    }
+                                    drag = null
+                                    moving = false
+                                },
+                                onDragCancel = {
+                                    drag = null
+                                    moving = false
+                                },
+                            )
+                        } finally {
+                            drag = null
+                            moving = false
+                        }
                     }
                     .semantics {
                         contentDescription = moveDescription
@@ -236,17 +269,25 @@ internal fun FloatingTabBar(
                                 requireUnconsumed = false,
                                 pass = PointerEventPass.Initial,
                             )
+                            touching = true
                             interaction++
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                if (event.changes.none { it.pressed }) break
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    if (event.changes.none { it.pressed }) break
+                                }
+                            } finally {
+                                touching = false
+                                interaction++
                             }
                         }
                     }
                     .testTag("Floating tab overlay"),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.heightIn(max = contentMax)) { content(handle) }
+                Box(Modifier.widthIn(max = contentMaxWidth).heightIn(max = contentMax)) {
+                    content(handle)
+                }
             }
         }
         // The tucked-away handle is half a capsule embedded in the screen edge: only the inner
@@ -255,7 +296,7 @@ internal fun FloatingTabBar(
         val expandHeight = 52.dp
         val expandWidthPx = with(density) { expandWidth.toPx() }
         val expandHeightPx = with(density) { expandHeight.toPx() }
-        val expandX = if (edge == FloatingEdge.LEFT) 0f else areaWidth - expandWidthPx
+        val expandX = if (renderEdge == FloatingEdge.LEFT) 0f else areaWidth - expandWidthPx
         val expandY =
             (resting.y + size.height / 2f - expandHeightPx / 2f).coerceIn(
                 0f,
@@ -270,7 +311,7 @@ internal fun FloatingTabBar(
             modifier = Modifier.offset { IntOffset(expandX.roundToInt(), expandY.roundToInt()) },
         ) {
             val shape =
-                if (edge == FloatingEdge.LEFT)
+                if (renderEdge == FloatingEdge.LEFT)
                     RoundedCornerShape(topEnd = expandWidth, bottomEnd = expandWidth)
                 else RoundedCornerShape(topStart = expandWidth, bottomStart = expandWidth)
             Box(
@@ -288,7 +329,7 @@ internal fun FloatingTabBar(
             ) {
                 ChromeSymbol(
                     ChromeIcon.CHEVRON,
-                    Modifier.size(16.dp).rotate(if (edge == FloatingEdge.LEFT) -90f else 90f),
+                    Modifier.size(16.dp).rotate(if (renderEdge == FloatingEdge.LEFT) -90f else 90f),
                     scheme.onSurfaceVariant,
                 )
             }

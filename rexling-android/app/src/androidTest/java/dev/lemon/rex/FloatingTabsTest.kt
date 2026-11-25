@@ -260,4 +260,96 @@ class FloatingTabsTest {
         )
         save("Floating tab overlay", "floating-tab-moved.png")
     }
+
+    @Test
+    fun narrowWorkspaceClampsFloatingBottomBarInsideMargins() {
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Box(
+                    Modifier.size(320.dp, 480.dp).background(MaterialTheme.colorScheme.background),
+                ) {
+                    FloatingTabBar(Offset(.5f, 1f), {}) { handle ->
+                        Box(Modifier.width(FloatingTabBarWidth)) {
+                            TerminalTabs(
+                                windows(5),
+                                "0",
+                                true,
+                                {},
+                                panePrograms = { programs },
+                                selectedPane = { 0 },
+                                floating = true,
+                                handle = handle,
+                                actions = { TerminalActions(true, true, {}, {}) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        val bar = ui.onNodeWithTag("Floating tab bar").fetchSemanticsNode().boundsInRoot
+        assertEquals(304f, bar.width / density, 1f)
+        assertEquals(8f, bar.left / density, 1f)
+        assertEquals(312f, bar.right / density, 1f)
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs_and_panes)).assertIsDisplayed()
+    }
+
+    @Test
+    fun layoutSizeChangeDuringDragDoesNotStickMovingState() {
+        val position = mutableStateOf(Offset(0.5f, 0.5f))
+        var wideContent by mutableStateOf(true)
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Box(Modifier.size(400.dp, 600.dp)) {
+                    FloatingTabBar(
+                        position.value,
+                        { position.value = it },
+                        hideAtEdges = true,
+                        idleHideMillis = 300,
+                    ) { handle ->
+                        Row(
+                            Modifier.size(if (wideContent) 160.dp else 100.dp, 40.dp)
+                                .background(Color(0xff3a5f8a))
+                                .testTag("Bar content"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            handle()
+                            Box(Modifier.weight(1f).fillMaxHeight())
+                        }
+                    }
+                }
+            }
+        }
+        ui.onNodeWithTag("Floating tab handle").performTouchInput {
+            down(center)
+            advanceEventTime(700)
+            moveBy(Offset(-260f, 0f))
+        }
+        wideContent = false
+        ui.waitForIdle()
+        ui.onNodeWithTag("Floating tab handle").performTouchInput {
+            moveBy(Offset(-200f, 0f))
+            up()
+        }
+        ui.waitForIdle()
+        assertEquals(0f, position.value.x, 0.01f)
+        ui.waitUntil(3_000) {
+            runCatching { ui.onNodeWithTag("Floating tab expand").assertIsDisplayed() }.isSuccess
+        }
+    }
+
+    @Test
+    fun holdingBarPausesIdleAutoHideUntilRelease() {
+        edgeFixture(Offset(0f, .5f), idle = 250)
+        ui.onNodeWithTag("Bar content").assertIsDisplayed()
+        ui.onNodeWithTag("Bar content").performTouchInput { down(center) }
+        Thread.sleep(450)
+        ui.waitForIdle()
+        ui.onNodeWithTag("Bar content").assertIsDisplayed()
+        ui.onNodeWithTag("Floating tab expand").assertDoesNotExist()
+
+        ui.onNodeWithTag("Bar content").performTouchInput { up() }
+        ui.waitUntil(3_000) {
+            runCatching { ui.onNodeWithTag("Floating tab expand").assertIsDisplayed() }.isSuccess
+        }
+    }
 }
