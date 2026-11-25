@@ -21,8 +21,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.*
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -307,8 +305,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     var connectionError by remember { mutableStateOf<String?>(null) }
     var picker by remember { mutableStateOf("") }
     var newSession by remember { mutableStateOf(false) }
-    var topBarExpanded by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(model.compactTopBar) { if (!model.compactTopBar) topBarExpanded = false }
     var menu by remember { mutableStateOf(false) }
     // Settings drawers stack, so Cancel, swipe-down and Back return to the level above.
     val settings = remember { mutableStateListOf<SettingsRoute>() }
@@ -320,10 +316,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     val view = LocalView.current
     val activityWindow = remember(view) { (view.context as? android.app.Activity)?.window }
-    val effectiveImmersive =
-        model.immersiveStatusBar || (model.compactTopBar && !topBarExpanded && settings.isEmpty())
-    LaunchedEffect(effectiveImmersive) {
-        activityWindow?.applyImmersiveStatusBar(effectiveImmersive)
+    LaunchedEffect(model.immersiveStatusBar) {
+        activityWindow?.applyImmersiveStatusBar(model.immersiveStatusBar)
     }
     DisposableEffect(Unit) {
         onDispose { activityWindow?.applyImmersiveStatusBar(model.immersiveStatusBar) }
@@ -474,8 +468,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             ?: if (state.phase == "preview") listOf(BlockItem("preview", "Terminal"))
             else emptyList()
     val compactHeaderMode = model.compactHeaderMode
-    val keyboardHeader =
-        !model.compactTopBar && compactHeaderMode != CompactHeaderMode.NEVER && blocks.isNotEmpty()
+    val keyboardHeader = compactHeaderMode != CompactHeaderMode.NEVER && blocks.isNotEmpty()
     val captureHeaderBackdrop = keyboardHeader && keyboardVisible
     // The header is measured before the weighted workspace in the same layout pass.
     val headerHeightSaved = remember { intArrayOf(0) }
@@ -675,11 +668,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     SideEffect { window?.let { client.floatingNavigation.remember(displayedSession, it, chosen) } }
     BackHandler(
-        enabled = model.compactTopBar && topBarExpanded && settings.isEmpty() && picker.isEmpty(),
-    ) {
-        topBarExpanded = false
-    }
-    BackHandler(
         enabled =
             ready &&
                 !newSession &&
@@ -808,13 +796,11 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             client.setMirrorObscured(true)
             onDispose { client.setMirrorObscured(false) }
         }
-    val topCutout =
-        if (model.immersiveStatusBar && !model.compactTopBar) workspaceTopCutout() else null
+    val topCutout = if (model.immersiveStatusBar) workspaceTopCutout() else null
     val safety = WindowInsets.safeDrawing
     val immersiveTop = immersiveTopInsets()
     val workspaceInsets =
-        if (model.compactTopBar && !topBarExpanded) safety.only(WindowInsetsSides.Horizontal)
-        else if (
+        if (
             model.immersiveStatusBar &&
                 (topCutout != null ||
                     WindowInsets.displayCutout.getTop(keyboardDensity) <=
@@ -822,7 +808,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         ) {
             safety.only(WindowInsetsSides.Horizontal).union(immersiveTop)
         } else safety.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-    CompositionLocalProvider(LocalImmersiveStatusBar provides effectiveImmersive) {
+    CompositionLocalProvider(LocalImmersiveStatusBar provides model.immersiveStatusBar) {
         Surface(
             Modifier.fillMaxSize().frostSource(workspaceHaze, workspaceBackdrop),
             color = MaterialTheme.colorScheme.background,
@@ -839,109 +825,38 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             ),
                     ),
             ) {
-                if (model.compactTopBar) {
-                    AnimatedContent(
-                        targetState = topBarExpanded,
-                        label = "top_bar_expand",
-                        transitionSpec = {
-                            (fadeIn(animationSpec = tween(180)) +
-                                    expandVertically(
-                                        animationSpec =
-                                            spring(dampingRatio = 0.85f, stiffness = 400f),
-                                    ))
-                                .togetherWith(
-                                    fadeOut(animationSpec = tween(120)) +
-                                        shrinkVertically(
-                                            animationSpec =
-                                                spring(dampingRatio = 0.85f, stiffness = 400f),
-                                        ),
-                                )
-                        },
-                    ) { expanded ->
-                        if (expanded) {
-                            SessionHeader(
-                                sessionStrip,
-                                currentSessionKey,
-                                state.connected,
-                                model.sessionTargets.isNotEmpty(),
-                                blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
-                                blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
-                                { picker = "sessions" },
-                                model::selectSessionTarget,
-                                model::jumpLastSession,
-                                serverIcons =
-                                    model.sessionTargets.associate { it.key to it.server.icon } +
-                                        (currentSessionKey to model.activeServer.icon),
-                                working = chosen in state.workingBlocks,
-                                isPaneWorking = { index ->
-                                    blocks.getOrNull(index)?.id in state.workingBlocks
-                                },
-                                progress = state.terminalProgress[chosen],
-                                title = paneTitle,
-                                onCollapse = { topBarExpanded = false },
-                                directory = state.directories[chosen].orEmpty(),
-                                iconSlotWidth = headerIconSlot,
-                                menu = {
-                                    ChromeButton(
-                                        ChromeIcon.MORE,
-                                        stringResource(R.string.terminal_menu),
-                                    ) {
-                                        menu = true
-                                    }
-                                },
-                            )
-                        } else {
-                            CompactSessionHeader(
-                                title = paneTitle,
-                                directory = state.directories[displayedBlock].orEmpty(),
-                                programs =
-                                    blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
-                                paneIndex =
-                                    blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
-                                working = chosen in state.workingBlocks,
-                                isPaneWorking = { index ->
-                                    blocks.getOrNull(index)?.id in state.workingBlocks
-                                },
-                                onExpand = { topBarExpanded = true },
-                            )
+                SessionHeader(
+                    sessionStrip,
+                    currentSessionKey,
+                    state.connected,
+                    model.sessionTargets.isNotEmpty(),
+                    blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
+                    blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
+                    { picker = "sessions" },
+                    model::selectSessionTarget,
+                    model::jumpLastSession,
+                    serverIcons =
+                        model.sessionTargets.associate { it.key to it.server.icon } +
+                            (currentSessionKey to model.activeServer.icon),
+                    working = chosen in state.workingBlocks,
+                    isPaneWorking = { index -> blocks.getOrNull(index)?.id in state.workingBlocks },
+                    progress = state.terminalProgress[chosen],
+                    title = paneTitle,
+                    collapseForIme = keyboardInsets.takeIf { keyboardHeader },
+                    onHeaderHeightSaved = { headerHeightSaved[0] = it },
+                    headerHaze = headerHaze.takeIf { captureHeaderBackdrop },
+                    onHeaderOverlap = { headerOverlap[0] = it },
+                    iconSlotWidth = headerIconSlot,
+                    topCutout = topCutout,
+                    alwaysCompact = compactHeaderMode == CompactHeaderMode.ALWAYS,
+                    directory = state.directories[chosen].orEmpty(),
+                    modifier = Modifier.zIndex(1f),
+                    menu = {
+                        ChromeButton(ChromeIcon.MORE, stringResource(R.string.terminal_menu)) {
+                            menu = true
                         }
-                    }
-                } else {
-                    SessionHeader(
-                        sessionStrip,
-                        currentSessionKey,
-                        state.connected,
-                        model.sessionTargets.isNotEmpty(),
-                        blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
-                        blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
-                        { picker = "sessions" },
-                        model::selectSessionTarget,
-                        model::jumpLastSession,
-                        serverIcons =
-                            model.sessionTargets.associate { it.key to it.server.icon } +
-                                (currentSessionKey to model.activeServer.icon),
-                        working = chosen in state.workingBlocks,
-                        isPaneWorking = { index ->
-                            blocks.getOrNull(index)?.id in state.workingBlocks
-                        },
-                        progress = state.terminalProgress[chosen],
-                        title = paneTitle,
-                        collapseForIme = keyboardInsets.takeIf { keyboardHeader },
-                        onHeaderHeightSaved = { headerHeightSaved[0] = it },
-                        headerHaze = headerHaze.takeIf { captureHeaderBackdrop },
-                        onHeaderOverlap = { headerOverlap[0] = it },
-                        iconSlotWidth = headerIconSlot,
-                        topCutout = topCutout,
-                        alwaysCompact = compactHeaderMode == CompactHeaderMode.ALWAYS,
-                        directory = state.directories[chosen].orEmpty(),
-                        modifier = Modifier.zIndex(1f),
-                        menu = {
-                            ChromeButton(ChromeIcon.MORE, stringResource(R.string.terminal_menu)) {
-                                menu = true
-                            }
-                        },
-                    )
-                }
+                    },
+                )
                 Box(
                     Modifier.weight(1f)
                         .fillMaxWidth()
@@ -1937,8 +1852,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 onTabLayout = model::changeTabLayout,
                                 floatingTabs = model.floatingTabs,
                                 onFloatingTabs = model::changeFloatingTabs,
-                                compactTopBar = model.compactTopBar,
-                                onCompactTopBar = model::changeCompactTopBar,
                                 compactHeaderMode = model.compactHeaderMode,
                                 onCompactHeaderMode = model::changeCompactHeaderMode,
                                 immersiveStatusBar = model.immersiveStatusBar,

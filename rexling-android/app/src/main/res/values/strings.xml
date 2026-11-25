@@ -142,8 +142,6 @@
     <string name="background_alerts_detail">Task completions and attention alerts</string>
     <string name="codex_title_attention">Codex title attention</string>
     <string name="codex_title_attention_detail">Use Codex’s explicit Action Required title when its status stays Working. Depends on Codex’s title format.</string>
-    <string name="compact_top_bar">Compact Top App Bar</string>
-    <string name="compact_top_bar_detail">Show only program and directory. Tap to expand the full session header.</string>
     <string name="frosted_effects">Frosted glass effects</string>
     <string name="frosted_effects_detail">Turn off for opaque surfaces and lower GPU rendering use.</string>
     <string name="about_rexling">About Rexling</string>
@@ -414,8 +412,6 @@
     <string name="a11y_next_session">Next session</string>
     <string name="a11y_previous_session">Previous session</string>
     <string name="a11y_session_strip">Session strip</string>
-    <string name="a11y_expand_top_bar">Expand top app bar</string>
-    <string name="a11y_collapse_top_bar">Collapse top app bar</string>
     <string name="a11y_switch_session">Switch session</string>
     <string name="a11y_session_label">Session %1$s</string>
     <string name="a11y_release_terminal_control">Release terminal control</string>

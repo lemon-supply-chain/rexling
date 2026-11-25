@@ -228,14 +228,6 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         updateActivity()
     }
 
-    internal var compactTopBar by mutableStateOf(preferences.getBoolean("compact_top_bar", false))
-        private set
-
-    internal fun changeCompactTopBar(enabled: Boolean) {
-        compactTopBar = enabled
-        preferences.edit { putBoolean("compact_top_bar", enabled) }
-    }
-
     internal var frostedEffectsEnabled by
         mutableStateOf(preferences.getBoolean("experimental_frosted_effects", true))
         private set

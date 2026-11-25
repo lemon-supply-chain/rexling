@@ -58,13 +58,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
@@ -729,7 +726,6 @@ internal fun SessionHeader(
     expanded: Boolean = false,
     serverIcons: Map<String, ServerIcon> = emptyMap(),
     progress: TerminalProgress? = null,
-    onCollapse: (() -> Unit)? = null,
     collapseForIme: WindowInsets? = null,
     onHeaderHeightSaved: (Int) -> Unit = {},
     headerHaze: HazeState? = null,
@@ -852,24 +848,11 @@ internal fun SessionHeader(
                     sessions.getOrNull(index)?.let { latestSelect(it.id) }
             }
     }
-    val headerMenu: @Composable () -> Unit = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (onCollapse != null) {
-                ChromeButton(
-                    ChromeIcon.CHEVRON,
-                    stringResource(R.string.a11y_collapse_top_bar),
-                    modifier = Modifier.graphicsLayer { rotationZ = 180f },
-                    onClick = onCollapse,
-                )
-            }
-            menu()
-        }
-    }
     val full: @Composable () -> Unit = {
         SessionHeaderRow(
             Modifier.heightIn(min = 44.dp),
             topCutout,
-            { if (!expanded) headerMenu() },
+            { if (!expanded) menu() },
         ) {
             if (!expanded) {
                 Box(
@@ -1101,7 +1084,7 @@ internal fun SessionHeader(
                     blur = 16.dp,
                 )
             } ?: Modifier
-        SessionHeaderRow(frost.testTag("Compact session header"), topCutout, headerMenu) {
+        SessionHeaderRow(frost.testTag("Compact session header"), topCutout, menu) {
             val session = sessions.getOrNull(selectedIndex)?.label.orEmpty()
             val serverIcon = serverIcons[selectedId] ?: ServerIcon.GLOBE
             Row(
@@ -1159,86 +1142,6 @@ internal fun SessionHeader(
             alwaysCompact -> compact()
             else -> full()
         }
-    }
-}
-
-@Composable
-internal fun CompactSessionHeader(
-    title: String,
-    directory: String,
-    programs: List<ProgramIdentity>,
-    paneIndex: Int,
-    working: Boolean = false,
-    isPaneWorking: (Int) -> Boolean = { if (it == paneIndex) working else false },
-    onExpand: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
-    val displayTitle = title.ifBlank { program.title }
-    val anyWorking = working || programs.indices.any(isPaneWorking)
-    val marquee = rememberRainbowMarquee(anyWorking)
-    val expandDescription = stringResource(R.string.a11y_expand_top_bar)
-    val fullText = if (directory.isNotBlank()) "$displayTitle - $directory" else displayTitle
-    val annotatedText = buildAnnotatedString {
-        withStyle(
-            SpanStyle(
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-        ) {
-            append(displayTitle)
-        }
-        if (directory.isNotBlank()) {
-            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
-                append(" - ")
-            }
-            withStyle(
-                SpanStyle(
-                    fontFamily = MonoUi,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            ) {
-                append(directory)
-            }
-        }
-    }
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .heightIn(min = 34.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClickLabel = expandDescription) { onExpand() }
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .semantics { contentDescription = fullText },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            Modifier.weight(1f, fill = false),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (anyWorking) {
-                Box(
-                    Modifier.size(6.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .rainbowMarquee(marquee, corner = 3.dp, thickness = 1.dp),
-                )
-            }
-            Text(
-                text = annotatedText,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        ChromeSymbol(
-            ChromeIcon.CHEVRON,
-            Modifier.size(12.dp),
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

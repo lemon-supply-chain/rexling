@@ -65,8 +65,6 @@ internal fun PreferencesSheet(
     onTabLayout: (TabWidthClass, TabBarLayout) -> Unit = { _, _ -> },
     floatingTabs: Boolean = false,
     onFloatingTabs: (Boolean) -> Unit = {},
-    compactTopBar: Boolean = false,
-    onCompactTopBar: (Boolean) -> Unit = {},
     compactHeaderMode: CompactHeaderMode = CompactHeaderMode.NEVER,
     onCompactHeaderMode: (CompactHeaderMode) -> Unit = {},
     immersiveStatusBar: Boolean = false,
@@ -712,35 +710,6 @@ internal fun PreferencesSheet(
                                     )
                                 }
                                 Switch(checked = codexTitleAttention, onCheckedChange = null)
-                            }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .toggleable(
-                                        value = compactTopBar,
-                                        role = androidx.compose.ui.semantics.Role.Switch,
-                                        onValueChange = onCompactTopBar,
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(
-                                    Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.compact_top_bar),
-                                        style = SettingsType.row,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        stringResource(R.string.compact_top_bar_detail),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(checked = compactTopBar, onCheckedChange = null)
                             }
                             SettingsDivider()
                             Row(

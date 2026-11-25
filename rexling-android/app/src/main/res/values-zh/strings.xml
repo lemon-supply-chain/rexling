@@ -142,8 +142,6 @@
     <string name="background_alerts_detail">任务完成与关注提醒</string>
     <string name="codex_title_attention">Codex 标题关注</string>
     <string name="codex_title_attention_detail">当 Codex 状态为 Working 但标题包含 Action Required 时提示关注。依赖 Codex 标题格式。</string>
-    <string name="compact_top_bar">紧凑顶部栏</string>
-    <string name="compact_top_bar_detail">自动隐藏顶部栏，仅保留一行“程序 - 地址”，点击后展开。</string>
     <string name="frosted_effects">磨砂玻璃效果</string>
     <string name="frosted_effects_detail">关闭后使用不透明表面，降低 GPU 渲染开销。</string>
     <string name="about_rexling">关于 Rexling</string>
@@ -414,8 +412,6 @@
     <string name="a11y_next_session">下一个会话</string>
     <string name="a11y_previous_session">上一个会话</string>
     <string name="a11y_session_strip">会话条</string>
-    <string name="a11y_expand_top_bar">展开顶部栏</string>
-    <string name="a11y_collapse_top_bar">收起顶部栏</string>
     <string name="a11y_switch_session">切换会话</string>
     <string name="a11y_session_label">会话 %1$s</string>
     <string name="a11y_release_terminal_control">释放终端控制</string>
