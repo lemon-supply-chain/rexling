@@ -229,7 +229,7 @@ internal fun TerminalTabRail(
     var menuId by remember(reorderKey) { mutableStateOf<String?>(null) }
     val ids = windows.map { it.id }
     val index = ids.indexOf(selectedId)
-    val newTabItems = if (tabsAtTop || onNewTab == null) 0 else 1
+    val newTabItems = if (titles || onNewTab == null) 0 else 1
     val newTabClearance =
         if (newTabItems == 0) 0
         else
@@ -293,7 +293,7 @@ internal fun TerminalTabRail(
             (windows.size * tabRowHeight.value).dp +
                 ((windows.size - 1).coerceAtLeast(0) * 4).dp +
                 4.dp +
-                (if (onNewTab != null) 40.dp else 0.dp)
+                (if (!titles && onNewTab != null) 40.dp else 0.dp)
         val grip = if (handle != null) FloatingTabBarHandle else 0.dp
         val pillHeight =
             if (floating)
@@ -435,7 +435,7 @@ internal fun TerminalTabRail(
                 ) {
                     // Lay out the button with the tabs so their placement can animate as the rail
                     // resizes.
-                    if (!tabsAtTop && onNewTab != null)
+                    if (!titles && onNewTab != null)
                         stickyHeader(key = 0) {
                             Box(
                                 Modifier.fillMaxWidth()
@@ -667,19 +667,9 @@ internal fun TerminalTabRail(
                             }
                         }
                     }
-                    if (tabsAtTop && onNewTab != null)
-                        item(key = 0) {
-                            ChromeButton(
-                                ChromeIcon.ADD,
-                                stringResource(R.string.label_new_tab),
-                                enabled = enabled,
-                                modifier =
-                                    Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
-                                        .padding(start = 14.dp),
-                                onClick = onNewTab,
-                            )
-                        }
                 }
+            val footerNewTab =
+                if (titles && onNewTab != null) SidebarNewTab(enabled, onNewTab) else null
             Column(
                 Modifier.fillMaxWidth().onSizeChanged { chromePx = it.height },
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -703,7 +693,11 @@ internal fun TerminalTabRail(
                     ) {
                         onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
                     }
-                    Box(Modifier.padding(top = 4.dp)) { actions() }
+                    Box(Modifier.padding(top = 4.dp)) {
+                        CompositionLocalProvider(LocalSidebarNewTab provides footerNewTab) {
+                            actions()
+                        }
+                    }
                 } else {
                     val atStart = side == TabBarPosition.LEFT
                     val atLeftEdge =
@@ -735,14 +729,23 @@ internal fun TerminalTabRail(
                             ),
                         horizontalArrangement =
                             when {
-                                titles -> Arrangement.SpaceBetween
+                                titles -> Arrangement.Start
                                 atStart -> Arrangement.Start
                                 else -> Arrangement.End
                             },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (atStart) toggle()
-                        if (titles) Box { actions() }
+                        if (titles)
+                            Box(
+                                Modifier.weight(1f),
+                                contentAlignment =
+                                    if (atStart) Alignment.CenterEnd else Alignment.CenterStart,
+                            ) {
+                                CompositionLocalProvider(LocalSidebarNewTab provides footerNewTab) {
+                                    actions()
+                                }
+                            }
                         if (!atStart) toggle()
                     }
                 }

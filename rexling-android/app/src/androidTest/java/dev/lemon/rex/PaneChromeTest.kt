@@ -529,7 +529,7 @@ class PaneChromeTest {
             val tabBounds = tab.fetchSemanticsNode().boundsInRoot
             val addBounds = newTab.fetchSemanticsNode().boundsInRoot
             val railBounds = rail.fetchSemanticsNode().boundsInRoot
-            assertTrue(addBounds.bottom <= tabBounds.top)
+            if (mode == "icons") assertTrue(addBounds.bottom <= tabBounds.top)
             val lastTab =
                 ui.onNodeWithContentDescription(
                     appString(R.string.a11y_tab, "Reported progress", "Codex"),
@@ -548,18 +548,27 @@ class PaneChromeTest {
                     ui.onNodeWithContentDescription(appString(R.string.a11y_show_keyboard))
                         .fetchSemanticsNode()
                         .boundsInRoot
+                val switcher =
+                    ui.onNodeWithContentDescription(appString(R.string.a11y_tabs_and_panes))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
                 val activity =
                     ui.onNodeWithContentDescription(appString(R.string.activity))
                         .fetchSemanticsNode()
                         .boundsInRoot
+                assertTrue(addBounds.top >= lastTab.fetchSemanticsNode().boundsInRoot.bottom)
+                assertEquals(collapse.center.y, addBounds.center.y, 1f)
                 assertEquals(
                     railBounds.left + with(ui.density) { 26.dp.toPx() },
                     collapse.center.x,
                     1f,
                 )
                 assertTrue(collapse.right <= keyboard.left)
+                assertTrue(keyboard.right <= addBounds.left)
+                assertTrue(addBounds.right <= switcher.left)
                 assertEquals(collapse.center.y, keyboard.center.y, 1f)
-                assertEquals(keyboard.center.y, activity.center.y, 1f)
+                assertEquals(keyboard.center.y, switcher.center.y, 1f)
+                assertEquals(switcher.center.y, activity.center.y, 1f)
                 val circle =
                     ui.onNodeWithTag("Activity button surface", useUnmergedTree = true)
                         .assertWidthIsEqualTo(activityButtonDiameter)
@@ -625,7 +634,9 @@ class PaneChromeTest {
             val bounds = descriptions.map { description ->
                 val button = ui.onNodeWithContentDescription(description)
                 ui.awaitDisplayed(button)
-                button.assertWidthIsEqualTo(36.dp).performClick()
+                if (vertical) button.assertWidthIsEqualTo(36.dp)
+                else button.assertWidthIsAtLeast(24.dp)
+                button.performClick()
                 button.fetchSemanticsNode().boundsInRoot
             }
             if (vertical) {
@@ -772,7 +783,9 @@ class PaneChromeTest {
                                 current = it
                             },
                         headerOverlap = { overlap },
-                    ) {}
+                    ) {
+                        TerminalActions(true, true, {}, {}, vertical = style == TabRailStyle.ICONS)
+                    }
                 }
                 Row(Modifier.size(360.dp, 420.dp).underWorkspaceHeader { overlap }) {
                     if (side == TabBarPosition.LEFT) rail()
@@ -792,6 +805,7 @@ class PaneChromeTest {
                 ignoreCase = true,
             )
         val newTab = ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
+        val switcher = ui.onNodeWithContentDescription(appString(R.string.a11y_tabs_and_panes))
         fun bounds(node: SemanticsNodeInteraction) = node.fetchSemanticsNode().boundsInRoot
         tabs.assertIsDisplayed().assertIsSelected()
         fun assertSidebarText(node: SemanticsNodeInteraction, weight: FontWeight) {
@@ -813,6 +827,8 @@ class PaneChromeTest {
         tabsList.assertWidthIsEqualTo(200.dp)
         assertTrue(bounds(activeTab).top - bounds(tabsList).top <= with(ui.density) { 4.dp.toPx() })
         assertTrue(bounds(activeTab).bottom <= bounds(newTab).top)
+        assertEquals(bounds(switcher).center.y, bounds(newTab).center.y, 1f)
+        assertTrue(bounds(newTab).right <= bounds(switcher).left)
         val terminalBounds = terminal.fetchSemanticsNode().boundsInRoot
         sessions.performClick().assertIsSelected()
         assertEquals(terminalBounds, terminal.fetchSemanticsNode().boundsInRoot)
@@ -838,7 +854,7 @@ class PaneChromeTest {
         val expandedTop = bounds(activeTab).top
         ui.mainClock.autoAdvance = false
         ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).performClick()
-        ui.mainClock.advanceTimeBy(96)
+        ui.mainClock.advanceTimeBy(160)
         val movingTop = bounds(activeTab).top
         ui.mainClock.advanceTimeBy(1000)
         val collapsedTop = bounds(activeTab).top
@@ -858,7 +874,9 @@ class PaneChromeTest {
             ui.runOnIdle { windowWidth = width }
             sessions.assertDoesNotExist()
             tabsList.assertWidthIsEqualTo(railWidth)
-            assertTrue(bounds(newTab).bottom <= bounds(activeTab).top)
+            assertTrue(bounds(activeTab).bottom <= bounds(newTab).top)
+            assertEquals(bounds(switcher).center.y, bounds(newTab).center.y, 1f)
+            assertTrue(bounds(newTab).right <= bounds(switcher).left)
             assertTrue(
                 bounds(tabsList).bottom - bounds(activeTab).bottom <=
                     with(ui.density) { 4.dp.toPx() },

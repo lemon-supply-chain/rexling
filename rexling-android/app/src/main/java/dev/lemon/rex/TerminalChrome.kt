@@ -588,6 +588,12 @@ internal fun ScrollToLatestButton(
     }
 }
 
+internal val LocalChromeButtonWidth = compositionLocalOf { 36.dp }
+
+internal data class SidebarNewTab(val enabled: Boolean, val onClick: () -> Unit)
+
+internal val LocalSidebarNewTab = compositionLocalOf<SidebarNewTab?> { null }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChromeButton(
@@ -601,7 +607,7 @@ internal fun ChromeButton(
 ) {
     Box(
         modifier
-            .size(36.dp)
+            .size(LocalChromeButtonWidth.current, 36.dp)
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
                 enabled = enabled,
@@ -1855,6 +1861,18 @@ internal fun TerminalActions(
             ?: onKeyboard?.let { click ->
                 { ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = click) }
             }
+    val sidebarNewTab = if (!vertical) LocalSidebarNewTab.current else null
+    val newTabButton: (@Composable () -> Unit)? = sidebarNewTab?.let { action ->
+        {
+            ChromeButton(
+                ChromeIcon.ADD,
+                stringResource(R.string.label_new_tab),
+                enabled = action.enabled,
+                readable = activityEnabled,
+                onClick = action.onClick,
+            )
+        }
+    }
     // The icon-only side rail stacks these actions.
     @Composable
     fun Group(content: @Composable () -> Unit) =
@@ -1867,22 +1885,36 @@ internal fun TerminalActions(
             }
         else
             BoxWithConstraints {
-                val buttonCount = if (renderedKeyboard == null) 1 else 2
-                val spacing =
+                val buttonCount =
+                    1 +
+                        (if (renderedKeyboard != null) 1 else 0) +
+                        (if (newTabButton != null) 1 else 0)
+                val (buttonWidth, spacing) =
                     if (constraints.hasBoundedWidth)
                         with(LocalDensity.current) {
-                            val buttonWidth =
-                                36.dp.roundToPx() * buttonCount + activityButtonDiameter.roundToPx()
-                            ((constraints.maxWidth - buttonWidth) / buttonCount)
-                                .coerceIn(0, 4.dp.roundToPx())
-                                .toDp()
+                            val availableForSmall =
+                                (constraints.maxWidth - activityButtonDiameter.roundToPx())
+                                    .coerceAtLeast(0)
+                            val widthPx =
+                                (availableForSmall / buttonCount).coerceIn(
+                                    24.dp.roundToPx(),
+                                    36.dp.roundToPx(),
+                                )
+                            val gapPx =
+                                ((constraints.maxWidth -
+                                        widthPx * buttonCount -
+                                        activityButtonDiameter.roundToPx()) / buttonCount)
+                                    .coerceIn(0, 4.dp.roundToPx())
+                            widthPx.toDp() to gapPx.toDp()
                         }
-                    else 4.dp
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(spacing),
-                ) {
-                    content()
+                    else 36.dp to 4.dp
+                CompositionLocalProvider(LocalChromeButtonWidth provides buttonWidth) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(spacing),
+                    ) {
+                        content()
+                    }
                 }
             }
     val switcherButton: @Composable () -> Unit = {
@@ -1942,6 +1974,7 @@ internal fun TerminalActions(
     }
     Group {
         if (!vertical) renderedKeyboard?.invoke()
+        newTabButton?.invoke()
         switcherButton()
         activityButton()
         if (vertical) renderedKeyboard?.invoke()
