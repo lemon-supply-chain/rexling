@@ -162,6 +162,13 @@ class SettingsScreensTest {
             countActionPixels(drawerHandle.captureToImage().asAndroidBitmap()) > 0
         }
 
+        // Pulling back above the start position clears the highlight while still pressed.
+        handleZone.performTouchInput { moveBy(Offset(0f, -120f)) }
+        ui.waitForIdle()
+        ui.waitUntil(2_000) {
+            countActionPixels(drawerHandle.captureToImage().asAndroidBitmap()) == 0
+        }
+
         handleZone.performTouchInput { cancel() }
         ui.waitForIdle()
         ui.waitUntil(2_000) {

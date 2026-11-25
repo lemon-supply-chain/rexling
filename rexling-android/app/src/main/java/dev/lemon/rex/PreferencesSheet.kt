@@ -146,15 +146,16 @@ internal fun PreferencesSheet(
                             val inHandle = down.position.y <= gesture.handleZoneBottomPx
                             gesture.startedInHandleZone = inHandle
                             val pointerId = down.id
+                            val startX = down.position.x
                             val startY = down.position.y
                             try {
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Initial)
                                     val change = event.changes.firstOrNull { it.id == pointerId }
                                     if (inHandle && change != null && change.pressed) {
-                                        if (change.position.y - startY > touchSlop) {
-                                            isPullingHandle = true
-                                        }
+                                        val dx = change.position.x - startX
+                                        val dy = change.position.y - startY
+                                        isPullingHandle = dy > touchSlop && dy > kotlin.math.abs(dx)
                                     }
                                     if (event.changes.none { it.pressed }) break
                                 }
@@ -207,6 +208,7 @@ internal fun PreferencesSheet(
                                             pass = PointerEventPass.Main,
                                         )
                                     val pointerId = down.id
+                                    val startX = down.position.x
                                     val startY = down.position.y
                                     var blockedDrag = false
                                     while (true) {
@@ -214,13 +216,15 @@ internal fun PreferencesSheet(
                                         val change =
                                             event.changes.firstOrNull { it.id == pointerId }
                                         if (change != null && change.pressed) {
+                                            val dx = change.position.x - startX
+                                            val dy = change.position.y - startY
                                             if (
                                                 !blockedDrag &&
                                                     isExpanded &&
                                                     !gesture.startedInHandleZone &&
                                                     !change.isConsumed &&
-                                                    kotlin.math.abs(change.position.y - startY) >
-                                                        touchSlop
+                                                    dy > touchSlop &&
+                                                    dy > kotlin.math.abs(dx)
                                             ) {
                                                 blockedDrag = true
                                             }
