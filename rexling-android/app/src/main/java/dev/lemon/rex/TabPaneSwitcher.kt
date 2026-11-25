@@ -2,231 +2,653 @@ package dev.lemon.rex
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.border
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.compose.ui.zIndex
 
 /**
  * The Sessions page of the switcher: [current] names the session whose tabs and panes the other
  * pages show, and [content] is the page itself (see SessionsPage).
  */
-internal class SwitcherSessions(val count: Int,val current: String,val height: androidx.compose.ui.unit.Dp,
-    val onShown: ()->Unit={},val content: @Composable ()->Unit)
+internal class SwitcherSessions(
+    val count: Int,
+    val current: String,
+    val onShown: () -> Unit = {},
+    val content: @Composable () -> Unit,
+)
+
+private enum class SwitcherPage(val labelRes: Int, val fallback: String) {
+    SESSIONS(R.string.sessions, "Sessions"),
+    TABS(R.string.section_tabs, "Tabs"),
+    PANES(R.string.section_panes, "Panes"),
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun TabPaneSwitcher(
-    windows: List<WindowItem>,selectedWindow: String,selectedBlock: String,
-    programs: Map<String,ProgramIdentity>,titles: Map<String,String>,directories: Map<String,String>,
-    selectedPane: (WindowItem)->Int,enabled: Boolean,canCreateTab: Boolean,canCreatePane: Boolean,
-    onTab: (String)->Unit,onPane: (String)->Unit,onNewTab: ()->Unit,onNewPane: (String,PaneSplit)->Unit,
-    onCloseTab: (WindowItem)->Unit,onClosePane: (BlockItem)->Unit,onClose: ()->Unit,initialPage: Int=0,
-    onMoveTab: (String,String?)->Boolean={_,_->false},onMovePane: (String,String,String?)->Boolean={_,_,_->false},reorderKey: String="",
-    onRenameTab: (String,String)->Boolean={_,_->false},onRenamePane: (String,String,String)->Boolean={_,_,_->false},
-    onFloatPane: (String,String)->Boolean={_,_->false},onDockPane: (String,String,String,PaneSplit)->Boolean={_,_,_,_->false},error: String="",hazeState: dev.chrisbanes.haze.HazeState?=null,
-    sessions: SwitcherSessions?=null,openSessions: Boolean=false,
+@Composable
+internal fun TabPaneSwitcher(
+    windows: List<WindowItem>,
+    selectedWindow: String,
+    selectedBlock: String,
+    programs: Map<String, ProgramIdentity>,
+    titles: Map<String, String>,
+    directories: Map<String, String>,
+    selectedPane: (WindowItem) -> Int,
+    enabled: Boolean,
+    canCreateTab: Boolean,
+    canCreatePane: Boolean,
+    onTab: (String) -> Unit,
+    onPane: (String) -> Unit,
+    onNewTab: () -> Unit,
+    onNewPane: (String, PaneSplit) -> Unit,
+    onCloseTab: (WindowItem) -> Unit,
+    onClosePane: (BlockItem) -> Unit,
+    onClose: () -> Unit,
+    initialPage: Int = 0,
+    onMoveTab: (String, String?) -> Boolean = { _, _ -> false },
+    onMovePane: (String, String, String?) -> Boolean = { _, _, _ -> false },
+    reorderKey: String = "",
+    onRenameTab: (String, String) -> Boolean = { _, _ -> false },
+    onRenamePane: (String, String, String) -> Boolean = { _, _, _ -> false },
+    onFloatPane: (String, String) -> Boolean = { _, _ -> false },
+    onDockPane: (String, String, String, PaneSplit) -> Boolean = { _, _, _, _ -> false },
+    error: String = "",
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
+    sessions: SwitcherSessions? = null,
+    openSessions: Boolean = false,
 ) {
-    // With sessions, page 0 is Sessions and Tabs/Panes follow; [initialPage] still counts Tabs as 0.
-    val offset=if(sessions!=null) 1 else 0
-    var rename by remember(reorderKey) {mutableStateOf<TerminalRenameTarget?>(null)}
-    var dock by remember(reorderKey) {mutableStateOf<Pair<String,String>?>(null)}
-    val pager=rememberPagerState(initialPage=if(sessions!=null && openSessions) 0 else offset+initialPage.coerceIn(0,1),pageCount={2+offset})
-    LaunchedEffect(pager.currentPage) {if(sessions!=null && pager.currentPage==0) sessions.onShown()}
-    val scope=rememberCoroutineScope()
-    var targetWindow by remember {mutableStateOf(selectedWindow)}
-    val current=windows.firstOrNull {it.id==targetWindow}
-    val panes=current?.blocks.orEmpty()
-    var targetPane by remember(targetWindow) {mutableStateOf(if(targetWindow==selectedWindow) selectedBlock else current?.blocks?.getOrNull(selectedPane(current))?.id.orEmpty())}
-    val targetNumber=panes.indexOfFirst {it.id==targetPane}.takeIf {it>=0}?.plus(1)
-    val canOpenPane=enabled && targetNumber!=null
-    val canSplit=canCreatePane && targetNumber!=null
-    var splitMenu by remember(targetWindow,targetPane,canSplit,enabled,pager.currentPage) {mutableStateOf(false)}
-    val hasLayout=panes.isNotEmpty() && current!=null && panes.all {pane->current.layout.any {it.id==pane.id}}
-    val layoutAllowance=if(current?.layout?.any {it.floating}==true) 128 else 104
-    // One height for every page, so swiping between them never resizes the drawer.
-    val panelHeight=maxOf((128+maxOf(windows.size,panes.size,1).coerceAtMost(7)*60+if(hasLayout) layoutAllowance else 0).dp,sessions?.height ?: 0.dp).coerceAtMost(620.dp)
+    var rename by remember(reorderKey) { mutableStateOf<TerminalRenameTarget?>(null) }
+    var dock by remember(reorderKey) { mutableStateOf<Pair<String, String>?>(null) }
+    var page by
+        rememberSaveable(reorderKey) {
+            mutableStateOf(
+                when {
+                    sessions != null && openSessions -> SwitcherPage.SESSIONS
+                    initialPage == 1 -> SwitcherPage.PANES
+                    else -> SwitcherPage.TABS
+                },
+            )
+        }
+    LaunchedEffect(page) { if (page == SwitcherPage.SESSIONS) sessions?.onShown?.invoke() }
+    val pageState = rememberSaveableStateHolder()
+    val current = windows.firstOrNull { it.id == selectedWindow }
+    val panes = current?.blocks.orEmpty()
+    val placements = current?.layout.orEmpty().associateBy { it.id }
+    val tiledCount = current?.tiledPanes().orEmpty().size
+    val tabs = page == SwitcherPage.TABS
+    val hasLayout = panes.isNotEmpty() && panes.all { it.id in placements }
+    var showLayout by rememberSaveable { mutableStateOf(false) }
+    val rows = maxOf(windows.size, panes.size, (sessions?.count ?: 0) + 1).coerceIn(3, 7)
+    val preferredHeight = (156.dp + 60.dp * rows) * 1.3f
     fun tabTitle(tab: WindowItem): String {
-        val block=tab.blocks.getOrNull(selectedPane(tab))
-        val program=programs[block?.id] ?: ProgramIdentity.Loading
-        return program.tabTitle(tab.label,block?.label.orEmpty(),windows.indexOf(tab)+1,titles[block?.id].orEmpty())
+        val block = tab.blocks.getOrNull(selectedPane(tab))
+        val program = programs[block?.id] ?: ProgramIdentity.Loading
+        return program.tabTitle(
+            tab.label,
+            block?.label.orEmpty(),
+            windows.indexOf(tab) + 1,
+            titles[block?.id].orEmpty(),
+        )
     }
-    val drawerSurface=Modifier.drawerFrost(hazeState,BottomSheetDefaults.ExpandedShape)
-    val pagesDescription=stringResource(R.string.a11y_tab_and_pane_pages)
-    ModalBottomSheet(onDismissRequest=onClose,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,tonalElevation=0.dp,
-        dragHandle=null,contentWindowInsets={WindowInsets(0,0,0,0)}) {
-        Column(drawerSurface.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
-        DrawerHandle()
-        Column(Modifier.fillMaxWidth().height(panelHeight).padding(bottom=4.dp)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).height(48.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f),RoundedCornerShape(12.dp)).padding(4.dp).selectableGroup()) {  // alpha-ok tab switcher header
-                (listOfNotNull(sessions?.let {stringResource(R.string.sessions) to it.count})+listOf("Tabs" to windows.size,"Panes" to panes.size)).forEachIndexed {page,(label,count)->
-                    val active=pager.currentPage==page
-                    Row(Modifier.weight(1f).fillMaxHeight().background(if(active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,RoundedCornerShape(9.dp))
-                        .selectable(active,role=Role.Tab,onClick={scope.launch {pager.animateScrollToPage(page)}}),
-                        horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
-                            Text(label,style=SettingsType.row,color=if(active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(6.dp))
-                            Text(count.toString(),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-            if(error.isNotBlank()) Text(error,Modifier.padding(horizontal=16.dp,vertical=4.dp),style=SettingsType.detail,color=MaterialTheme.colorScheme.error,maxLines=2,overflow=TextOverflow.Ellipsis)
-            HorizontalPager(pager,Modifier.fillMaxWidth().weight(1f).semantics {contentDescription=pagesDescription},verticalAlignment=Alignment.Top) {index->
-                if(sessions!=null && index==0) {sessions.content();return@HorizontalPager}
-                val page=index-offset
-                val ids=if(page==0) windows.map {it.id} else panes.map {it.id}
-                val list=rememberLazyListState()
-                val drag=remember(page,reorderKey,if(page==1) targetWindow else "") {TabDrag()}
-                val haptic=LocalHapticFeedback.current
-                val edge=with(LocalDensity.current) {32.dp.toPx()}
-                val speed=with(LocalDensity.current) {420.dp.toPx()}
-                fun move(id: String,before: String?)=if(page==0) onMoveTab(id,before) else onMovePane(targetWindow,id,before)
-                fun moveBy(id: String,delta: Int): Boolean {
-                    val index=ids.indexOf(id);val to=index+delta
-                    if(index<0 || to !in ids.indices) return false
-                    val order=ids.toMutableList().apply {removeAt(index);add(to,id)}
-                    return move(id,order.getOrNull(to+1))
-                }
-                fun rowModifier(id: String)=Modifier
-                    .zIndex(if(drag.id==id) 1f else 0f).graphicsLayer {translationY=drag.translation(id,list)}
-                fun rowActions(id: String): List<CustomAccessibilityAction> =
-                        if(enabled) buildList {
-                            val index=ids.indexOf(id)
-                            if(index>0) add(CustomAccessibilityAction("Move up") {moveBy(id,-1)})
-                            if(index>=0 && index<ids.lastIndex) add(CustomAccessibilityAction("Move down") {moveBy(id,1)})
-                        } else emptyList()
-                LaunchedEffect(ids,enabled) {drag.cancel()}
-                LaunchedEffect(drag.id) {
-                    var previous=withFrameNanos {it}
-                    while(drag.id!=null) {
-                        val now=withFrameNanos {it};val dt=((now-previous)/1_000_000_000f).coerceAtMost(.05f);previous=now
-                        if(!drag.moved) continue
-                        val end=list.layoutInfo.viewportEndOffset.toFloat()
-                        val velocity=when {
-                            drag.pointer<edge -> -((edge-drag.pointer)/edge).coerceIn(0f,1f)
-                            drag.pointer>end-edge -> ((drag.pointer-end+edge)/edge).coerceIn(0f,1f)
-                            else -> 0f
-                        }
-                        if(velocity!=0f) {list.scrollBy(velocity*speed*dt);drag.cross(velocity,list)}
-                    }
-                }
-                Column(Modifier.fillMaxSize()) {
-                    // Whose tabs these are; tapping goes to Sessions to switch.
-                    if(sessions!=null) SwitcherSessionLabel(sessions.current) {scope.launch {pager.animateScrollToPage(0)}}
-                    LazyColumn(Modifier.fillMaxWidth().weight(1f).selectableGroup().semantics {contentDescription=if(page==0) "Reorder tabs" else "Reorder panes"}
-                        .pointerInput(enabled,ids,reorderKey,targetWindow,page) {
-                            if(enabled) detectTabDrag(
-                                start={point->val started=drag.start(ids,list,point.y);if(started) haptic.performHapticFeedback(HapticFeedbackType.LongPress);started},
-                                move={amount->drag.move(amount.y,viewConfiguration.touchSlop,list)},
-                                cancel={drag.cancel()},end={
-                                    val id=drag.id
-                                    if(id!=null && drag.changed()) move(id,drag.order.getOrNull(drag.order.indexOf(id)+1))
-                                    drag.cancel()
-                                })
-                        },state=list,userScrollEnabled=drag.id==null,
-                        contentPadding=PaddingValues(horizontal=16.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        if(page==0) {
-                            if(windows.isEmpty()) item {SwitcherEmpty("No tabs yet","Create a tab to start a terminal.")}
-                            val displayed=if(drag.id==null) windows else drag.order.mapNotNull {id->windows.firstOrNull {it.id==id}}
-                            items(displayed,key={it.id}) {tab->
-                                val focus=selectedPane(tab)
-                                val block=tab.blocks.getOrNull(focus)
-                                val icons=tab.blocks.map {programs[it.id] ?: ProgramIdentity.Loading}
-                                val title=tabTitle(tab)
-                                val count="${tab.blocks.size} pane${if(tab.blocks.size==1) "" else "s"}"
-                                val directory=directories[block?.id].orEmpty()
-                                val subtitle=listOfNotNull(if(tab.id==selectedWindow) "Viewing" else null,count,directory.takeIf {it.isNotBlank()}).joinToString(" · ")
-                                SwitcherItem(title,subtitle,icons,focus,tab.id==targetWindow,
-                                    "Tab $title",enabled && tab.blocks.isNotEmpty(),{targetWindow=tab.id},enabled,"Close tab $title",{onCloseTab(tab)},
-                                    Modifier.animateItem(fadeInSpec=null,fadeOutSpec=null,placementSpec=if(drag.id==tab.id) null else androidx.compose.animation.core.spring()).then(rowModifier(tab.id)),rowActions(tab.id),
-                                    actionsDescription="Actions for tab $title",actions={dismiss->
-                                        TerminalMenuItem("Rename tab",ChromeIcon.EDIT,enabled=enabled,onClick={dismiss();rename=TerminalRenameTarget(tab.id,tab.id,true,tab.label)})
-                                    })
-                            }
-                        } else {
-                            if(panes.isEmpty()) item {SwitcherEmpty("No panes yet","Choose a tab or create a new one.")}
-                            else if(hasLayout) item(key="layout") {
-                                PaneLayoutMap(current!!,targetPane,programs,titles,enabled) {targetPane=it}
-                                Spacer(Modifier.height(4.dp))
-                            } else item(key="layout-unavailable") {Text(stringResource(R.string.label_layout_unavailable),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                            val displayed=if(drag.id==null) panes else drag.order.mapNotNull {id->panes.firstOrNull {it.id==id}}
-                            items(displayed,key={it.id}) {block->
-                                val program=programs[block.id] ?: ProgramIdentity.Loading
-                                val title=program.paneTitle(block.label,titles[block.id].orEmpty())
-                                val subtitle=listOfNotNull(if(block.id==selectedBlock) "Viewing" else null,if(current?.layout?.any {it.id==block.id && it.floating}==true) "Floating" else null,directories[block.id].orEmpty().ifBlank {program.label}).joinToString(" · ")
-                                SwitcherItem(title,subtitle,listOf(program),0,block.id==targetPane,
-                                    "Pane $title",enabled,{targetPane=block.id},enabled,"Close pane $title",{onClosePane(block)},
-                                    Modifier.animateItem(fadeInSpec=null,fadeOutSpec=null,placementSpec=if(drag.id==block.id) null else androidx.compose.animation.core.spring()).then(rowModifier(block.id)),rowActions(block.id),
-                                    actionsDescription="Actions for pane $title",actions={dismiss->
-                                        TerminalMenuItem("Rename pane",ChromeIcon.EDIT,enabled=enabled,onClick={dismiss();rename=TerminalRenameTarget(targetWindow,block.id,false,block.label)})
-                                        val placement=current?.layout?.firstOrNull {it.id==block.id}
-                                        val tiled=current?.tiledPanes().orEmpty()
-                                        if(placement?.floating==true) TerminalMenuItem("Dock pane",ChromeIcon.SPLIT,enabled=enabled && tiled.isNotEmpty(),onClick={dismiss();dock=targetWindow to block.id})
-                                        else if(placement!=null) DropdownMenuItem(text={Column {
-                                            Text(stringResource(R.string.label_float_pane),style=SettingsType.row)
-                                            if(tiled.size<2) Text(stringResource(R.string.label_keep_one_docked),style=SettingsType.detail)
-                                        }},leadingIcon={ChromeSymbol(ChromeIcon.FLOAT)},enabled=enabled && tiled.size>1,
-                                            onClick={dismiss();onFloatPane(targetWindow,block.id)})
-                                    })
+    val drawerSurface = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
+    if (dock == null)
+        ModalBottomSheet(
+            onDismissRequest = onClose,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 0.dp,
+            dragHandle = null,
+            contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Top) },
+        ) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                Column(
+                    drawerSurface
+                        .fillMaxWidth()
+                        .height(minOf(preferredHeight, maxHeight * .82f))
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
+                        ),
+                ) {
+                    DrawerHandle()
+                    Column(Modifier.fillMaxWidth().weight(1f).padding(bottom = 4.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .height(48.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f),
+                                        RoundedCornerShape(12.dp),
+                                    )
+                                    .padding(4.dp)
+                                    .selectableGroup(),
+                            ) {
+                                (listOfNotNull(
+                                        sessions?.let { SwitcherPage.SESSIONS to it.count },
+                                    ) +
+                                        listOf(
+                                            SwitcherPage.TABS to windows.size,
+                                            SwitcherPage.PANES to panes.size,
+                                        ))
+                                    .forEach { (section, count) ->
+                                        val active = page == section
+                                        val label =
+                                            if (section.labelRes != 0)
+                                                stringResource(section.labelRes)
+                                            else section.fallback
+                                        Row(
+                                            Modifier.weight(1f)
+                                                .fillMaxHeight()
+                                                .background(
+                                                    if (active)
+                                                        MaterialTheme.colorScheme.primaryContainer
+                                                    else Color.Transparent,
+                                                    RoundedCornerShape(9.dp),
+                                                )
+                                                .selectable(
+                                                    active,
+                                                    role = Role.Tab,
+                                                    onClick = { page = section },
+                                                ),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                label,
+                                                style = SettingsType.row,
+                                                color =
+                                                    if (active)
+                                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                count.toString(),
+                                                style = SettingsType.detail,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
                             }
                         }
-                    }
-                    HorizontalDivider(Modifier.padding(horizontal=16.dp),color=MaterialTheme.colorScheme.outlineVariant)
-                    if(page==0) Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                        Button(onClick={onTab(targetWindow)},enabled=enabled && current?.blocks?.isNotEmpty()==true && !pager.isScrollInProgress,
-                            modifier=Modifier.weight(1f).heightIn(min=48.dp)) {Text(stringResource(R.string.label_open_tab),style=SettingsType.row)}
-                        FilledTonalButton(onClick=onNewTab,enabled=canCreateTab && !pager.isScrollInProgress,
-                            modifier=Modifier.weight(1f).heightIn(min=48.dp)) {
-                        ChromeSymbol(ChromeIcon.ADD,Modifier.size(18.dp),MaterialTheme.colorScheme.onSecondaryContainer)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.label_new_tab),style=SettingsType.row)
-                        }
-                    } else Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                        Button(onClick={onPane(targetPane)},enabled=canOpenPane && !pager.isScrollInProgress,
-                            modifier=Modifier.weight(1f).heightIn(min=48.dp)) {Text(stringResource(R.string.label_open_pane),style=SettingsType.row)}
-                        Box(Modifier.weight(1f)) {
-                            FilledTonalButton(onClick={splitMenu=true},enabled=canSplit && !pager.isScrollInProgress,
-                                modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {
-                                ChromeSymbol(ChromeIcon.ADD,Modifier.size(18.dp),LocalContentColor.current)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.label_new_pane),style=SettingsType.row)
+                        if (error.isNotBlank())
+                            Text(
+                                error,
+                                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                style = SettingsType.detail,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        pageState.SaveableStateProvider(page.name) {
+                            if (page == SwitcherPage.SESSIONS && sessions != null) {
+                                sessions.content()
+                                return@SaveableStateProvider
                             }
-                            DropdownMenu(expanded=splitMenu,onDismissRequest={splitMenu=false},containerColor=MaterialTheme.colorScheme.surface,
-                                shape=RoundedCornerShape(14.dp),tonalElevation=0.dp,shadowElevation=0.dp,
-                                modifier=Modifier.width(188.dp).border(1.dp,MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(14.dp))) {
-                                PaneSplit.entries.forEach {split->
-                                    DropdownMenuItem(text={Text(split.label,style=SettingsType.row)},
-                                        leadingIcon={SplitDiagram(split,Modifier.size(24.dp),MaterialTheme.colorScheme.onSurfaceVariant)},
-                                        enabled=canSplit && !pager.isScrollInProgress,onClick={splitMenu=false;onNewPane(targetPane,split)})
+                            val ids = if (tabs) windows.map { it.id } else panes.map { it.id }
+                            val list = rememberLazyListState()
+                            val drag =
+                                remember(page, reorderKey, if (tabs) "" else selectedWindow) {
+                                    TabDrag()
+                                }
+                            var revealedRow by
+                                remember(page, reorderKey, selectedWindow) {
+                                    mutableStateOf<String?>(null)
+                                }
+                            val haptic = LocalHapticFeedback.current
+                            val edge = with(LocalDensity.current) { 32.dp.toPx() }
+                            val speed = with(LocalDensity.current) { 420.dp.toPx() }
+                            fun move(id: String, before: String?) =
+                                if (tabs) onMoveTab(id, before)
+                                else onMovePane(selectedWindow, id, before)
+                            fun reveal(id: String, open: Boolean) {
+                                if (open) revealedRow = id
+                                else if (revealedRow == id) revealedRow = null
+                            }
+                            fun moveBy(id: String, delta: Int): Boolean {
+                                val index = ids.indexOf(id)
+                                val to = index + delta
+                                if (index < 0 || to !in ids.indices) return false
+                                val order =
+                                    ids.toMutableList().apply {
+                                        removeAt(index)
+                                        add(to, id)
+                                    }
+                                return move(id, order.getOrNull(to + 1))
+                            }
+                            fun rowModifier(id: String) =
+                                Modifier.zIndex(if (drag.id == id) 1f else 0f).graphicsLayer {
+                                    translationY = drag.translation(id, list)
+                                }
+                            val moveUpLabel = stringResource(R.string.move_up)
+                            val moveDownLabel = stringResource(R.string.move_down)
+                            fun rowActions(id: String): List<CustomAccessibilityAction> =
+                                if (enabled)
+                                    buildList {
+                                        val index = ids.indexOf(id)
+                                        if (index > 0)
+                                            add(
+                                                CustomAccessibilityAction(moveUpLabel) {
+                                                    moveBy(id, -1)
+                                                },
+                                            )
+                                        if (index >= 0 && index < ids.lastIndex)
+                                            add(
+                                                CustomAccessibilityAction(moveDownLabel) {
+                                                    moveBy(id, 1)
+                                                },
+                                            )
+                                    }
+                                else emptyList()
+                            LaunchedEffect(ids, enabled) { drag.cancel() }
+                            LaunchedEffect(drag.id) {
+                                var previous = withFrameNanos { it }
+                                while (drag.id != null) {
+                                    val now = withFrameNanos { it }
+                                    val dt = ((now - previous) / 1_000_000_000f).coerceAtMost(.05f)
+                                    previous = now
+                                    if (!drag.moved) continue
+                                    val end = list.layoutInfo.viewportEndOffset.toFloat()
+                                    val velocity =
+                                        when {
+                                            drag.pointer < edge ->
+                                                -((edge - drag.pointer) / edge).coerceIn(0f, 1f)
+                                            drag.pointer > end - edge ->
+                                                ((drag.pointer - end + edge) / edge).coerceIn(
+                                                    0f,
+                                                    1f,
+                                                )
+                                            else -> 0f
+                                        }
+                                    if (velocity != 0f) {
+                                        list.scrollBy(velocity * speed * dt)
+                                        drag.cross(velocity, list)
+                                    }
+                                }
+                            }
+                            Column(Modifier.fillMaxSize()) {
+                                if (tabs || sessions != null || hasLayout)
+                                    Row(
+                                        Modifier.fillMaxWidth()
+                                            .padding(horizontal = 16.dp)
+                                            .padding(top = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (sessions != null)
+                                            SwitcherSessionLabel(
+                                                sessions.current,
+                                                Modifier.weight(1f),
+                                            ) {
+                                                page = SwitcherPage.SESSIONS
+                                            }
+                                        else Spacer(Modifier.weight(1f))
+                                        if (tabs)
+                                            SwitcherAddButton(
+                                                stringResource(R.string.label_new_tab),
+                                                canCreateTab,
+                                                onNewTab,
+                                            )
+                                        else if (hasLayout)
+                                            FilterChip(
+                                                selected = showLayout,
+                                                onClick = {
+                                                    showLayout = !showLayout
+                                                    if (showLayout) list.requestScrollToItem(0)
+                                                },
+                                                label = {
+                                                    Text(
+                                                        if (showLayout)
+                                                            stringResource(R.string.hide_map)
+                                                        else stringResource(R.string.show_map),
+                                                        style = SettingsType.detail,
+                                                    )
+                                                },
+                                                leadingIcon = {
+                                                    ChromeSymbol(
+                                                        ChromeIcon.SPLIT,
+                                                        Modifier.size(15.dp),
+                                                        LocalContentColor.current,
+                                                    )
+                                                },
+                                                shape = RoundedCornerShape(percent = 50),
+                                                modifier = Modifier.height(40.dp),
+                                            )
+                                    }
+                                val reorderDescription =
+                                    stringResource(
+                                        if (tabs) R.string.reorder_tabs else R.string.reorder_panes,
+                                    )
+                                LazyColumn(
+                                    Modifier.fillMaxWidth()
+                                        .weight(1f)
+                                        .selectableGroup()
+                                        .semantics { contentDescription = reorderDescription }
+                                        .pointerInput(
+                                            enabled,
+                                            ids,
+                                            reorderKey,
+                                            selectedWindow,
+                                            page,
+                                        ) {
+                                            if (enabled)
+                                                detectTabDrag(
+                                                    start = { point ->
+                                                        val started = drag.start(ids, list, point.y)
+                                                        if (started) {
+                                                            revealedRow = null
+                                                            haptic.performHapticFeedback(
+                                                                HapticFeedbackType.LongPress,
+                                                            )
+                                                        }
+                                                        started
+                                                    },
+                                                    move = { amount ->
+                                                        drag.move(
+                                                            amount.y,
+                                                            viewConfiguration.touchSlop,
+                                                            list,
+                                                        )
+                                                    },
+                                                    cancel = { drag.cancel() },
+                                                    end = {
+                                                        val id = drag.id
+                                                        if (id != null && drag.changed())
+                                                            move(
+                                                                id,
+                                                                drag.order.getOrNull(
+                                                                    drag.order.indexOf(id) + 1,
+                                                                ),
+                                                            )
+                                                        drag.cancel()
+                                                    },
+                                                )
+                                        },
+                                    state = list,
+                                    userScrollEnabled = drag.id == null,
+                                    contentPadding =
+                                        PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    if (tabs) {
+                                        if (windows.isEmpty())
+                                            item {
+                                                SwitcherEmpty(
+                                                    stringResource(R.string.no_tabs_yet),
+                                                    stringResource(R.string.create_tab_hint),
+                                                )
+                                            }
+                                        val displayed =
+                                            if (drag.id == null) windows
+                                            else
+                                                drag.order.mapNotNull { id ->
+                                                    windows.firstOrNull { it.id == id }
+                                                }
+                                        items(displayed, key = { it.id }) { tab ->
+                                            val focus = selectedPane(tab)
+                                            val block = tab.blocks.getOrNull(focus)
+                                            val icons =
+                                                tab.blocks.map {
+                                                    programs[it.id] ?: ProgramIdentity.Loading
+                                                }
+                                            val title = tabTitle(tab)
+                                            val count =
+                                                pluralStringResource(
+                                                    R.plurals.pane_count,
+                                                    tab.blocks.size,
+                                                    tab.blocks.size,
+                                                )
+                                            val directory = directories[block?.id].orEmpty()
+                                            val subtitle =
+                                                listOfNotNull(
+                                                        if (tab.id == selectedWindow)
+                                                            stringResource(R.string.viewing)
+                                                        else null,
+                                                        count,
+                                                        directory.takeIf { it.isNotBlank() },
+                                                    )
+                                                    .joinToString(" · ")
+                                            SwitcherItem(
+                                                title,
+                                                subtitle,
+                                                icons,
+                                                focus,
+                                                tab.id == selectedWindow,
+                                                stringResource(R.string.a11y_tab_title, title),
+                                                enabled,
+                                                enabled && tab.blocks.isNotEmpty(),
+                                                { onTab(tab.id) },
+                                                Modifier.animateItem(
+                                                        fadeInSpec = null,
+                                                        fadeOutSpec = null,
+                                                        placementSpec =
+                                                            if (drag.id == tab.id) null
+                                                            else
+                                                                androidx.compose.animation.core
+                                                                    .spring(),
+                                                    )
+                                                    .then(rowModifier(tab.id)),
+                                                rowActions(tab.id),
+                                                revealedRow == tab.id,
+                                                { reveal(tab.id, it) },
+                                                listOf(
+                                                    SwitcherRowAction(
+                                                        stringResource(R.string.label_rename_tab),
+                                                        ChromeIcon.EDIT,
+                                                    ) {
+                                                        rename =
+                                                            TerminalRenameTarget(
+                                                                tab.id,
+                                                                tab.id,
+                                                                true,
+                                                                tab.label,
+                                                            )
+                                                    },
+                                                    SwitcherRowAction(
+                                                        stringResource(R.string.close_tab),
+                                                        ChromeIcon.CLOSE,
+                                                        destructive = true,
+                                                    ) {
+                                                        onCloseTab(tab)
+                                                    },
+                                                ),
+                                            )
+                                        }
+                                    } else {
+                                        if (panes.isEmpty())
+                                            item {
+                                                SwitcherEmpty(
+                                                    stringResource(R.string.no_panes_yet),
+                                                    stringResource(R.string.choose_tab_hint),
+                                                )
+                                            }
+                                        else if (hasLayout && showLayout)
+                                            item(key = "layout") {
+                                                PaneLayoutMap(
+                                                    current!!,
+                                                    selectedBlock,
+                                                    programs,
+                                                    titles,
+                                                    enabled,
+                                                    onSelect = onPane,
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                            }
+                                        val displayed =
+                                            if (drag.id == null) panes
+                                            else
+                                                drag.order.mapNotNull { id ->
+                                                    panes.firstOrNull { it.id == id }
+                                                }
+                                        items(displayed, key = { it.id }) { block ->
+                                            val program =
+                                                programs[block.id] ?: ProgramIdentity.Loading
+                                            val title =
+                                                program.paneTitle(
+                                                    block.label,
+                                                    titles[block.id].orEmpty(),
+                                                )
+                                            val placement = placements[block.id]
+                                            val subtitle =
+                                                listOfNotNull(
+                                                        if (block.id == selectedBlock)
+                                                            stringResource(R.string.viewing)
+                                                        else null,
+                                                        if (placement?.floating == true)
+                                                            stringResource(
+                                                                R.string.a11y_state_floating,
+                                                            )
+                                                        else null,
+                                                        directories[block.id].orEmpty().ifBlank {
+                                                            program.label
+                                                        },
+                                                    )
+                                                    .joinToString(" · ")
+                                            SwitcherItem(
+                                                title,
+                                                subtitle,
+                                                listOf(program),
+                                                0,
+                                                block.id == selectedBlock,
+                                                stringResource(R.string.a11y_pane_title, title),
+                                                enabled,
+                                                enabled,
+                                                {
+                                                    if (revealedRow == block.id)
+                                                        reveal(block.id, false)
+                                                    else onPane(block.id)
+                                                },
+                                                Modifier.animateItem(
+                                                        fadeInSpec = null,
+                                                        fadeOutSpec = null,
+                                                        placementSpec =
+                                                            if (drag.id == block.id) null
+                                                            else
+                                                                androidx.compose.animation.core
+                                                                    .spring(),
+                                                    )
+                                                    .then(rowModifier(block.id)),
+                                                rowActions(block.id),
+                                                revealedRow == block.id,
+                                                { reveal(block.id, it) },
+                                                buildList {
+                                                    add(
+                                                        SwitcherRowAction(
+                                                            stringResource(
+                                                                PaneSplit.RIGHT.labelRes,
+                                                            ),
+                                                            ChromeIcon.SPLIT_RIGHT,
+                                                            enabled = canCreatePane,
+                                                        ) {
+                                                            onNewPane(block.id, PaneSplit.RIGHT)
+                                                        },
+                                                    )
+                                                    add(
+                                                        SwitcherRowAction(
+                                                            stringResource(
+                                                                PaneSplit.BELOW.labelRes,
+                                                            ),
+                                                            ChromeIcon.SPLIT_BELOW,
+                                                            enabled = canCreatePane,
+                                                        ) {
+                                                            onNewPane(block.id, PaneSplit.BELOW)
+                                                        },
+                                                    )
+                                                    add(
+                                                        SwitcherRowAction(
+                                                            stringResource(
+                                                                R.string.label_rename_pane,
+                                                            ),
+                                                            ChromeIcon.EDIT,
+                                                        ) {
+                                                            rename =
+                                                                TerminalRenameTarget(
+                                                                    selectedWindow,
+                                                                    block.id,
+                                                                    false,
+                                                                    block.label,
+                                                                )
+                                                        },
+                                                    )
+                                                    if (placement?.floating == true) {
+                                                        add(
+                                                            SwitcherRowAction(
+                                                                stringResource(
+                                                                    R.string.label_dock_pane,
+                                                                ),
+                                                                ChromeIcon.SPLIT,
+                                                                enabled = tiledCount > 0,
+                                                            ) {
+                                                                dock = selectedWindow to block.id
+                                                            },
+                                                        )
+                                                    } else if (placement != null) {
+                                                        add(
+                                                            SwitcherRowAction(
+                                                                stringResource(
+                                                                    R.string.label_float_pane,
+                                                                ),
+                                                                ChromeIcon.FLOAT,
+                                                                enabled = tiledCount > 1,
+                                                            ) {
+                                                                onFloatPane(
+                                                                    selectedWindow,
+                                                                    block.id,
+                                                                )
+                                                            },
+                                                        )
+                                                    }
+                                                    add(
+                                                        SwitcherRowAction(
+                                                            stringResource(R.string.close_pane),
+                                                            ChromeIcon.CLOSE,
+                                                            destructive = true,
+                                                        ) {
+                                                            onClosePane(block)
+                                                        },
+                                                    )
+                                                },
+                                                trailing = {
+                                                    if (placement != null)
+                                                        PanePositionMap(
+                                                            current?.layout.orEmpty(),
+                                                            block.id,
+                                                            Modifier.size(34.dp, 22.dp)
+                                                                .testTag(
+                                                                    "Pane position: ${block.id}",
+                                                                ),
+                                                        )
+                                                },
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -234,75 +656,175 @@ internal class SwitcherSessions(val count: Int,val current: String,val height: a
                 }
             }
         }
+    rename?.let { target ->
+        val available =
+            windows
+                .firstOrNull { it.id == target.window }
+                ?.let { target.tab || it.blocks.any { b -> b.id == target.id } } == true
+        TerminalRenameDialog(
+            target,
+            enabled && available,
+            onSave = { label ->
+                if (target.tab) onRenameTab(target.id, label)
+                else onRenamePane(target.window, target.id, label)
+            },
+            onClose = { rename = null },
+        )
     }
-    }
-    rename?.let {target->
-        val available=windows.firstOrNull {it.id==target.window}?.let {target.tab || it.blocks.any {b->b.id==target.id}}==true
-        TerminalRenameDialog(target,enabled && available,onSave={label->
-            if(target.tab) onRenameTab(target.id,label) else onRenamePane(target.window,target.id,label)
-        },onClose={rename=null})
-    }
-    dock?.let {(window,id)->
-        val tab=windows.firstOrNull {it.id==window}
-        val anchors=tab?.tiledPanes().orEmpty().filterNot {it.id==id}
-        DockPaneDialog(anchors,programs,titles,enabled && tab?.floatingPanes()?.any {it.id==id}==true,
-            onDock={anchor,split->onDockPane(window,id,anchor,split)},onClose={dock=null})
-    }
-}
-
-@Composable private fun SplitDiagram(split: PaneSplit,modifier: Modifier,color: Color) {
-    Canvas(modifier) {
-        val u=size.minDimension/24f
-        val right=split==PaneSplit.RIGHT
-        drawRoundRect(color.copy(alpha=.22f),Offset((if(right) 12f else 2f)*u,(if(right) 4f else 12f)*u),  // alpha-ok layout preview ghost
-            Size((if(right) 10f else 20f)*u,(if(right) 16f else 8f)*u),CornerRadius(1.5f*u))
-        drawRoundRect(color,Offset(2f*u,4f*u),Size(20f*u,16f*u),CornerRadius(2f*u),style=Stroke(1.5f*u))
-        drawLine(color,Offset((if(right) 12f else 2f)*u,(if(right) 4f else 12f)*u),
-            Offset((if(right) 12f else 22f)*u,(if(right) 20f else 12f)*u),1.5f*u,StrokeCap.Round)
-    }
-}
-
-@Composable private fun SwitcherEmpty(title: String,description: String) {
-    Column(Modifier.fillMaxWidth().padding(vertical=24.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-        Text(title,style=SettingsType.row)
-        Text(description,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    dock?.let { (window, id) ->
+        val tab = windows.firstOrNull { it.id == window }
+        DockPaneSheet(
+            tab,
+            programs,
+            titles,
+            enabled && tab?.floatingPanes()?.any { it.id == id } == true,
+            hazeState,
+            onDock = { anchor, split -> onDockPane(window, id, anchor, split) },
+            onClose = { dock = null },
+        )
     }
 }
 
-@Composable private fun SwitcherItem(title: String,subtitle: String,programs: List<ProgramIdentity>,focus: Int,active: Boolean,
-    description: String,enabled: Boolean,onSelect: ()->Unit,canClose: Boolean,closeDescription: String,onClose: ()->Unit,modifier: Modifier=Modifier,reorderActions: List<CustomAccessibilityAction> = emptyList(),actionsDescription: String="Terminal actions",
-    actions: @Composable ((()->Unit)->Unit)={}) {
-    var menu by remember {mutableStateOf(false)}
-    val primary=MaterialTheme.colorScheme.primary
-    Surface(modifier=modifier,shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)) {  // alpha-ok item surface
-        Row(Modifier.fillMaxWidth().heightIn(min=56.dp).selectable(active,enabled=enabled,role=Role.RadioButton,onClick=onSelect)
-            .semantics {contentDescription=description;stateDescription=if(active) "Selected" else "";customActions=reorderActions}.padding(start=8.dp,end=0.dp,top=4.dp,bottom=4.dp),
-            verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.width(3.dp).height(22.dp).then(if(active) Modifier.background(primary,RoundedCornerShape(2.dp)) else Modifier))
-            Box(Modifier.width(36.dp),contentAlignment=Alignment.Center) {ProgramStack(programs,focus,fixedSlot=true)}
-            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(1.dp)) {
-                Text(title,style=SettingsType.row,color=if(active) primary else MaterialTheme.colorScheme.onSurface,maxLines=1,overflow=TextOverflow.Ellipsis)
-                Text(subtitle,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
-            }
-            Box {
-                ChromeButton(ChromeIcon.MORE,actionsDescription,enabled=enabled || canClose) {menu=true}
-                DropdownMenu(menu,{menu=false},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
-                    actions {menu=false}
-                    TerminalMenuItem(if(closeDescription.startsWith("Close tab")) "Close tab" else "Close pane",ChromeIcon.CLOSE,enabled=canClose,
-                        onClick={menu=false;onClose()})
+@Composable
+private fun SwitcherEmpty(title: String, description: String) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(title, style = SettingsType.row)
+        Text(
+            description,
+            style = SettingsType.detail,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SwitcherItem(
+    title: String,
+    subtitle: String,
+    programs: List<ProgramIdentity>,
+    focus: Int,
+    active: Boolean,
+    description: String,
+    enabled: Boolean,
+    canOpen: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier,
+    reorderActions: List<CustomAccessibilityAction>,
+    revealed: Boolean,
+    onReveal: (Boolean) -> Unit,
+    actions: List<SwitcherRowAction>,
+    trailing: @Composable () -> Unit = {},
+) {
+    val scheme = MaterialTheme.colorScheme
+    val selectedLabel = stringResource(R.string.a11y_state_selected)
+    SwitcherSwipeRow(revealed, onReveal, actions, enabled, modifier) {
+        Row(
+            Modifier.fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .background(scheme.surfaceVariant.copy(alpha = if (active) .8f else .35f))
+                .selectable(active, enabled = canOpen, role = Role.RadioButton, onClick = onSelect)
+                .semantics {
+                    contentDescription = description
+                    stateDescription = if (active) selectedLabel else ""
+                    customActions =
+                        if (enabled)
+                            reorderActions +
+                                actions
+                                    .filter { it.enabled }
+                                    .map { action ->
+                                        CustomAccessibilityAction(action.label) {
+                                            onReveal(false)
+                                            action.run()
+                                            true
+                                        }
+                                    }
+                        else emptyList()
                 }
+                .padding(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                Modifier.width(3.dp)
+                    .height(22.dp)
+                    .then(
+                        if (active) Modifier.background(scheme.primary, RoundedCornerShape(2.dp))
+                        else Modifier,
+                    ),
+            )
+            Box(Modifier.width(36.dp), contentAlignment = Alignment.Center) {
+                ProgramStack(programs, focus, fixedSlot = true)
             }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    title,
+                    style = SettingsType.row,
+                    color = if (active) scheme.primary else scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    subtitle,
+                    style = SettingsType.detail,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            trailing()
         }
     }
 }
 
-@Composable private fun SwitcherSessionLabel(current: String,onClick: ()->Unit) {
-    val scheme=MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().padding(horizontal=16.dp).padding(top=6.dp).clip(RoundedCornerShape(10.dp))
-        .clickable(role=Role.Button,onClickLabel=stringResource(R.string.switch_session),onClick=onClick).padding(horizontal=4.dp,vertical=6.dp),
-        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        Text(stringResource(R.string.session_label),style=SettingsType.detail,color=scheme.onSurfaceVariant)
-        Text(current.ifBlank {stringResource(R.string.none)},Modifier.weight(1f,fill=false),style=SettingsType.section,color=scheme.onSurface,maxLines=1,overflow=TextOverflow.Ellipsis)
-        ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(14.dp).graphicsLayer {rotationZ=-90f},scheme.onSurfaceVariant)
+@Composable
+internal fun SwitcherAddButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 10.dp),
+        modifier = Modifier.heightIn(min = 40.dp),
+    ) {
+        ChromeSymbol(ChromeIcon.ADD, Modifier.size(15.dp), LocalContentColor.current)
+        Spacer(Modifier.width(4.dp))
+        Text(label, style = SettingsType.section, maxLines = 1)
+    }
+}
+
+@Composable
+private fun SwitcherSessionLabel(current: String, modifier: Modifier, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.switch_session),
+                onClick = onClick,
+            )
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            stringResource(R.string.session_label),
+            style = SettingsType.detail,
+            color = scheme.onSurfaceVariant,
+        )
+        Text(
+            current.ifBlank { stringResource(R.string.none) },
+            Modifier.weight(1f, fill = false),
+            style = SettingsType.section,
+            color = scheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        ChromeSymbol(
+            ChromeIcon.CHEVRON,
+            Modifier.size(14.dp).graphicsLayer { rotationZ = -90f },
+            scheme.onSurfaceVariant,
+        )
     }
 }

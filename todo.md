@@ -1,6 +1,6 @@
 # Upstream Sync Plan & Status
 
-Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884c48f3600dd787f17a5` through `da7a0f9fa45759ffcf2f01d41865c3bbec614742` (`upstream/main`), while preserving repository customizations:
+Synchronized all upstream features and UI/UX design through `d786ea0cef9480e03e5c9bf4f0d7e7e6ae96395e` (`upstream/main`, Build 171), while preserving repository customizations:
 - Package name `dev.lemon.rex` preserved.
 - Icon rainbow marquee and glint effects (`RainbowMarquee.kt`, `ProgramStack.kt`, `TerminalChrome.kt`) preserved.
 - Custom vector artwork system (`ProgramArtwork.kt`, `ProgramVectorPicture.kt`, `ProgramVocabulary.kt`) preserved.
@@ -195,12 +195,167 @@ Synchronized all upstream features and UI/UX design from `e62c6193ff0591e1549884
   - **Area**: File Uploads, Release Packaging
   - **Status**: Generalized image uploads to arbitrary files across `rexling-core/src/upload.rs`, JNI bridge, `ImageUploads.kt`, `MainActivity.kt` file picker, bumped `versionCode = 169` in `build.gradle.kts`.
 
+- [x] **37. `27a07dc`** - Add a side tab rail, chosen by the app window's width
+  - **Full Hash**: `27a07dc537df1a1a2384a56a62657e289bf53b92`
+  - **Area**: Tab Navigation, Adaptive Layout
+  - **Status**: Synced `TabRail.kt` (`TerminalTabRail`), `TabBarLayout`, `TabBarPosition`, `TabRailStyle`, `PreferencesSheet.kt` tab rail options.
+
+- [x] **38. `7689225`** - Swipe or tap to expand and collapse the side tab rail
+  - **Full Hash**: `76892251a37c6314f8842ae37a280c4fa0ba62f9`
+  - **Area**: Gestures, Tab Rail Interaction
+  - **Status**: Implemented rail collapse/expand animations, touch targeting and semantic accessibility.
+
+- [x] **39. `8a01bdc`** - Show a tab's panes side by side when unfolded and full screen
+  - **Full Hash**: `8a01bdcfc9d2f3a61dc4b6be2dbe7d507116a4a0`
+  - **Area**: Multi-Pane Layout, Foldables
+  - **Status**: Added `MultiPaneLayout.kt`, `multiPaneTiles`, `PaneSplitLine`, `Models.kt` split/zoom models.
+
+- [x] **40. `1d4c7c0`** - Polish the multi-pane layout and let the side rail reach the screen edge
+  - **Full Hash**: `1d4c7c0b89326f1406e2373752e399517dc00965`
+  - **Area**: Window Insets, Multi-Pane UI
+  - **Status**: Integrated edge-to-edge window insets, flush single pane styling, and seamless navigation clearance.
+
+- [x] **41. `ec5fbff`** - Float the side rail beside multiple panes and keep its tabs in thumb reach
+  - **Full Hash**: `ec5fbff0e68d879ba22fbc81b37cae2170327f23`
+  - **Area**: Floating Rail, Ergonomics
+  - **Status**: Added island floating rail beside tiled layout, preserving ergonomic spacing.
+
+- [x] **42. `ae0f538`** - Drag pane borders in the multi-pane layout
+  - **Full Hash**: `ae0f5386db8c5445aa4c1e40562be9cb4433606f`
+  - **Area**: Split Resizing, Gestures
+  - **Status**: Implemented border drag handles, `resizeSplit` command in `RexConnection.kt`, and ratio persistence.
+
+- [x] **43. `82fc5d0`** - Zoom a pane from its corner menu in the multi-pane layout
+  - **Full Hash**: `82fc5d0a688ee4102941ecae97c36d226a267a14`
+  - **Area**: Zoom Controls, Tile Overlays
+  - **Status**: Added corner actions pill, pane zoom toggle, and unzoom animation.
+
+- [x] **44. `33adfb0`** - Keep foldable pane streams live across focus changes
+  - **Full Hash**: `33adfb080ee11746f39dcf282d8d85f8185c88b7`
+  - **Area**: JNI Mirroring, Background Streams
+  - **Status**: Implemented pane mirroring cache (`mirror.rs`), `RexConnection.mirror()`, and live frame multiplexing.
+
+- [x] **45. `87f72ed`** - Remove the bottom gap for single panes with side tabs
+  - **Full Hash**: `87f72edf72e503378fc9e09d436ec539c368ff16`
+  - **Area**: Viewport Padding, Terminal Layout
+  - **Status**: Refined `flushSinglePane` and `singlePaneNavigationClearance` in `MainActivity.kt`.
+
+- [x] **46. `736173a`** - Fix session recovery, pointer clicks, and foldable drawers
+  - **Full Hash**: `736173a9856ad8d0c64eb3d96924c25608b61cba`
+  - **Area**: Mouse Input, Session Recovery, Drawer Layout
+  - **Status**: Handled mouse clicks once without triggering soft keyboard, offloaded Kitty bitmap generation, and bounded drawer headers.
+
+- [x] **47. `bf90ea7`** - Add drag and split controls to foldable panes
+  - **Full Hash**: `bf90ea7f631dfad43c3300a74797ebcfdb4c1bb6`
+  - **Area**: Drag & Drop, Tile Reordering
+  - **Status**: Added drag drop zones, tile reordering, and swap support across `MultiPaneLayout.kt` and JNI tests.
+
+- [x] **48. `4d07e1a`** - Refine foldable drawers and add global pane search
+  - **Full Hash**: `4d07e1ae1d72379361ad22f9d505f317d7ae65f8`
+  - **Area**: Global Search, Pane Catalog
+  - **Status**: Added `AllPanesPage.kt`, `PaneCatalog.kt`, and `requestPaneCatalog` in JNI engine and Android client.
+
+- [x] **49. `c731026`** - Add floating panes to the unfolded workspace
+  - **Full Hash**: `c731026ad99b456631ad02e960303126f54c9a6d`
+  - **Area**: Floating Panes, Multi-Pane Overlay
+  - **Status**: Added floating overlay placements over tiled panes, dock sheets, and minimize/dock actions.
+
+- [x] **50. `acd8b2c`** - Support edge drops when dragging tiled panes
+  - **Full Hash**: `acd8b2c4bf246c43fa96636aa712a2df14d1f2b6`
+  - **Area**: Drag & Drop, Edge Snapping
+  - **Status**: Implemented edge drop targets (top/bottom/left/right splits) during tile dragging.
+
+- [x] **51. `38cc96d`** - Reduce redraws and state work for mirrored panes
+  - **Full Hash**: `38cc96d9f8266e74b3017a0d421712a1499b2447`
+  - **Area**: Performance, Mirror Delta Caching
+  - **Status**: Implemented `pane_frames` delta caching in `updates.rs` and wired RXT8 wire protocol updates.
+
+- [x] **52. `79ba686`** - Tighten foldable pane layout and reduce mirror overhead
+  - **Full Hash**: `79ba6868df3241b71d9d97cb656ae995dfbe831e`
+  - **Area**: Layout Margins, Redraw Optimization
+  - **Status**: Streamlined margins, added mirror obscured flags, and minimized PTY reallocations.
+
+- [x] **53. `7b47d85`** - Sync floating pane minimization through Rex
+  - **Full Hash**: `7b47d859fa4f004aeb53c158525b445582f6f597`
+  - **Area**: Minimization Protocol, State Machine
+  - **Status**: Synced `minimize_floating` command and state updates across core, JNI, and Android UI.
+
+- [x] **54. `1d2185d`** - Bound floating pane recovery and streamline restore
+  - **Full Hash**: `1d2185d58d9ec76fba899988357777ee2d708fc2`
+  - **Area**: Workspace Navigation, Pane Recovery
+  - **Status**: Added `restoreMinimized` flag to `selectBlock`, avoiding ghost panes on session restore.
+
+- [x] **55. `e372aac`** - Improve Fold terminal scrolling, themes, and floating pane focus
+  - **Full Hash**: `e372aac24e0bcf5e7c8446b5a329d8b746ce0b61`
+  - **Area**: Fold Viewport, Focus Management
+  - **Status**: Fixed soft keyboard focus retention across pane switches in `MultiPaneLayout.kt`.
+
+- [x] **56. `56887a5`** - Give the launch window the canvas the app actually draws
+  - **Full Hash**: `56887a55c2f58e17db174c6530635905d2ee575a`
+  - **Area**: App Launch Window, Window Background
+  - **Status**: Updated launch canvas in `styles.xml` and `styles.xml (night)` to `#f3f4f9` and `#090c11`.
+
+- [x] **57. `7182652`** - Make the built-in themes token themes like the presets
+  - **Full Hash**: `7182652f4c4a520bfba50bf54e951bf0212351bb`
+  - **Area**: Design Tokens, Theme Architecture
+  - **Status**: Migrated built-in themes to `DefaultUiTokens` in `ThemeColors.kt` and `ThemeCatalog.kt`, verified via `ThemeColorsTest.kt`.
+
+- [x] **58. `b6d4a45`** - Update JNI smoke test for RXT8
+  - **Full Hash**: `b6d4a45070054c0b4cb933d7bca89d1b6e4e0474`
+  - **Area**: JNI Tests, Protocol Verification
+  - **Status**: Updated JNI smoke harness in `NativeBridge.java` to verify `RXT8` wire header.
+
+- [x] **59. `c69128e`** - Bump Android build to 170
+  - **Full Hash**: `c69128e18dfc6cb3fa8a36c1e550616b490d14b1`
+  - **Area**: Versioning
+  - **Status**: Bumped `versionCode = 170` in `app/build.gradle.kts`.
+
+- [x] **60. `6634084`** - Repair the appearance instrumentation test
+  - **Full Hash**: `66340840b2efd3fece07ce88ffbc2a9a7a60d6a0`
+  - **Area**: Appearance Tests, Theme Engine
+  - **Status**: Fixed `AppearanceSheetTest` to wrap content in `RexTheme(theme.terminal.dark, theme)`.
+
+- [x] **61. `33c35c8`** - Clear activity badges for visible panes
+  - **Full Hash**: `33c35c8ea3fcdeba56db97ce4f526b77df0fc9a5`
+  - **Area**: Activity Indicators, Focus & Badge Policies
+  - **Status**: Added `WatchedPanes` and `activityPaneCandidates(...)`, clearing unread badges for visible/tiled/floating panes; updated `ActivityBadgePolicy`, `ActivityFocusPolicy`, and `MainActivity`.
+
+- [x] **62. `660ff41`** - Keep terminal pane sizes stable across tab switches
+  - **Full Hash**: `660ff4156c1d76343dc968858a74e54e449df5c8`
+  - **Area**: JNI Engine, Pane Activation, Mirror Protocol
+  - **Status**: Added `mirror.park()` to preserve claimed pane sizing without issuing disowns; added `owned_blocks` tracking in `Actor` and `release_session_panes()`; updated `PaneActivation.shouldTake()`.
+
+- [x] **63. `7952f76`** - Reuse drawn rows when terminal apps scroll
+  - **Full Hash**: `7952f76846174a7428c0bceee077797746569eb2`
+  - **Area**: Terminal Rendering, Row Cache Performance
+  - **Status**: Added row content hash tracking and `reuseApplicationRows` in `TerminalView.kt` to preserve unchanged rows across terminal application scrolling without full redraws.
+
+- [x] **64. `890f059`** - Open the keyboard only from terminal input
+  - **Full Hash**: `890f059cb79e75553b4fcb7fefea44040a4cf028`
+  - **Area**: IME / Input System, Terminal View
+  - **Status**: Removed `tapOpensKeyboard` global flag; keyboard is requested only on deliberate taps within active input rows, cursor areas, or prompts; `takeControl(showKeyboard)` updated.
+
+- [x] **65. `8402063`** - Show reconnect progress for the last used server
+  - **Full Hash**: `84020634c0369527cf6e680d221ce4f5b0266da5`
+  - **Area**: Workspace Connection UI, Connection Notice
+  - **Status**: Added `activeConnectionRequested` state, reconnect progress indicator in `ConnectionChrome.kt`, and `WorkspaceConnectionTest.kt`.
+
+- [x] **66. `cfeb748`** - Reveal the terminal with a blue paper tear on launch
+  - **Full Hash**: `cfeb748281358f27aa51c2069cb910543e343ec4`
+  - **Area**: App Launch Animation, Splash Theme
+  - **Status**: Added `LaunchReveal.kt` with tear mask canvas reveal on Android 12+, splash screen background `@color/launch_paper` (`#4E8BFF`) in `styles.xml`.
+
+- [x] **67. `d786ea0`** - Prepare release build 171
+  - **Full Hash**: `d786ea0cef9480e03e5c9bf4f0d7e7e6ae96395e`
+  - **Area**: Versioning
+  - **Status**: Bumped `versionCode = 171` in `rexling-android/app/build.gradle.kts`.
+
 ---
 
-## Verification
-- Rust Core (`rexling-core`): 50 passed, 3 ignored (6 suites).
-- Go Network Daemon (`rexling-network`): 9 passed in 1 package.
-- Android Application (`rexling-android`):
-  - Debug compilation: `BUILD SUCCESSFUL`.
-  - Debug unit tests: 312 passed, 1 skipped (`testDebugUnitTest` SUCCESS).
-  - Debug APK assembly: `BUILD SUCCESSFUL` (`assembleDebug`).
+## Verification (2026-11-24, after the review follow-ups)
+- Rust workspace: `cargo test --workspace` 167 passed, 20 ignored (13 suites); `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean.
+- JNI Smoke Test (`rexling-android/scripts/test_jni.py`): PASSED (handles, worker, snapshot, Unicode, secret redaction, and cleanup).
+- Android Application Unit Tests (`rexling-android`): 327 passed, 1 skipped (`./gradlew :app:testDebugUnitTest`).
+- Lint: `./gradlew :app:lintDebug` 0 errors, 0 unused resources.
+- Formatting: `./gradlew ktfmtCheck` clean (ktfmt Gradle plugin 0.28.0).
+- Debug and release APK assembly: `BUILD SUCCESSFUL`; release APK 29.38 MB (`:app:assembleRelease`).

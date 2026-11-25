@@ -22,7 +22,14 @@ internal data class ProgramArtworkIndex(
 }
 
 internal data class ProgramArtwork(val tile: String?, val glyph: String?, val source: Source) {
-    enum class Source { SKIN_VARIANT, SKIN_DEFAULT, EXECUTABLE, CANDIDATE, SHELL, GENERATED }
+    enum class Source {
+        SKIN_VARIANT,
+        SKIN_DEFAULT,
+        EXECUTABLE,
+        CANDIDATE,
+        SHELL,
+        GENERATED,
+    }
 }
 
 internal fun interface ProgramArtworkRule {
@@ -30,14 +37,15 @@ internal fun interface ProgramArtworkRule {
 }
 
 internal object ProgramArtworkResolver {
-    private val rules = listOf(
-        ProgramArtworkRule(::skinVariant),
-        ProgramArtworkRule(::skinDefault),
-        ProgramArtworkRule(::executable),
-        ProgramArtworkRule(::candidate),
-        ProgramArtworkRule(::shell),
-        ProgramArtworkRule(::generated),
-    )
+    private val rules =
+        listOf(
+            ProgramArtworkRule(::skinVariant),
+            ProgramArtworkRule(::skinDefault),
+            ProgramArtworkRule(::executable),
+            ProgramArtworkRule(::candidate),
+            ProgramArtworkRule(::shell),
+            ProgramArtworkRule(::generated),
+        )
 
     fun resolve(program: ProgramIdentity, index: ProgramArtworkIndex): ProgramArtwork =
         rules.firstNotNullOfOrNull { it.resolve(program, index) }
@@ -45,7 +53,9 @@ internal object ProgramArtworkResolver {
 
     private fun skinVariant(program: ProgramIdentity, index: ProgramArtworkIndex): ProgramArtwork? {
         val skin = index.skins[program.kind.name] ?: return null
-        val tile = skin.variants[executableName(program.executable)]?.takeIf(index.icons::contains) ?: return null
+        val tile =
+            skin.variants[executableName(program.executable)]?.takeIf(index.icons::contains)
+                ?: return null
         val glyph = index.glyph(tile) ?: skin.glyph?.takeIf(index.glyphs::contains)
         return ProgramArtwork(tile, glyph, ProgramArtwork.Source.SKIN_VARIANT)
     }
@@ -80,7 +90,8 @@ internal object ProgramArtworkResolver {
     private fun shell(program: ProgramIdentity, index: ProgramArtworkIndex): ProgramArtwork? {
         if (!program.isShell) return null
         val name = executableName(program.executable)
-        val tile = (if (name == "nu") "nushell" else "shell").takeIf(index.icons::contains) ?: return null
+        val tile =
+            (if (name == "nu") "nushell" else "shell").takeIf(index.icons::contains) ?: return null
         val glyph = index.glyph(tile) ?: index.glyph("terminal")
         return ProgramArtwork(tile, glyph, ProgramArtwork.Source.SHELL)
     }

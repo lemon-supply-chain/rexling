@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -15,16 +16,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.*
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -33,31 +38,36 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 
 class MainActivity : ComponentActivity() {
     private val model: RexModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) installLaunchReveal()
         // The stored in-app appearance decides the window colour before Compose draws,
         // so a light appearance does not flash the dark theme's background.
         window.setBackgroundDrawable(
-            android.graphics.drawable.ColorDrawable(windowBackgroundColor())
+            android.graphics.drawable.ColorDrawable(windowBackgroundColor()),
         )
         consumeAlert(intent)
         enableEdgeToEdge(
@@ -109,7 +119,9 @@ class MainActivity : ComponentActivity() {
                     isAppearanceLightNavigationBars = !dark
                 }
             }
-            RexTheme(dark, model.theme(dark)) { RexApp(model) }
+            RexTheme(dark, model.theme(dark), frostedEffectsEnabled = model.frostedEffectsEnabled) {
+                RexApp(model)
+            }
         }
     }
 
@@ -117,7 +129,8 @@ class MainActivity : ComponentActivity() {
     private fun windowBackgroundColor(): Int {
         val stored = runCatching {
             Appearance.valueOf(getSharedPreferences("rex", 0).getString("appearance", "SYSTEM")!!)
-        }.getOrDefault(Appearance.SYSTEM)
+        }
+            .getOrDefault(Appearance.SYSTEM)
         val dark =
             when (stored) {
                 Appearance.DARK -> true
@@ -127,7 +140,7 @@ class MainActivity : ComponentActivity() {
                         android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                         android.content.res.Configuration.UI_MODE_NIGHT_YES
             }
-        return if (dark) 0xff090c11.toInt() else 0xfff3f4f9.toInt()
+        return getColor(if (dark) R.color.window_canvas_dark else R.color.launch_canvas)
     }
 
     private fun consumeAlert(intent: Intent?) {
@@ -165,14 +178,16 @@ internal fun RexTheme(
     dark: Boolean,
     theme: AppTheme,
     motionEnabled: Boolean = android.animation.ValueAnimator.areAnimatorsEnabled(),
+    frostedEffectsEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val scheme = remember(dark, theme) { rexColorScheme(dark, theme) }
+    val scheme = remember(dark, theme.ui) { rexColorScheme(dark, theme.ui) }
     MaterialTheme(colorScheme = scheme, typography = RexTokens.type, shapes = RexTokens.shapes) {
         CompositionLocalProvider(
             LocalTerminalPalette provides theme.terminal,
             LocalContentColor provides scheme.onSurface,
             LocalMotionEnabled provides motionEnabled,
+            LocalFrostedEffectsEnabled provides frostedEffectsEnabled,
             content = content,
         )
     }
@@ -189,10 +204,7 @@ private fun RexApp(model: RexModel) {
             LocalKeepScreenAwake provides model.keepScreenAwake,
             LocalKeyboardSuggestions provides model.keyboardSuggestions,
         ) {
-            Box(
-                Modifier.fillMaxSize()
-                    .then(if (captureNotice) Modifier.hazeSource(noticeHaze) else Modifier)
-            ) {
+            Box(Modifier.fillMaxSize().frostSource(noticeHaze, captureNotice)) {
                 key(model.activeServerId) { RexWorkspace(model, client) }
             }
         }
@@ -229,9 +241,16 @@ private data class TerminalCloseTarget(
 @Composable
 private fun RexWorkspace(model: RexModel, client: RexConnection) {
     val state by client.chromeState.collectAsState()
+    val networkConfigError by NetworkSettings.configurationError.collectAsState()
+    val connectionRequested = model.activeConnectionRequested
+    val connectionPhase =
+        if (connectionRequested && state.phase in listOf("disconnected", "paused")) {
+            if (client.hasScreen) "reconnecting" else "connecting"
+        } else state.phase
     val navigation = client.navigationRequest
     val displayedSession = navigation.session ?: state.selectedSession
     val currentSessionKey = sessionKey(model.activeServerId, displayedSession)
+    val sessionLabel = state.sessions.firstOrNull { it.id == displayedSession }?.label
     val sessionStrip =
         SessionCatalog.strip(
             model.sessionTargets,
@@ -239,9 +258,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 model.activeServer,
                 SessionItem(
                     displayedSession,
-                    state.sessions.firstOrNull { it.id == displayedSession }?.label
+                    sessionLabel
                         ?: if (state.connected) stringResource(R.string.label_no_session)
-                        else state.phase,
+                        else phaseLabel(state.phase),
                 ),
             ),
         )
@@ -251,30 +270,24 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     val window =
         windows.firstOrNull { w -> w.blocks.any { it.id == displayedBlock } }
             ?: windows.firstOrNull { it.blocks.isNotEmpty() }
+    val activeWindowId = window?.id.orEmpty()
     val ready = state.connected && !navigation.pending && !state.creating
     val keyTarget = client.keyTarget()
-    val activityBadges =
-        remember(model.activitySources, model.activeServer, displayedSession, windows) {
-            ActivityBadgePolicy.route(
-                model.activitySources,
-                model.activeServer,
-                displayedSession,
-                windows,
-            )
-        }
     val terminalHaze = remember { HazeState() }
     val workspaceHaze = remember { HazeState() }
     var readyBackdrop by remember { mutableStateOf(false) }
     var floatingBackdrop by remember { mutableStateOf(false) }
     var ownerBackdrop by remember { mutableStateOf(false) }
+    var shortcutBackdrop by remember { mutableStateOf(false) }
     val palette = LocalTerminalPalette.current
     var endpoint by rememberSaveable { mutableStateOf(client.savedEndpoint) }
-    var showServer by rememberSaveable { mutableStateOf(true) }
     var servers by remember { mutableStateOf(false) }
     var addServer by remember { mutableStateOf(false) }
     var connectionError by remember { mutableStateOf<String?>(null) }
     var picker by remember { mutableStateOf("") }
     var newSession by remember { mutableStateOf(false) }
+    var topBarExpanded by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(model.compactTopBar) { if (!model.compactTopBar) topBarExpanded = false }
     var menu by remember { mutableStateOf(false) }
     // Settings drawers stack, so Cancel, swipe-down and Back return to the level above.
     val settings = remember { mutableStateListOf<SettingsRoute>() }
@@ -283,6 +296,27 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     fun closeSettings() {
         SettingsNav.close(settings)
+    }
+    val view = LocalView.current
+    val activityWindow = remember(view) { (view.context as? android.app.Activity)?.window }
+    val insetsController =
+        remember(activityWindow, view) {
+            activityWindow?.let { WindowCompat.getInsetsController(it, view) }
+        }
+    LaunchedEffect(model.compactTopBar, topBarExpanded, settings.size) {
+        val shouldHide = model.compactTopBar && !topBarExpanded && settings.isEmpty()
+        insetsController?.let { controller ->
+            if (shouldHide) {
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.statusBars())
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { insetsController?.show(WindowInsetsCompat.Type.statusBars()) }
     }
     var pendingShortcut by remember {
         mutableStateOf<Triple<ShortcutProfile, NeovimShortcut, String>?>(null)
@@ -303,7 +337,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             if (granted) action?.invoke()
             else {
                 denied?.invoke()
-                model.images.notice = "Allow local network access to upload images to Rex."
+                model.images.notice = context.getString(R.string.notice_local_network_upload)
             }
         }
     DisposableEffect(Unit) {
@@ -340,9 +374,26 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         pasteTerminalClipboard(context, { uri -> imageCommit(uri, {}) }, client::paste)
     }
         .getOrElse {
-            model.images.notice = "Could not read the clipboard image. Try Attach file instead."
+            model.images.notice = context.getString(R.string.notice_clipboard_image_failed)
             false
         }
+    val photoPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            val target = model.pendingImageTarget
+            model.pendingImageTarget = null
+            if (uri != null) withUploadNetwork({ model.attachImage(uri, target) })
+        }
+    fun chooseImage() {
+        val target = model.imageTarget()
+        if (target == null) {
+            model.images.notice = context.getString(R.string.notice_take_control_first)
+            return
+        }
+        model.pendingImageTarget = target
+        photoPicker.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
+    }
     // Rex accepts any file type, so the document picker allows everything.
     val filePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -353,13 +404,13 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     fun chooseFile() {
         val target = model.imageTarget()
         if (target == null) {
-            model.images.notice = "Take control of a pane before attaching a file."
+            model.images.notice = context.getString(R.string.notice_take_control_first)
             return
         }
         model.pendingImageTarget = target
         filePicker.launch(arrayOf("*/*"))
     }
-    DisposableEffect(client) { onDispose { model.setPaneObscured(true) } }
+    DisposableEffect(client) { onDispose { model.setVisibleActivityPanes(null) } }
     val keyboardDensity = LocalDensity.current
     val keyboardInsets = WindowInsets.ime
     val keyboardVisible by
@@ -367,13 +418,35 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             derivedStateOf { keyboardInsets.getBottom(keyboardDensity) > 0 }
         }
     // Follow where the keyboard is heading, not its animated inset: the inset stays above zero
-    // until
-    // the hide animation ends, which left the toolbar showing after the keyboard was gone.
+    // until the hide animation ends, which left the toolbar showing after the keyboard was gone.
     @OptIn(ExperimentalLayoutApi::class) val keyboardShown = WindowInsets.isImeVisible
     val toolbarHidden = model.toolbarWithKeyboardOnly && !keyboardShown
+    val tabWidth = currentTabWidth()
+    val panelShown = state.connected || state.phase == "preview" || client.hasScreen
+    val unfoldedFullScreen = isUnfoldedFullScreen()
+    val hasHinge =
+        remember(context) {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE)
+        }
+    val allowFloatingOverlay = unfoldedFullScreen
+    val tabLayout = model.tabLayout(tabWidth.first)
+    // Floating tabs are a pure overlay: they take no layout space, so moving them never resizes the
+    // terminal. The docked rail and bottom strip step aside while this is on.
+    val floatingTabs = model.floatingTabs
+    val extendUnderNav =
+        panelShown && tabLayout.side && !floatingTabs && model.toolbarWithKeyboardOnly
+    val navigationClearance =
+        with(keyboardDensity) {
+            val inset = WindowInsets.navigationBars.getBottom(this).toDp()
+            when {
+                !extendUnderNav || inset == 0.dp -> 0.dp
+                inset < 40.dp -> 14.dp
+                else -> inset + 3.dp
+            }
+        }
     // The auto-hidden toolbar's unclipped height (divider + key row until measured). Written during
-    // its
-    // measurement and read by the terminal's, so it is a plain holder rather than snapshot state.
+    // its measurement and read by the terminal's, so it is a plain holder rather than snapshot
+    // state.
     val toolbarHeight =
         remember(keyboardDensity) {
             intArrayOf(with(keyboardDensity) { 1.dp.roundToPx() + 45.dp.roundToPx() })
@@ -382,62 +455,158 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         window?.blocks
             ?: if (state.phase == "preview") listOf(BlockItem("preview", "Terminal"))
             else emptyList()
-    val chosen = displayedBlock.ifBlank { blocks.firstOrNull()?.id.orEmpty() }
-    val floating =
-        if (model.minimizeFloatingPanes) window?.floatingPanes().orEmpty() else emptyList()
+    val requested = window?.layout?.firstOrNull { it.id == displayedBlock }
+    val visibleBlocks = window?.visiblePanes() ?: blocks
+    val chosen =
+        displayedBlock.takeUnless { it.isBlank() || requested?.minimized == true }
+            ?: visibleBlocks
+                .firstOrNull { it.id == state.selectedBlock }
+                ?.id
+                .orEmpty()
+                .ifBlank { visibleBlocks.firstOrNull()?.id.orEmpty() }
+    val tiles =
+        if (model.multiPaneUnfolded && unfoldedFullScreen)
+            multiPaneTiles(window, chosen, allowFloatingOverlay)
+        else null
+    val showAllFloating = model.minimizeFloatingPanes || (allowFloatingOverlay && tiles != null)
+    val floating = window?.floatingPanes(minimizedOnly = !showAllFloating).orEmpty()
     val carouselBlocks = window?.carouselPanes(model.minimizeFloatingPanes, chosen) ?: blocks
-    val floatingActive = floating.any { it.id == chosen }
-    var hiddenFloating by rememberSaveable(displayedSession, window?.id) { mutableStateOf("") }
-    val controlled =
-        state.controlled &&
-            ready &&
-            client.hasScreen &&
-            (!floatingActive || hiddenFloating != chosen)
+    val activeFloating =
+        window
+            ?.layout
+            ?.firstOrNull { it.id == chosen && it.floating && !it.minimized }
+            ?.takeIf { pane -> floating.any { it.id == pane.id } }
+    val flushSinglePane = tabLayout.side && !floatingTabs && tiles == null
+    val terminalBottomMargin =
+        when {
+            flushSinglePane -> 0.dp
+            extendUnderNav -> navigationClearance
+            else -> 3.dp
+        }
+    val singlePaneNavigationClearance = if (flushSinglePane) navigationClearance else 0.dp
+    val bottomOverlayInset = if (keyboardShown) 0.dp else singlePaneNavigationClearance
+    val floatingOverlay =
+        if (allowFloatingOverlay && tiles != null) window?.visibleFloatingPlacements().orEmpty()
+        else emptyList()
+    var dockFloatingPane by remember(displayedSession, window?.id) { mutableStateOf<String?>(null) }
+    val controlled = state.controlled && ready && client.hasScreen
+    val paneObscured =
+        menu ||
+            model.activityVisible ||
+            picker.isNotEmpty() ||
+            settings.isNotEmpty() ||
+            servers ||
+            addServer ||
+            forwards ||
+            newSession ||
+            pendingShortcut != null ||
+            closeTarget != null ||
+            dockFloatingPane != null
+    var fannedTabId by remember { mutableStateOf<String?>(null) }
+    var fanAnchorBounds by remember { mutableStateOf(Rect.Zero) }
+    var fanBarBounds by remember { mutableStateOf(Rect.Zero) }
+    var floatingTabMenuOpen by remember { mutableStateOf(false) }
+    fun resolveFannedWindow() =
+        if (floatingTabs) windows.firstOrNull { it.id == fannedTabId && it.blocks.size > 1 }
+        else null
+    LaunchedEffect(
+        floatingTabs,
+        displayedSession,
+        activeWindowId,
+        tabLayout.position,
+        paneObscured,
+    ) {
+        fannedTabId = null
+        if (!floatingTabs) {
+            fanAnchorBounds = Rect.Zero
+            fanBarBounds = Rect.Zero
+            floatingTabMenuOpen = false
+        }
+    }
+    LaunchedEffect(fannedTabId, windows, floatingTabs) {
+        if (fannedTabId != null && resolveFannedWindow() == null) fannedTabId = null
+    }
+    val zoomed = window?.zoomed.orEmpty()
+    val activityPaneIds =
+        remember(chosen, tiles, floatingOverlay, zoomed) {
+            activityPaneCandidates(chosen, tiles, floatingOverlay, zoomed)
+        }
+    val display = client.displayLayout.collectAsState()
+    val visibleActivityBlocks by
+        remember(client, display, activityPaneIds, ready, paneObscured, state.selectedBlock) {
+            derivedStateOf<Set<String>>(structuralEqualityPolicy()) {
+                if (!ready || paneObscured) emptySet()
+                else
+                    activityPaneIds.filterTo(mutableSetOf()) { id ->
+                        id == state.selectedBlock && display.value.hasScreen ||
+                            id in client.paneFrames
+                    }
+            }
+        }
+    val activityServer = model.activeServer
+    val activityBadges =
+        remember(
+            model.activitySources,
+            activityServer,
+            displayedSession,
+            windows,
+            visibleActivityBlocks,
+        ) {
+            ActivityBadgePolicy.route(
+                model.activitySources,
+                activityServer,
+                displayedSession,
+                windows,
+                visibleActivityBlocks,
+            )
+        }
     SideEffect {
-        model.setPaneObscured(
-            (floatingActive && hiddenFloating == chosen) ||
-                model.activityVisible ||
-                picker.isNotEmpty() ||
-                settings.isNotEmpty() ||
-                servers ||
-                addServer ||
-                forwards ||
-                newSession ||
-                pendingShortcut != null ||
-                closeTarget != null
+        model.setVisibleActivityPanes(
+            visibleActivityBlocks
+                .takeIf { it.isNotEmpty() }
+                ?.let {
+                    WatchedPanes(
+                        activityServer.id,
+                        activityServer.endpoint,
+                        displayedSession,
+                        state.selectedBlock,
+                        it,
+                    )
+                },
         )
     }
     fun openPane(id: String) {
-        hiddenFloating = ""
-        client.selectBlock(id)
+        client.selectBlock(id, null, keepTiled = tiles != null, restoreMinimized = true)
     }
-    fun minimizeFloating() {
-        hiddenFloating = chosen
-        window
-            ?.let { client.floatingNavigation.returnPane(displayedSession, it) }
-            ?.let(client::selectBlock)
+    fun minimizeFloating(id: String) {
+        val tab = window ?: return
+        val pane = tab.layout.firstOrNull { it.id == id && it.floating && !it.minimized } ?: return
+        client.minimizeFloating(displayedSession, tab.id, pane)
     }
-    LaunchedEffect(navigation.id) { if (navigation.pending) hiddenFloating = "" }
     LaunchedEffect(model.minimizeFloatingPanes) {
-        if (model.minimizeFloatingPanes && floatingActive) minimizeFloating()
+        if (model.minimizeFloatingPanes && activeFloating != null && tiles == null)
+            client.floatingNavigation.returnPane(displayedSession, window)?.let(client::selectBlock)
     }
     SideEffect { window?.let { client.floatingNavigation.remember(displayedSession, it, chosen) } }
     BackHandler(
+        enabled = model.compactTopBar && topBarExpanded && settings.isEmpty() && picker.isEmpty(),
+    ) {
+        topBarExpanded = false
+    }
+    BackHandler(
         enabled =
             ready &&
-                model.minimizeFloatingPanes &&
                 !newSession &&
                 settings.isEmpty() &&
                 pendingShortcut == null &&
                 !forwards &&
                 !addServer &&
                 closeTarget == null &&
-                floatingActive &&
-                hiddenFloating != chosen &&
+                activeFloating?.layerId?.isNotBlank() == true &&
                 picker.isEmpty() &&
-                !model.activityVisible
+                !model.activityVisible,
     ) {
-        minimizeFloating()
+        activeFloating?.let { minimizeFloating(it.id) }
     }
     val liveBlock = state.selectedBlock.ifBlank { if (state.phase == "preview") "preview" else "" }
     fun closePaneTarget(block: BlockItem) =
@@ -470,9 +639,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     LaunchedEffect(state.selectedSession) { closeTarget = null }
     LaunchedEffect(palette) { model.updateTerminalTheme(palette) }
-    LaunchedEffect(state.phase) {
-        if (state.connected || state.phase == "preview") showServer = false
-    }
     LaunchedEffect(
         state.connected,
         state.selectedSession,
@@ -489,7 +655,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         window?.id,
         state.selectedBlock,
         carouselBlocks,
+        tiles != null,
     ) {
+        if (tiles != null) return@LaunchedEffect
         val blocks = carouselBlocks
         val index = blocks.indexOfFirst { it.id == state.selectedBlock }
         if (index >= 0 && blocks.size > 1)
@@ -498,23 +666,46 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         blocks[Math.floorMod(index - 1, blocks.size)].id,
                         blocks[(index + 1) % blocks.size].id,
                     )
-                    .distinct()
+                    .distinct(),
             )
     }
-    LaunchedEffect(ready, chosen, client.hasScreen, hiddenFloating) {
-        if (ready && (!floatingActive || hiddenFloating != chosen)) client.claimActivePane()
-    }
-    LaunchedEffect(controlled, client.keyboardRequest, terminalView) {
+    LaunchedEffect(ready, chosen, client.hasScreen) { if (ready) client.claimActivePane() }
+    LaunchedEffect(controlled, terminalView) {
         if (controlled) {
             terminalView?.requestFocus()
             client.applySize()
-            if (client.keyboardRequest == displayedBlock && terminalView != null) {
-                terminalView?.keyboard()
-                client.keyboardShown()
-            }
         }
     }
-    LaunchedEffect(picker) { if (picker == "sessions") model.refreshSessionDetails() }
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(
+        controlled,
+        client.keyboardRequest,
+        terminalView,
+        displayedBlock,
+        menu,
+        windowFocused,
+    ) {
+        val view = terminalView
+        if (
+            windowFocused &&
+                !menu &&
+                controlled &&
+                view != null &&
+                client.keyboardRequest.isNotEmpty() &&
+                client.keyboardRequest == displayedBlock
+        ) {
+            view.keyboard()
+            client.keyboardShown()
+        }
+    }
+    val chosenBlock = blocks.firstOrNull { it.id == chosen }
+    val paneTitle =
+        if (model.servers.isEmpty()) stringResource(R.string.app_name)
+        else
+            (state.programs[chosen] ?: ProgramIdentity.Loading).paneTitle(
+                chosenBlock?.label.orEmpty(),
+                state.titles[chosen].orEmpty(),
+            )
     val workspaceBackdrop =
         rememberBackdropCapture(
             menu ||
@@ -523,180 +714,132 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 servers ||
                 addServer ||
                 picker in setOf("tabs", "panes", "sessions") ||
-                model.activityVisible
+                model.activityVisible ||
+                dockFloatingPane != null,
         )
+    if (workspaceBackdrop && tiles != null)
+        DisposableEffect(client) {
+            client.setMirrorObscured(true)
+            onDispose { client.setMirrorObscured(false) }
+        }
     Surface(
-        Modifier.fillMaxSize()
-            .then(if (workspaceBackdrop) Modifier.hazeSource(workspaceHaze) else Modifier),
+        Modifier.fillMaxSize().frostSource(workspaceHaze, workspaceBackdrop),
         color = MaterialTheme.colorScheme.background,
     ) {
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
-            SessionHeader(
-                sessionStrip,
-                currentSessionKey,
-                state.connected,
-                model.sessionTargets.isNotEmpty(),
-                blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
-                blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
-                state.directories[displayedBlock].orEmpty(),
-                { picker = "sessions" },
-                model::selectSessionTarget,
-                model::jumpLastSession,
-                serverIcons =
-                    model.sessionTargets.associate { it.key to it.server.icon } +
-                        (currentSessionKey to model.activeServer.icon),
-                working = chosen in state.workingBlocks,
-                isPaneWorking = { index -> blocks.getOrNull(index)?.id in state.workingBlocks },
-                progress = state.terminalProgress[chosen],
-                title =
-                    if (model.servers.isEmpty()) stringResource(R.string.app_name)
+        val contentInsets =
+            if (model.compactTopBar && !topBarExpanded)
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+            else WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+        Column(
+            Modifier.fillMaxSize()
+                .windowInsetsPadding(contentInsets)
+                .imePadding()
+                .then(
+                    if (panelShown) Modifier
                     else
-                        (state.programs[chosen] ?: ProgramIdentity.Loading).paneTitle(
-                            blocks.firstOrNull { it.id == chosen }?.label.orEmpty(),
-                            state.titles[chosen].orEmpty(),
+                        Modifier.windowInsetsPadding(
+                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
                         ),
-                menu = {
-                    Box {
+                ),
+        ) {
+            if (model.compactTopBar) {
+                AnimatedContent(
+                    targetState = topBarExpanded,
+                    label = "top_bar_expand",
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(180)) +
+                                expandVertically(
+                                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
+                                ))
+                            .togetherWith(
+                                fadeOut(animationSpec = tween(120)) +
+                                    shrinkVertically(
+                                        animationSpec =
+                                            spring(dampingRatio = 0.85f, stiffness = 400f),
+                                    ),
+                            )
+                    },
+                ) { expanded ->
+                    if (expanded) {
+                        SessionHeader(
+                            sessionStrip,
+                            currentSessionKey,
+                            state.connected,
+                            model.sessionTargets.isNotEmpty(),
+                            blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
+                            blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
+                            state.directories[displayedBlock].orEmpty(),
+                            { picker = "sessions" },
+                            model::selectSessionTarget,
+                            model::jumpLastSession,
+                            serverIcons =
+                                model.sessionTargets.associate { it.key to it.server.icon } +
+                                    (currentSessionKey to model.activeServer.icon),
+                            working = chosen in state.workingBlocks,
+                            isPaneWorking = { index ->
+                                blocks.getOrNull(index)?.id in state.workingBlocks
+                            },
+                            progress = state.terminalProgress[chosen],
+                            title = paneTitle,
+                            onCollapse = { topBarExpanded = false },
+                            menu = {
+                                ChromeButton(
+                                    ChromeIcon.MORE,
+                                    stringResource(R.string.terminal_menu),
+                                ) {
+                                    menu = true
+                                }
+                            },
+                        )
+                    } else {
+                        CompactSessionHeader(
+                            title = paneTitle,
+                            directory = state.directories[displayedBlock].orEmpty(),
+                            programs =
+                                blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
+                            paneIndex = blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
+                            working = chosen in state.workingBlocks,
+                            isPaneWorking = { index ->
+                                blocks.getOrNull(index)?.id in state.workingBlocks
+                            },
+                            onExpand = { topBarExpanded = true },
+                        )
+                    }
+                }
+            } else {
+                SessionHeader(
+                    sessionStrip,
+                    currentSessionKey,
+                    state.connected,
+                    model.sessionTargets.isNotEmpty(),
+                    blocks.map { state.programs[it.id] ?: ProgramIdentity.Loading },
+                    blocks.indexOfFirst { it.id == chosen }.coerceAtLeast(0),
+                    state.directories[displayedBlock].orEmpty(),
+                    { picker = "sessions" },
+                    model::selectSessionTarget,
+                    model::jumpLastSession,
+                    serverIcons =
+                        model.sessionTargets.associate { it.key to it.server.icon } +
+                            (currentSessionKey to model.activeServer.icon),
+                    working = chosen in state.workingBlocks,
+                    isPaneWorking = { index -> blocks.getOrNull(index)?.id in state.workingBlocks },
+                    progress = state.terminalProgress[chosen],
+                    title = paneTitle,
+                    menu = {
                         ChromeButton(ChromeIcon.MORE, stringResource(R.string.terminal_menu)) {
                             menu = true
                         }
-                        DropdownMenu(
-                            menu,
-                            { menu = false },
-                            modifier =
-                                Modifier.drawerFrost(
-                                    workspaceHaze,
-                                    RoundedCornerShape(16.dp),
-                                    workspaceBackdrop,
-                                ),
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = Color.Transparent,
-                            tonalElevation = 0.dp,
-                        ) {
-                            Text(
-                                model.activeServer.label,
-                                Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                if (state.connected)
-                                    if (controlled) stringResource(R.string.in_control)
-                                    else stringResource(R.string.viewing_terminal)
-                                else state.phase,
-                                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            client.screenDimensions?.let {
-                                Text(
-                                    "${it.first} × ${it.second}",
-                                    Modifier.padding(horizontal = 16.dp),
-                                    fontFamily = MonoUi,
-                                    fontSize = 11.sp,
-                                )
-                            }
-                            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                            TerminalMenuItem(
-                                stringResource(R.string.new_session),
-                                ChromeIcon.ADD,
-                                enabled = ready,
-                                onClick = {
-                                    menu = false
-                                    newSession = true
-                                },
-                            )
-                            OwnershipMenuItem(controlled, ready && client.hasScreen) {
-                                menu = false
-                                if (controlled) client.releaseControl() else client.takeControl()
-                            }
-                            QuickThemeMenuItem(palette.dark) { dark ->
-                                menu = false
-                                model.changeAppearance(
-                                    if (dark) Appearance.DARK else Appearance.LIGHT
-                                )
-                            }
-                            TerminalMenuItem(
-                                stringResource(R.string.preferences),
-                                ChromeIcon.SETTINGS,
-                                enabled = true,
-                                onClick = {
-                                    menu = false
-                                    openSettings(SettingsRoute.Preferences)
-                                },
-                            )
-                            TerminalMenuItem(
-                                stringResource(R.string.copy_viewport),
-                                ChromeIcon.COPY,
-                                enabled = client.hasScreen,
-                                onClick = {
-                                    menu = false
-                                    client.terminal.value?.let { screen ->
-                                        (getClipboard(model.getApplication()) as ClipboardManager)
-                                            .setPrimaryClip(
-                                                ClipData.newPlainText(
-                                                    "Rex terminal",
-                                                    screen.plainText(),
-                                                )
-                                            )
-                                    }
-                                },
-                            )
-                            TerminalMenuItem(
-                                stringResource(R.string.paste),
-                                ChromeIcon.PASTE,
-                                enabled = controlled,
-                                onClick = {
-                                    menu = false
-                                    pasteClipboard()
-                                },
-                            )
-                            TerminalMenuItem(
-                                stringResource(R.string.attach_file),
-                                ChromeIcon.FILE,
-                                enabled = controlled && model.images.state == null,
-                                onClick = {
-                                    menu = false
-                                    chooseFile()
-                                },
-                            )
-                            TerminalMenuItem(
-                                stringResource(R.string.port_forwarding),
-                                ChromeIcon.PORT_FORWARD,
-                                enabled = true,
-                                onClick = {
-                                    menu = false
-                                    forwards = true
-                                },
-                            )
-                            TerminalMenuItem(
-                                stringResource(
-                                    R.string.servers_connected_format,
-                                    model.connectedCount,
-                                ),
-                                ChromeIcon.SERVER,
-                                enabled = true,
-                                onClick = {
-                                    menu = false
-                                    servers = true
-                                },
-                            )
-                            TerminalMenuItem(
-                                stringResource(R.string.refresh_sessions),
-                                ChromeIcon.REFRESH,
-                                enabled = state.connected,
-                                onClick = {
-                                    menu = false
-                                    client.refresh()
-                                },
-                            )
-                        }
-                    }
-                },
-            )
+                    },
+                )
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.fillMaxSize()) {
-                    if (showServer || (state.phase == "disconnected" && !client.hasScreen)) {
+                    if (
+                        model.servers.isEmpty() ||
+                            (!connectionRequested &&
+                                state.phase == "disconnected" &&
+                                !client.hasScreen)
+                    ) {
                         Surface(
                             Modifier.padding(12.dp),
                             shape = RoundedCornerShape(18.dp),
@@ -743,8 +886,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
                                             onClick = { connectionError = model.connect(endpoint) },
-                                            enabled =
-                                                state.phase != "connecting" && endpoint.isNotBlank(),
+                                            enabled = endpoint.isNotBlank(),
                                         ) {
                                             Text(stringResource(R.string.connect))
                                         }
@@ -755,7 +897,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             TextButton(
                                                 onClick = {
                                                     model.disconnectServer(model.activeServerId)
-                                                }
+                                                },
                                             ) {
                                                 Text(stringResource(R.string.disconnect))
                                             }
@@ -763,20 +905,21 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             TextButton(
                                                 onClick = {
                                                     model.previewServer(model.activeServerId)
-                                                }
+                                                },
                                             ) {
                                                 Text(stringResource(R.string.try_preview))
-                                            }
-                                        if (client.hasScreen)
-                                            TextButton(onClick = { showServer = false }) {
-                                                Text(stringResource(R.string.hide))
                                             }
                                     }
                                 }
                         }
                     }
                     if (blocks.isEmpty() && model.servers.isNotEmpty())
-                        ConnectionNotice(state.phase, model.networkAvailable, client::retryNow)
+                        ConnectionNotice(
+                            connectionPhase,
+                            model.networkAvailable,
+                            client::retryNow,
+                            configError = networkConfigError,
+                        )
                     if (
                         blocks.isEmpty() &&
                             state.connected &&
@@ -805,39 +948,157 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
-                    if (blocks.isNotEmpty()) {
-                        Box(Modifier.weight(1f).fillMaxWidth().padding(bottom = 3.dp)) {
-                            if (!floatingActive || hiddenFloating != chosen)
-                                LiveTerminal(
-                                    client,
-                                    carouselBlocks,
-                                    chosen,
-                                    liveBlock,
-                                    state.programs,
-                                    controlled,
-                                    fontSize.toFloat(),
-                                    client::type,
-                                    client::scroll,
-                                    client::wheel,
-                                    client::takeControl,
-                                    client::scrollToBottom,
-                                    client::resize,
-                                    ::openPane,
-                                    { picker = "panes" },
-                                    { view ->
-                                        terminalView = view
-                                        view.onOpenLink = { url ->
-                                            val loopback = LoopbackLink.parse(url)
-                                            if (loopback == null)
-                                                PortForwards.openBrowser(context, url)
-                                            else if (
-                                                ready &&
-                                                    chosen == liveBlock &&
-                                                    displayedSession.isNotBlank()
-                                            ) {
-                                                val sourceServer = model.activeServer
-                                                val sourceSession = displayedSession
-                                                withUploadNetwork({
+                    val tabActions: @Composable (Boolean, Boolean) -> Unit = { vertical, sideRail ->
+                        TerminalActions(
+                            state.connected && state.selectedSession.isNotBlank(),
+                            model.connectedCount > 0,
+                            { model.showActivity(true) },
+                            { picker = "tabs" },
+                            attentionCount = activityBadges.elsewhere,
+                            keyboardLabel =
+                                if (!controlled)
+                                    stringResource(R.string.a11y_take_control_and_show_keyboard)
+                                else stringResource(R.string.a11y_show_keyboard),
+                            onKeyboard =
+                                if (toolbarHidden)
+                                    ({
+                                        if (!controlled) client.takeControl()
+                                        else terminalView?.keyboard()
+                                    })
+                                else null,
+                            vertical = vertical,
+                            sideRail = sideRail,
+                        )
+                    }
+                    val tabRail: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
+                        val isFloatingRail = floatingTabs && handle != null
+                        TerminalTabRail(
+                            windows,
+                            activeWindowId,
+                            state.connected && !state.creating && !changingSession,
+                            client::selectWindow,
+                            client::tabPrograms,
+                            client::tabPaneIndex,
+                            tabLayout.position,
+                            tabLayout.style,
+                            paneTitle = { w, pane ->
+                                state.titles[w.blocks.getOrNull(pane)?.id].orEmpty()
+                            },
+                            paneWorking = { w -> w.blocks.any { it.id in state.workingBlocks } },
+                            onClose = { closeTarget = closeTabTarget(it) },
+                            onMove = client::moveTab,
+                            reorderKey = displayedSession,
+                            paneProgress = { w ->
+                                state.terminalProgress[
+                                        w.blocks.getOrNull(client.tabPaneIndex(w))?.id]
+                                    ?: w.blocks
+                                        .mapNotNull { state.terminalProgress[it.id] }
+                                        .firstOrNull()
+                            },
+                            tabAttention = { w -> activityBadges.tabs[w.id] ?: 0 },
+                            animateWorking = !workspaceBackdrop,
+                            onStyle = {
+                                model.changeTabLayout(tabWidth.first, tabLayout.copy(style = it))
+                            },
+                            extendUnderNav = extendUnderNav,
+                            island = tiles != null && !floatingTabs,
+                            islandBottom =
+                                terminalBottomMargin + (if (extendUnderNav) 0.dp else 8.dp),
+                            floating = floatingTabs,
+                            hazeState = terminalHaze,
+                            handle = handle,
+                            onFanToggle =
+                                if (isFloatingRail)
+                                    { id -> fannedTabId = if (fannedTabId == id) null else id }
+                                else null,
+                            onFanDismiss = { fannedTabId = null },
+                            onFanAnchorBounds = { if (isFloatingRail) fanAnchorBounds = it },
+                            onFanBarBounds = { if (isFloatingRail) fanBarBounds = it },
+                            onFanAnchorGone = { id -> if (fannedTabId == id) fannedTabId = null },
+                            onMenuOpenChange = { if (isFloatingRail) floatingTabMenuOpen = it },
+                        ) {
+                            tabActions(tabLayout.style == TabRailStyle.ICONS, true)
+                        }
+                    }
+                    // A floating strip always carries a grip; the docked strip never does.
+                    val tabStrip: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
+                        val isFloatingStrip = floatingTabs && handle != null
+                        TerminalTabs(
+                            windows,
+                            activeWindowId,
+                            state.connected && !state.creating && !changingSession,
+                            client::selectWindow,
+                            panePrograms = client::tabPrograms,
+                            selectedPane = client::tabPaneIndex,
+                            paneTitle = { window, pane ->
+                                state.titles[window.blocks.getOrNull(pane)?.id].orEmpty()
+                            },
+                            isPaneWorking = { window, pane ->
+                                window.blocks.getOrNull(pane)?.id in state.workingBlocks
+                            },
+                            paneWorking = { window ->
+                                window.blocks.any { it.id in state.workingBlocks }
+                            },
+                            onClose = { closeTarget = closeTabTarget(it) },
+                            onMove = client::moveTab,
+                            reorderKey = displayedSession,
+                            animateWorking = !workspaceBackdrop,
+                            tabAttention = { window -> activityBadges.tabs[window.id] ?: 0 },
+                            paneProgress = { window ->
+                                state.terminalProgress[
+                                        window.blocks.getOrNull(client.tabPaneIndex(window))?.id]
+                                    ?: window.blocks.firstNotNullOfOrNull {
+                                        state.terminalProgress[it.id]
+                                    }
+                            },
+                            contentReady =
+                                client.hasScreen &&
+                                    !state.creating &&
+                                    !changingSession &&
+                                    windows.isNotEmpty() &&
+                                    windows.all { window ->
+                                        val block =
+                                            window.blocks.getOrNull(client.tabPaneIndex(window))
+                                        block != null && state.programs[block.id]?.pending == false
+                                    },
+                            floating = handle != null,
+                            hazeState = terminalHaze,
+                            handle = handle,
+                            onFanToggle =
+                                if (isFloatingStrip)
+                                    { id -> fannedTabId = if (fannedTabId == id) null else id }
+                                else null,
+                            onFanDismiss = { fannedTabId = null },
+                            onFanAnchorBounds = { if (isFloatingStrip) fanAnchorBounds = it },
+                            onFanBarBounds = { if (isFloatingStrip) fanBarBounds = it },
+                            onFanAnchorGone = { id -> if (fannedTabId == id) fannedTabId = null },
+                            onMenuOpenChange = { if (isFloatingStrip) floatingTabMenuOpen = it },
+                            actions = { tabActions(false, false) },
+                        )
+                    }
+                    if (blocks.isNotEmpty())
+                        Row(Modifier.weight(1f).fillMaxWidth()) {
+                            if (!floatingTabs && tabLayout.position == TabBarPosition.LEFT)
+                                tabRail(null)
+                            Box(
+                                Modifier.weight(1f)
+                                    .fillMaxHeight()
+                                    .padding(bottom = terminalBottomMargin),
+                            ) {
+                                val onView: (TerminalView) -> Unit = { view ->
+                                    terminalView = view
+                                    view.onOpenLink = { url ->
+                                        val loopback = LoopbackLink.parse(url)
+                                        if (loopback == null) PortForwards.openBrowser(context, url)
+                                        else if (
+                                            ready &&
+                                                chosen == liveBlock &&
+                                                displayedSession.isNotBlank()
+                                        ) {
+                                            val sourceServer = model.activeServer
+                                            val sourceSession = displayedSession
+                                            withUploadNetwork(
+                                                {
                                                     if (
                                                         model.servers.any {
                                                             it.id == sourceServer.id &&
@@ -850,250 +1111,341 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                             sourceSession,
                                                             loopback,
                                                         )
-                                                })
-                                            } else
-                                                PortForwards.notice =
-                                                    "Wait for this pane to connect before forwarding its link."
-                                        }
-                                    },
-                                    Modifier.fillMaxSize(),
-                                    floatingDock = floating.isNotEmpty(),
-                                    paneLayout = window?.layout.orEmpty(),
-                                    titles = state.titles,
-                                    directories = state.directories,
-                                    hazeState = terminalHaze,
-                                    captureBackdrop =
-                                        floatingBackdrop ||
-                                            ownerBackdrop ||
-                                            readyBackdrop ||
-                                            model.images.state != null,
-                                    onImage = imageCommit,
-                                    onPaste = ::pasteClipboard,
-                                    padding = model.terminalPadding,
-                                    extendPadding = model.extendPadding,
-                                    imeEnterSubmits = model.enterSubmits,
-                                    tapOpensKeyboard = model.toolbarWithKeyboardOnly,
-                                    keyboardChrome = {
-                                        if (model.toolbarWithKeyboardOnly) toolbarHeight[0] else 0
-                                    },
-                                )
-                            if (floatingActive && hiddenFloating == chosen)
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        stringResource(R.string.floating_panes_minimized),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                },
+                                            )
+                                        } else
+                                            PortForwards.notice =
+                                                context.getString(
+                                                    R.string.notice_wait_before_forward,
+                                                )
+                                    }
+                                }
+                                val captureTerminal =
+                                    floatingBackdrop ||
+                                        ownerBackdrop ||
+                                        readyBackdrop ||
+                                        shortcutBackdrop ||
+                                        floatingTabs ||
+                                        model.images.state != null
+                                if (carouselBlocks.isEmpty())
+                                    Box(
+                                        Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.floating_panes_minimized),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                else if (tiles != null && window != null) {
+                                    MultiPaneLayout(
+                                        client,
+                                        displayedSession,
+                                        window.id,
+                                        tiles,
+                                        chosen,
+                                        liveBlock,
+                                        controlled,
+                                        state.programs,
+                                        state.mirrorWaiting,
+                                        fontSize.toFloat(),
+                                        onFocus = { id, grid ->
+                                            client.selectBlock(id, grid, keepTiled = true)
+                                        },
+                                        onView = onView,
+                                        onImage = imageCommit,
+                                        onPaste = ::pasteClipboard,
+                                        imeEnterSubmits = model.enterSubmits,
+                                        keyboardChrome = {
+                                            if (model.toolbarWithKeyboardOnly) toolbarHeight[0]
+                                            else 0
+                                        },
+                                        extendsUnderNavigation = extendUnderNav,
+                                        hazeState = terminalHaze,
+                                        captureBackdrop = captureTerminal,
+                                        bottomPaddingDp = if (floating.isNotEmpty()) 28 else 6,
+                                        bottomMargin = !extendUnderNav,
+                                        sideRail =
+                                            if (floatingTabs) TabBarPosition.BOTTOM
+                                            else tabLayout.position,
+                                        splits = window.splits,
+                                        zoomed = window.zoomed,
+                                        paneActionsEnabled = ready,
+                                        floatingPanes = floatingOverlay,
+                                        allowFloat = allowFloatingOverlay && tiles.size > 1,
+                                        onMinimizeFloating = ::minimizeFloating,
+                                        onDockFloating = { dockFloatingPane = it },
+                                        onClosePane = { id ->
+                                            blocks
+                                                .firstOrNull { it.id == id }
+                                                ?.let { closeTarget = closePaneTarget(it) }
+                                        },
+                                    )
+                                } else {
+                                    LiveTerminal(
+                                        client,
+                                        carouselBlocks,
+                                        chosen,
+                                        liveBlock,
+                                        state.programs,
+                                        controlled,
+                                        fontSize.toFloat(),
+                                        client::type,
+                                        client::scroll,
+                                        client::wheel,
+                                        client::takeControl,
+                                        client::scrollToBottom,
+                                        client::resize,
+                                        ::openPane,
+                                        { picker = "panes" },
+                                        onView,
+                                        Modifier.fillMaxSize(),
+                                        floatingDock = floating.isNotEmpty(),
+                                        paneLayout = window?.layout.orEmpty(),
+                                        titles = state.titles,
+                                        directories = state.directories,
+                                        hazeState = terminalHaze,
+                                        captureBackdrop = captureTerminal,
+                                        onImage = imageCommit,
+                                        onPaste = ::pasteClipboard,
+                                        padding = model.terminalPadding,
+                                        extendPadding = model.extendPadding,
+                                        imeEnterSubmits = model.enterSubmits,
+                                        keyboardChrome = {
+                                            if (model.toolbarWithKeyboardOnly) toolbarHeight[0]
+                                            else 0
+                                        },
+                                        squareCorners = tabLayout.side && !floatingTabs,
+                                        extendsUnderNavigation = extendUnderNav,
+                                        navigationClearance = singlePaneNavigationClearance,
+                                        bottomOverlayInset = bottomOverlayInset,
                                     )
                                 }
-
-                            ConnectionNotice(
-                                state.phase,
-                                model.networkAvailable,
-                                client::retryNow,
-                                Modifier.align(Alignment.TopCenter).padding(8.dp),
-                            )
-                            ReadyNotice(
-                                state.connectionEpoch,
-                                controlled,
-                                ready,
-                                Modifier.align(Alignment.TopCenter).padding(8.dp),
-                                hazeState = terminalHaze,
-                                onVisibleChange = { readyBackdrop = it },
-                            )
-                            OtherOwnerNotice(
-                                chosen,
-                                state.otherOwner && !controlled,
-                                ready,
-                                client.screenDimensions,
-                                client::takeControl,
-                                Modifier.align(Alignment.TopEnd).padding(10.dp),
-                                hazeState = terminalHaze,
-                                onVisibleChange = { ownerBackdrop = it },
-                            )
-                            val shortcutProfile =
-                                if (ready && chosen == liveBlock && chosen !in state.cachedPrograms)
-                                    ShortcutProfiles.active(
-                                        model.shortcutProfiles,
-                                        state.programs[chosen],
-                                    )
-                                else null
-                            if (
-                                (!floatingActive || hiddenFloating != chosen) &&
-                                    shortcutProfile != null
-                            ) {
-                                NeovimShortcutButton(
-                                    shortcutProfile.items,
-                                    keyTarget,
+                                ConnectionNotice(
+                                    connectionPhase,
+                                    model.networkAvailable,
+                                    client::retryNow,
+                                    Modifier.align(Alignment.TopCenter).padding(8.dp),
+                                    configError = networkConfigError,
+                                )
+                                ReadyNotice(
+                                    state.connectionEpoch,
                                     controlled,
-                                    onChoose = { item, target ->
-                                        if (item.confirm)
-                                            pendingShortcut = Triple(shortcutProfile, item, target)
-                                        else
-                                            client.shortcut(
-                                                model.shortcutProfiles,
-                                                shortcutProfile,
-                                                item,
-                                                target,
-                                            )
-                                    },
-                                    onCustomize = {
-                                        openSettings(
-                                            SettingsRoute.ShortcutEditor(shortcutProfile.id)
-                                        )
-                                    },
-                                    layout = model.neovimShortcutLayout,
-                                    effect = model.neovimShortcutEffect,
-                                    hapticsEnabled = model.neovimShortcutHaptics,
-                                    name = shortcutProfile.name,
-                                    modifier = Modifier.fillMaxSize(),
-                                    position = model.neovimShortcutPosition,
-                                    onPosition = model::moveNeovimShortcut,
-                                    bottomInset =
-                                        if (floating.isNotEmpty() || carouselBlocks.size > 1) 64.dp
-                                        else 10.dp,
-                                )
-                            }
-                            if (floating.isNotEmpty())
-                                FloatingPaneDock(
-                                    floating,
-                                    chosen.takeIf { floatingActive && hiddenFloating != chosen },
-                                    state.programs,
-                                    state.titles,
                                     ready,
-                                    ::openPane,
-                                    ::minimizeFloating,
-                                    Modifier.align(Alignment.BottomEnd).padding(end = 6.dp),
-                                    directories = state.directories,
+                                    Modifier.align(Alignment.TopCenter).padding(8.dp),
                                     hazeState = terminalHaze,
-                                    onExpandedChange = { floatingBackdrop = it },
+                                    onVisibleChange = { readyBackdrop = it },
                                 )
+                                OtherOwnerNotice(
+                                    chosen,
+                                    state.otherOwner && !controlled,
+                                    ready,
+                                    client.screenDimensions,
+                                    { client.takeControl() },
+                                    Modifier.align(Alignment.TopEnd).padding(10.dp),
+                                    hazeState = terminalHaze,
+                                    onVisibleChange = { ownerBackdrop = it },
+                                )
+                                val shortcutProfile =
+                                    if (
+                                        ready &&
+                                            chosen == liveBlock &&
+                                            chosen !in state.cachedPrograms
+                                    )
+                                        ShortcutProfiles.active(
+                                            model.shortcutProfiles,
+                                            state.programs[chosen],
+                                        )
+                                    else null
+                                if (shortcutProfile != null) {
+                                    NeovimShortcutButton(
+                                        shortcutProfile.items,
+                                        keyTarget,
+                                        controlled,
+                                        onChoose = { item, target ->
+                                            if (item.confirm)
+                                                pendingShortcut =
+                                                    Triple(shortcutProfile, item, target)
+                                            else
+                                                client.shortcut(
+                                                    model.shortcutProfiles,
+                                                    shortcutProfile,
+                                                    item,
+                                                    target,
+                                                )
+                                        },
+                                        onCustomize = {
+                                            openSettings(
+                                                SettingsRoute.ShortcutEditor(shortcutProfile.id),
+                                            )
+                                        },
+                                        layout = model.neovimShortcutLayout,
+                                        effect = model.neovimShortcutEffect,
+                                        hapticsEnabled = model.neovimShortcutHaptics,
+                                        name = shortcutProfile.name,
+                                        modifier = Modifier.fillMaxSize(),
+                                        position = model.neovimShortcutPosition,
+                                        onPosition = model::moveNeovimShortcut,
+                                        bottomInset =
+                                            bottomOverlayInset +
+                                                (if (
+                                                    floating.isNotEmpty() || carouselBlocks.size > 1
+                                                )
+                                                    64.dp
+                                                else 10.dp),
+                                        hazeState = terminalHaze,
+                                        onExpandedChange = { shortcutBackdrop = it },
+                                    )
+                                }
+                                if (floating.isNotEmpty()) {
+                                    FloatingPaneDock(
+                                        floating,
+                                        activeFloating?.id,
+                                        state.programs,
+                                        state.titles,
+                                        ready,
+                                        ::openPane,
+                                        { activeFloating?.let { minimizeFloating(it.id) } },
+                                        Modifier.align(Alignment.BottomEnd)
+                                            .padding(end = 6.dp, bottom = bottomOverlayInset),
+                                        directories = state.directories,
+                                        hazeState = terminalHaze,
+                                        onExpandedChange = { floatingBackdrop = it },
+                                    )
+                                }
+                                if (floatingTabs) {
+                                    val fannedWindow = resolveFannedWindow()
+                                    val selectedFanBlockId =
+                                        fannedWindow
+                                            ?.blocks
+                                            ?.getOrNull(client.tabPaneIndex(fannedWindow))
+                                            ?.id ?: chosen
+                                    val fanItems =
+                                        remember(
+                                            fannedWindow,
+                                            selectedFanBlockId,
+                                            state.programs,
+                                            state.titles,
+                                            state.workingBlocks,
+                                            state.terminalProgress,
+                                        ) {
+                                            fannedWindow
+                                                ?.blocks
+                                                ?.map { block ->
+                                                    val program =
+                                                        state.programs[block.id]
+                                                            ?: ProgramIdentity.Loading
+                                                    TabFanItem(
+                                                        id = block.id,
+                                                        program = program,
+                                                        title =
+                                                            program.paneTitle(
+                                                                block.label,
+                                                                state.titles[block.id].orEmpty(),
+                                                            ),
+                                                        selected = block.id == selectedFanBlockId,
+                                                        working = block.id in state.workingBlocks,
+                                                        progress = state.terminalProgress[block.id],
+                                                    )
+                                                }
+                                                .orEmpty()
+                                        }
+                                    val fanMarquee =
+                                        rememberRainbowMarquee(
+                                            fannedWindow != null &&
+                                                !workspaceBackdrop &&
+                                                fanItems.any {
+                                                    it.working || it.progress?.busy == true
+                                                },
+                                        )
+                                    TabStackFan(
+                                        visible = fannedWindow != null && !paneObscured,
+                                        items = fanItems,
+                                        anchorBounds = fanAnchorBounds,
+                                        barBounds = fanBarBounds,
+                                        preferredAxis =
+                                            if (tabLayout.side) Orientation.Vertical
+                                            else Orientation.Horizontal,
+                                        marquee = fanMarquee,
+                                        onSelect = { blockId ->
+                                            fannedTabId = null
+                                            openPane(blockId)
+                                        },
+                                        onDismiss = { fannedTabId = null },
+                                        bar = {
+                                            FloatingTabBar(
+                                                model.floatingTabPosition,
+                                                {
+                                                    fannedTabId = null
+                                                    model.moveFloatingTab(it)
+                                                },
+                                                Modifier.fillMaxSize(),
+                                                // Only the left and right rails tuck themselves
+                                                // away.
+                                                hideAtEdges = tabLayout.side,
+                                                keepVisible =
+                                                    (fannedWindow != null && !paneObscured) ||
+                                                        floatingTabMenuOpen,
+                                                onDragStart = { fannedTabId = null },
+                                            ) { handle ->
+                                                if (tabLayout.position == TabBarPosition.BOTTOM)
+                                                    Box(
+                                                        Modifier.widthIn(max = FloatingTabBarWidth),
+                                                    ) {
+                                                        tabStrip(handle)
+                                                    }
+                                                else tabRail(handle)
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                            if (!floatingTabs && tabLayout.position == TabBarPosition.RIGHT)
+                                tabRail(null)
                         }
-                    } else
+                    else
                         Box(
                             Modifier.weight(1f).fillMaxWidth().padding(24.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                if (state.connected)
-                                    stringResource(R.string.choose_session_or_start)
-                                else stringResource(R.string.terminals_anywhere),
-                                fontFamily = MonoUi,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    if (state.connected || state.phase == "preview" || client.hasScreen) {
-                        Column(
-                            Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                        ) {
-                            TerminalTabs(
-                                windows,
-                                window?.id.orEmpty(),
-                                state.connected && !state.creating && !changingSession,
-                                client::selectWindow,
-                                panePrograms = client::tabPrograms,
-                                selectedPane = client::tabPaneIndex,
-                                paneTitle = { w, pane ->
-                                    state.titles[w.blocks.getOrNull(pane)?.id].orEmpty()
-                                },
-                                isPaneWorking = { w, pane ->
-                                    w.blocks.getOrNull(pane)?.id in state.workingBlocks
-                                },
-                                paneWorking = { w ->
-                                    w.blocks.any { it.id in state.workingBlocks }
-                                },
-                                onClose = { closeTarget = closeTabTarget(it) },
-                                onMove = client::moveTab,
-                                reorderKey = displayedSession,
-                                animateWorking = !model.activityVisible,
-                                tabAttention = { w -> activityBadges.tabs[w.id] ?: 0 },
-                                paneProgress = { w ->
-                                    state.terminalProgress[
-                                            w.blocks.getOrNull(client.tabPaneIndex(w))?.id]
-                                        ?: w.blocks
-                                            .mapNotNull { state.terminalProgress[it.id] }
-                                            .firstOrNull()
-                                },
-                                contentReady =
-                                    client.hasScreen &&
-                                        !state.creating &&
-                                        !changingSession &&
-                                        windows.isNotEmpty() &&
-                                        windows.all { w ->
-                                            val block = w.blocks.getOrNull(client.tabPaneIndex(w))
-                                            block != null &&
-                                                state.programs[block.id]?.pending == false
-                                        },
-                                actions = {
-                                    TerminalActions(
-                                        state.connected && state.selectedSession.isNotBlank(),
-                                        model.connectedCount > 0,
-                                        { model.showActivity(true) },
-                                        { picker = "tabs" },
-                                        attentionCount = activityBadges.elsewhere,
-                                        keyboardLabel =
-                                            if (!controlled)
-                                                stringResource(
-                                                    R.string.a11y_take_control_and_show_keyboard
-                                                )
-                                            else stringResource(R.string.a11y_show_keyboard),
-                                        onKeyboard =
-                                            if (toolbarHidden)
-                                                ({
-                                                    if (!controlled) client.takeControl()
-                                                    else terminalView?.keyboard()
-                                                })
-                                            else null,
-                                    )
-                                },
-                            )
-                            Box(
-                                Modifier.fillMaxWidth()
-                                    .then(
-                                        if (model.toolbarWithKeyboardOnly)
-                                            Modifier.keyboardRevealed(
-                                                WindowInsets.ime,
-                                                WindowInsets.navigationBars,
-                                            ) {
-                                                toolbarHeight[0] = it
-                                            }
-                                        else Modifier
-                                    )
-                            ) {
-                                KeyboardBar(
-                                    controlled,
-                                    ready,
-                                    client.controlModifier,
-                                    client.altModifier,
-                                    client.shiftModifier,
-                                    keyboardVisible,
-                                    client::toggleControl,
-                                    client::toggleAlt,
-                                    client::toggleShift,
-                                    client::pressShift,
-                                    client::releaseShift,
-                                    { client.keyForTarget(it, keyTarget) },
-                                    readable = state.connected,
-                                    onControlShortcut = { client.controlShortcut(it, keyTarget) },
-                                    inputKey = keyTarget,
-                                    shortcutGesture = model.shortcutGesture,
-                                    arrowJoystickEnabled = model.arrowJoystickEnabled,
-                                    onPaste = ::pasteClipboard,
-                                    onPrompt =
-                                        if (client.hasSemanticPrompts && !changingSession)
-                                            client::scrollPrompt
-                                        else null,
-                                    toolbarKeys = model.toolbarKeys,
-                                    controlItems = model.controlItems,
-                                ) {
-                                    if (!controlled) client.takeControl()
-                                    else if (keyboardVisible) terminalView?.hideKeyboard()
-                                    else terminalView?.keyboard()
-                                }
+                            if (state.connected || !connectionRequested) {
+                                Text(
+                                    if (state.connected)
+                                        stringResource(R.string.choose_session_or_start)
+                                    else stringResource(R.string.terminals_anywhere),
+                                    fontFamily = MonoUi,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
+                    if (state.connected || state.phase == "preview" || client.hasScreen) {
+                        WorkspaceBottomBar(
+                            model,
+                            client,
+                            state,
+                            changingSession,
+                            // Without a docked rail the bar keeps its rounded top.
+                            tabLayout.side && !floatingTabs,
+                            extendUnderNav,
+                            controlled,
+                            ready,
+                            keyboardVisible,
+                            keyTarget,
+                            toolbarHeight,
+                            onPaste = ::pasteClipboard,
+                            onKeyboard = {
+                                if (!controlled) client.takeControl()
+                                else if (keyboardVisible) terminalView?.hideKeyboard()
+                                else terminalView?.keyboard()
+                            },
+                            tabs =
+                                if (floatingTabs) null
+                                else {
+                                    { tabStrip(null) }
+                                },
+                        )
                     }
                 }
                 model.images.state?.let { status ->
@@ -1108,24 +1460,138 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     bottom =
                                         if (state.connected)
                                             if (floating.isNotEmpty()) 152.dp else 112.dp
-                                        else 16.dp
+                                        else 16.dp,
                                 ),
                         retryable = model.images.retryable,
                         hazeState = terminalHaze,
                     )
                 }
                 // Loading feedback must not resize the terminal grid during navigation.
-                if (
-                    state.creating ||
-                        navigation.pending ||
-                        state.phase == "connecting" ||
-                        state.phase == "reconnecting"
-                )
+                if (state.creating || navigation.pending)
                     LinearProgressIndicator(
-                        Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp)
+                        Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp),
                     )
             }
         }
+    }
+    if (menu) {
+        val canTakeControl = ready && client.hasScreen
+        val canAttach = controlled && model.images.state == null
+        TerminalActionsDrawer(
+            title =
+                if (chosenBlock == null) stringResource(R.string.terminal_actions) else paneTitle,
+            subtitle =
+                listOfNotNull(
+                        sessionLabel,
+                        model.activeServer.label.takeIf { model.servers.isNotEmpty() },
+                    )
+                    .joinToString(" · "),
+            status =
+                if (state.connected)
+                    if (controlled) stringResource(R.string.in_control)
+                    else stringResource(R.string.viewing_terminal)
+                else phaseLabel(state.phase),
+            dimensions = client.screenDimensions,
+            controlled = controlled,
+            ownership =
+                if (canTakeControl)
+                    ({ if (controlled) client.releaseControl() else client.takeControl() })
+                else null,
+            quickActions =
+                listOfNotNull(
+                    TerminalDrawerAction(
+                        stringResource(R.string.paste),
+                        ChromeIcon.PASTE,
+                        enabled = controlled,
+                    ) {
+                        pasteClipboard()
+                    },
+                    TerminalDrawerAction(
+                        stringResource(R.string.image),
+                        ChromeIcon.IMAGE,
+                        enabled = canAttach,
+                        run = ::chooseImage,
+                    ),
+                    TerminalDrawerAction(
+                        stringResource(R.string.attach_file),
+                        ChromeIcon.FILE,
+                        enabled = canAttach,
+                        run = ::chooseFile,
+                    ),
+                    TerminalDrawerAction(
+                        stringResource(R.string.copy_viewport),
+                        ChromeIcon.COPY,
+                        enabled = client.hasScreen,
+                    ) {
+                        client.terminal.value?.let { screen ->
+                            (getClipboard(context) as ClipboardManager).setPrimaryClip(
+                                ClipData.newPlainText(
+                                    context.getString(R.string.clip_rex_terminal),
+                                    screen.plainText(),
+                                ),
+                            )
+                        }
+                    },
+                    if (unfoldedFullScreen) {
+                        val multiple = model.multiPaneUnfolded
+                        TerminalDrawerAction(
+                            if (multiple) stringResource(R.string.single_pane)
+                            else stringResource(R.string.multiple_panes),
+                            if (multiple) ChromeIcon.ZOOM else ChromeIcon.SPLIT,
+                        ) {
+                            model.changeMultiPaneUnfolded(!multiple)
+                        }
+                    } else null,
+                    TerminalDrawerAction(
+                        if (palette.dark) stringResource(R.string.light_theme)
+                        else stringResource(R.string.dark_theme),
+                        if (palette.dark) ChromeIcon.SUN else ChromeIcon.MOON,
+                    ) {
+                        model.changeAppearance(
+                            if (palette.dark) Appearance.LIGHT else Appearance.DARK,
+                        )
+                    },
+                ),
+            actions =
+                listOf(
+                    TerminalDrawerAction(
+                        stringResource(R.string.new_session),
+                        ChromeIcon.ADD,
+                        enabled = ready,
+                        opensDrawer = true,
+                    ) {
+                        newSession = true
+                    },
+                    TerminalDrawerAction(
+                        stringResource(R.string.port_forwarding),
+                        ChromeIcon.PORT_FORWARD,
+                        opensDrawer = true,
+                    ) {
+                        forwards = true
+                    },
+                    TerminalDrawerAction(
+                        stringResource(R.string.servers_connected_format, model.connectedCount),
+                        ChromeIcon.SERVER,
+                        opensDrawer = true,
+                    ) {
+                        servers = true
+                    },
+                    TerminalDrawerAction(
+                        stringResource(R.string.refresh_sessions),
+                        ChromeIcon.REFRESH,
+                        enabled = state.connected,
+                    ) {
+                        client.refresh()
+                    },
+                ),
+            onPreferences = { openSettings(SettingsRoute.Preferences) },
+            onClosePane =
+                chosenBlock
+                    ?.takeIf { ready }
+                    ?.let { block -> { closeTarget = closePaneTarget(block) } },
+            onDismiss = { menu = false },
+            hazeState = workspaceHaze,
+        )
     }
     if (model.activityVisible)
         ActivitySheet(
@@ -1157,8 +1623,19 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 onEnterSubmits = model::changeEnterSubmits,
                 toolbarWithKeyboardOnly = model.toolbarWithKeyboardOnly,
                 onToolbarWithKeyboardOnly = model::changeToolbarWithKeyboardOnly,
+                multiPaneUnfolded = model.multiPaneUnfolded,
+                onMultiPaneUnfolded = model::changeMultiPaneUnfolded,
+                tabLayouts = model.tabLayouts,
+                tabWidth = tabWidth,
+                onTabLayout = model::changeTabLayout,
+                floatingTabs = model.floatingTabs,
+                onFloatingTabs = model::changeFloatingTabs,
+                compactTopBar = model.compactTopBar,
+                onCompactTopBar = model::changeCompactTopBar,
                 codexTitleAttention = model.experimentalCodexAttention,
                 onCodexTitleAttention = model::changeCodexAttention,
+                frostedEffectsEnabled = model.frostedEffectsEnabled,
+                onFrostedEffects = model::changeFrostedEffects,
                 minimizeFloatingPanes = model.minimizeFloatingPanes,
                 onMinimizeFloatingPanes = model::changeMinimizeFloatingPanes,
                 onNetwork = { openSettings(SettingsRoute.Network) },
@@ -1196,7 +1673,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 closeSettings()
             }
         SettingsRoute.Language ->
-            LanguageDialog(model.language, model::changeLanguage) { closeSettings() }
+            LanguageSheet(model.language, model::changeLanguage, hazeState = workspaceHaze) {
+                closeSettings()
+            }
         SettingsRoute.BackgroundAlerts ->
             BackgroundAlertsDialog(model, hazeState = workspaceHaze) { closeSettings() }
         SettingsRoute.About -> AboutSheet(hazeState = workspaceHaze) { closeSettings() }
@@ -1295,14 +1774,14 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     }
                 if (saved != null && target != null && target.session.isNotBlank())
                     PortForwards.update(
-                        saved.copy(session = target.session, server = target.profile.label)
+                        saved.copy(session = target.session, server = target.profile.label),
                     )
                 withUploadNetwork({ PortForwards.requestStart(context, id) })
             },
         ) { target, host, port, local ->
-            withUploadNetwork({
-                PortForwards.start(context, target.profile, target.session, host, port, local)
-            })
+            withUploadNetwork(
+                { PortForwards.start(context, target.profile, target.session, host, port, local) },
+            )
         }
     if (servers) ServersSheet(model, hazeState = workspaceHaze) { servers = false }
     if (addServer)
@@ -1338,7 +1817,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             },
             onNewPane = { anchor, split ->
                 picker = ""
-                client.createPane(split, anchor)
+                client.createPane(
+                    split,
+                    anchor,
+                    keepTiled =
+                        allowFloatingOverlay && tiles != null && floating.any { it.id == anchor },
+                )
             },
             onCloseTab = {
                 picker = ""
@@ -1381,7 +1865,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         .firstOrNull { it.key == currentSessionKey }
                         ?.let { "${it.session.label} · ${it.server.label}" }
                         .orEmpty(),
-                    sessionsPageHeight(model.sessionTargets),
                     onShown = model::refreshSessionDetails,
                 ) {
                     SessionsPage(
@@ -1401,17 +1884,65 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             picker = ""
                             newSession = true
                         },
+                        allPanes = { back ->
+                            DisposableEffect(model) {
+                                model.showPaneCatalog(true)
+                                onDispose { model.showPaneCatalog(false) }
+                            }
+                            AllPanesPage(
+                                model.paneCatalogSources,
+                                model.activeServerId,
+                                displayedSession,
+                                chosen,
+                                back,
+                                model::refreshPaneCatalog,
+                            ) { target ->
+                                model.openCatalogPane(target).also { opened ->
+                                    if (opened) picker = ""
+                                }
+                            }
+                        },
                     )
                 },
             openSessions = picker == "sessions",
         )
+    dockFloatingPane?.let { id ->
+        if (allowFloatingOverlay && window != null && window.floatingPanes().any { it.id == id }) {
+            DockPaneSheet(
+                window,
+                state.programs,
+                state.titles,
+                ready,
+                workspaceHaze,
+                onDock = { anchor, split ->
+                    client.editTerminal(
+                        displayedSession,
+                        window.id,
+                        id,
+                        "dock_pane",
+                        anchor = anchor,
+                        split = split,
+                    )
+                },
+                onClose = { dockFloatingPane = null },
+            )
+        }
+    }
+    LaunchedEffect(allowFloatingOverlay, window?.layout, dockFloatingPane) {
+        if (
+            !allowFloatingOverlay ||
+                window?.layout?.any { it.id == dockFloatingPane && it.floating } != true
+        ) {
+            dockFloatingPane = null
+        }
+    }
     closeTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { closeTarget = null },
             title = {
                 Text(
                     if (target.tab) stringResource(R.string.close_tab_title)
-                    else stringResource(R.string.close_tab)
+                    else stringResource(R.string.close_tab),
                 )
             },
             text = {
@@ -1424,7 +1955,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             R.string.label_close_tab_confirm_many,
                             target.label,
                             target.blocks.size,
-                        )
+                        ),
                 )
             },
             confirmButton = {
@@ -1450,6 +1981,80 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
         NewSessionDialog(model.activeServer.label, ready, client::createSession) {
             newSession = false
         }
+}
+
+@Composable
+private fun WorkspaceBottomBar(
+    model: RexModel,
+    client: RexConnection,
+    state: AppState,
+    changingSession: Boolean,
+    sideTabs: Boolean,
+    extendUnderNav: Boolean,
+    controlled: Boolean,
+    ready: Boolean,
+    keyboardVisible: Boolean,
+    keyTarget: String,
+    toolbarHeight: IntArray,
+    onPaste: () -> Boolean,
+    onKeyboard: () -> Unit,
+    tabs: (@Composable () -> Unit)?,
+) {
+    // Square beside a side tab rail; the bottom tab bar keeps its rounded top.
+    val shape =
+        if (sideTabs) androidx.compose.ui.graphics.RectangleShape
+        else RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .then(
+                if (extendUnderNav) Modifier
+                else
+                    Modifier.windowInsetsPadding(
+                        WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                    ),
+            ),
+    ) {
+        if (!sideTabs && tabs != null) tabs()
+        Box(
+            Modifier.fillMaxWidth()
+                .then(
+                    if (model.toolbarWithKeyboardOnly)
+                        Modifier.keyboardRevealed(WindowInsets.ime, WindowInsets.navigationBars) {
+                            toolbarHeight[0] = it
+                        }
+                    else Modifier,
+                ),
+        ) {
+            KeyboardBar(
+                controlled,
+                ready,
+                client.controlModifier,
+                client.altModifier,
+                client.shiftModifier,
+                keyboardVisible,
+                client::toggleControl,
+                client::toggleAlt,
+                client::toggleShift,
+                client::pressShift,
+                client::releaseShift,
+                { client.keyForTarget(it, keyTarget) },
+                readable = state.connected,
+                onControlShortcut = { client.controlShortcut(it, keyTarget) },
+                inputKey = keyTarget,
+                shortcutGesture = model.shortcutGesture,
+                arrowJoystickEnabled = model.arrowJoystickEnabled,
+                onPaste = { onPaste() },
+                onPrompt =
+                    if (client.hasSemanticPrompts && !changingSession) client::scrollPrompt
+                    else null,
+                toolbarKeys = model.toolbarKeys,
+                controlItems = model.controlItems,
+                onKeyboard = onKeyboard,
+            )
+        }
+    }
 }
 
 private fun getClipboard(context: Context) = context.getSystemService(Context.CLIPBOARD_SERVICE)
@@ -1478,10 +2083,17 @@ internal fun SessionsPage(
     onRenameSession: (SessionTarget, String) -> Boolean,
     onSelect: (String) -> Unit,
     onNew: () -> Unit,
+    allPanes: (@Composable (onBack: () -> Unit) -> Unit)? = null,
 ) {
     var search by rememberSaveable { mutableStateOf("") }
+    var showAllPanes by rememberSaveable { mutableStateOf(false) }
+    if (showAllPanes && allPanes != null) {
+        allPanes { showAllPanes = false }
+        return
+    }
     var closeTarget by remember { mutableStateOf<SessionTarget?>(null) }
     var renameTarget by remember { mutableStateOf<SessionTarget?>(null) }
+    var revealedRow by rememberSaveable { mutableStateOf<String?>(null) }
     val groups =
         remember(targets, current, search) { SessionCatalog.groups(targets, current, search) }
     val scheme = MaterialTheme.colorScheme
@@ -1491,49 +2103,25 @@ internal fun SessionsPage(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BasicTextField(
+            SwitcherSearchField(
                 search,
                 { search = it },
-                Modifier.weight(1f)
-                    .heightIn(min = 40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(scheme.surfaceVariant.copy(alpha = .45f)) // alpha-ok search background
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                textStyle = SettingsType.row.copy(color = scheme.onSurface),
-                singleLine = true,
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
-                decorationBox = { field ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ChromeSymbol(
-                            ChromeIcon.SEARCH,
-                            Modifier.size(17.dp),
-                            scheme.onSurfaceVariant,
-                        )
-                        Box(Modifier.weight(1f)) {
-                            if (search.isEmpty())
-                                Text(
-                                    stringResource(R.string.find_session),
-                                    style = SettingsType.row,
-                                    color = scheme.onSurfaceVariant,
-                                )
-                            field()
-                        }
-                    }
-                },
+                stringResource(R.string.find_session),
+                Modifier.weight(1f),
             )
-            FilledTonalButton(
-                onClick = onNew,
-                enabled = canCreate,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                modifier = Modifier.heightIn(min = 40.dp),
-            ) {
-                ChromeSymbol(ChromeIcon.ADD, Modifier.size(15.dp), scheme.primary)
-                Spacer(Modifier.width(4.dp))
-                Text(stringResource(R.string.new_session), style = SettingsType.section)
+            if (allPanes != null) {
+                TextButton(
+                    onClick = { showAllPanes = true },
+                    contentPadding = PaddingValues(horizontal = 6.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.all_panes),
+                        style = SettingsType.section,
+                        maxLines = 1,
+                    )
+                }
             }
+            SwitcherAddButton(stringResource(R.string.new_session), canCreate, onNew)
         }
         LazyColumn(
             Modifier.fillMaxWidth().weight(1f),
@@ -1582,6 +2170,11 @@ internal fun SessionsPage(
                         onSelect = { onSelect(target.key) },
                         onClose = { closeTarget = target },
                         onRename = { renameTarget = target },
+                        revealed = revealedRow == target.key,
+                        onReveal = { open ->
+                            if (open) revealedRow = target.key
+                            else if (revealedRow == target.key) revealedRow = null
+                        },
                     )
                 }
             }
@@ -1612,7 +2205,7 @@ internal fun SessionsPage(
                         R.string.close_session_confirm,
                         target.session.label,
                         target.server.label,
-                    )
+                    ),
                 )
             },
             confirmButton = {
@@ -1650,7 +2243,7 @@ private fun LiveTerminal(
     onInput: (String) -> Unit,
     onScroll: (Int) -> Unit,
     onWheel: (Int, Int, Int, Int, Int) -> Unit,
-    onActivate: () -> Unit,
+    onActivate: (Boolean) -> Unit,
     onBottom: () -> Unit,
     onDimensions: (Int, Int) -> Unit,
     onSelect: (String) -> Unit,
@@ -1671,8 +2264,11 @@ private fun LiveTerminal(
     padding: TerminalPadding = TerminalPadding.NORMAL,
     extendPadding: Boolean = true,
     imeEnterSubmits: Boolean = false,
-    tapOpensKeyboard: Boolean = false,
     keyboardChrome: () -> Int = { 0 },
+    squareCorners: Boolean = false,
+    extendsUnderNavigation: Boolean = false,
+    navigationClearance: Dp = 0.dp,
+    bottomOverlayInset: Dp = 0.dp,
 ) {
     val layout by client.displayLayout.collectAsState()
     val screen = client.screenForLayout(layout)
@@ -1681,7 +2277,7 @@ private fun LiveTerminal(
         chosen,
         liveBlock,
         screen,
-        client.paneFrames,
+        { client.paneFrames[it] },
         programs,
         controlled,
         fontSize,
@@ -1710,8 +2306,11 @@ private fun LiveTerminal(
         padding = padding,
         extendPadding = extendPadding,
         imeEnterSubmits = imeEnterSubmits,
-        tapOpensKeyboard = tapOpensKeyboard,
         keyboardChrome = keyboardChrome,
+        squareCorners = squareCorners,
+        extendsUnderNavigation = extendsUnderNavigation,
+        navigationClearance = navigationClearance,
+        bottomOverlayInset = bottomOverlayInset,
     )
 }
 
@@ -1764,7 +2363,7 @@ private fun BackgroundAlertsDialog(
                         else if (
                             Build.VERSION.SDK_INT >= 33 &&
                                 context.checkSelfPermission(
-                                    Manifest.permission.POST_NOTIFICATIONS
+                                    Manifest.permission.POST_NOTIFICATIONS,
                                 ) != android.content.pm.PackageManager.PERMISSION_GRANTED
                         )
                             permission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -1787,9 +2386,9 @@ private fun BackgroundAlertsDialog(
                     onClick = {
                         context.startActivity(
                             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
                         )
-                    }
+                    },
                 ) {
                     Text(stringResource(R.string.notification_settings))
                 }

@@ -1,4 +1,6 @@
 //! Real actor + Ghostty + loopback protocol peers with deliberately held replies.
+//! tungstenite's upgrade callback returns a large ErrorResponse; the size is fixed by the API.
+#![allow(clippy::result_large_err)]
 use super::*;
 use futures_util::{SinkExt, StreamExt, stream::FuturesUnordered};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,6 +19,8 @@ struct Peer {
     endpoint: Endpoint,
     gate: Arc<Semaphore>,
     snapshot_gate: Arc<Semaphore>,
+    mirror_gate: Arc<Semaphore>,
+    mirror_disconnect: Arc<Semaphore>,
     writes: Arc<Mutex<Vec<String>>>,
     acknowledged: Arc<AtomicUsize>,
     methods: Arc<Mutex<Vec<String>>>,
@@ -47,6 +51,36 @@ impl Peer {
         floating: bool,
         slow_snapshot: bool,
     ) -> Self {
+        Self::with_options(delay, reject, drop_first, floating, slow_snapshot, false).await
+    }
+    async fn with_options(
+        delay: Duration,
+        reject: bool,
+        drop_first: bool,
+        floating: bool,
+        slow_snapshot: bool,
+        tiled: bool,
+    ) -> Self {
+        Self::with_views(
+            delay,
+            reject,
+            drop_first,
+            floating,
+            slow_snapshot,
+            tiled,
+            Vec::new(),
+        )
+        .await
+    }
+    async fn with_views(
+        delay: Duration,
+        reject: bool,
+        drop_first: bool,
+        floating: bool,
+        slow_snapshot: bool,
+        tiled: bool,
+        views: Vec<Value>,
+    ) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = Endpoint::new(
             &format!("http://{}", listener.local_addr().unwrap()),
@@ -56,6 +90,10 @@ impl Peer {
         let gate = Arc::new(Semaphore::new(0));
         let snapshot_gate = Arc::new(Semaphore::new(if slow_snapshot { 0 } else { 128 }));
         let history_gate = snapshot_gate.clone();
+        let mirror_gate = Arc::new(Semaphore::new(0));
+        let mirror_disconnect = Arc::new(Semaphore::new(0));
+        let ticket_gate = mirror_gate.clone();
+        let close_mirror = mirror_disconnect.clone();
         let writes = Arc::new(Mutex::new(Vec::new()));
         let acknowledged = Arc::new(AtomicUsize::new(0));
         let methods = Arc::new(Mutex::new(Vec::new()));
@@ -68,6 +106,7 @@ impl Peer {
             methods.clone(),
         );
         let output = output_tx.clone();
+        let views = Arc::new(Mutex::new(std::collections::VecDeque::from(views)));
         let task = tokio::spawn(async move {
             let mut peers = tokio::task::JoinSet::new();
             loop {
@@ -84,12 +123,16 @@ impl Peer {
                     output_rx.clone(),
                 );
                 let history_gate = history_gate.clone();
+                let ticket_gate = ticket_gate.clone();
+                let close_mirror = close_mirror.clone();
+                let views = views.clone();
                 peers.spawn(async move {
                     let mut ws=accept_hdr_async(socket,|request:&Request,mut response:Response|{
                         response.headers_mut().insert("Sec-WebSocket-Protocol",request.headers()["Sec-WebSocket-Protocol"].clone());Ok(response)
                     }).await.unwrap();
                     let Some(Ok(hello))=ws.next().await else{return;};
                     if hello.is_binary() {
+                        let mirror=tiled && hello.into_data().get(1)==Some(&1);
                         let mut welcome=vec![0;32];welcome[0]=0x81;welcome[1..17].fill(1);
                         welcome[20..24].copy_from_slice(&60000u32.to_le_bytes());welcome[24..32].copy_from_slice(&NONCE.to_le_bytes());
                         ws.send(Message::Binary(welcome.into())).await.unwrap();
@@ -104,6 +147,13 @@ impl Peer {
                             let permit=history_gate.acquire().await.unwrap();permit.forget();
                             ws.send(Message::Binary(SNAPSHOT[end..].to_vec().into())).await.unwrap();
                         } else {ws.send(Message::Binary(SNAPSHOT.to_vec().into())).await.unwrap();}
+                        if mirror {
+                            tokio::select! {
+                                permit=close_mirror.acquire() => {permit.unwrap().forget();let _=ws.close(None).await;},
+                                _=ws.next()=>{},
+                            }
+                            return;
+                        }
                         let mut rx=rx.lock().await;
                         loop {tokio::select! {
                             data=rx.recv()=>{let Some(data)=data else{break;};if ws.send(Message::Binary(data.into())).await.is_err(){break;}},
@@ -119,7 +169,9 @@ impl Peer {
                                 if !msg.is_text(){continue;}
                                 let request:Value=serde_json::from_str(msg.to_text().unwrap()).unwrap();
                                 let method=request["method"].as_str().unwrap().to_owned();methods.lock().unwrap().push(method.clone());
-                                let input=method=="com.superlogical.terminal.write" || method=="block.event";
+                                let input=method=="com.superlogical.terminal.write" ||
+                                    (method=="block.event" && request["payload"]["event"]["type"]!="focus");
+                                let mirror_ticket=tiled && method=="data.connect" && request["payload"]["block_id"]=="block:mirror";
                                 let mut response=json!({"type":"response","id":request["id"],"payload":{}});
                                 if input {
                                     let text=if method=="block.event" {request["payload"]["event"]["payload"]["text"].as_str().unwrap()} else {request["payload"]["args"]["data"].as_str().unwrap()};
@@ -127,7 +179,7 @@ impl Peer {
                                     let _=output.send(b"\r\nVT_BEFORE_ACK\r\n".to_vec()).await;
                                     if drop_first && first {break;}
                                     if reject {response["error"]=json!({"code":"not_owner","message":"Control changed","status":403});}
-                                } else if method=="data.connect" {response["payload"]=json!({"ticket":"AAAAAAAAAAAAAAAAAAAAAA"});}
+                                } else if method=="data.connect" {response["payload"]=json!({"ticket":if mirror_ticket {"AQAAAAAAAAAAAAAAAAAAAA"} else {"AAAAAAAAAAAAAAAAAAAAAA"}});}
                                 else if method=="session.list" || method=="session.attach_all" {response["payload"]=json!({"sessions":[]});}
                                 else if method=="session.view" || method=="session.attach" {
                                     let mut view=json!({"windows":[{"window_id":"window:test","layers":[{"blocks":[{"block_id":"block:test","creator_name":"com.superlogical.terminal","owner":if reject {"client:other"} else {"client:test"}}]}]}]});
@@ -136,9 +188,20 @@ impl Peer {
                                         view["windows"][0]["layers"][0]["layout"]=json!({"block_id":"block:test","rect":[0,0,1,1]});
                                         view["windows"][0]["layers"].as_array_mut().unwrap().push(json!({"kind":"tiled","blocks":[{"block_id":"block:tiled","creator_name":"com.superlogical.terminal"}],"layout":{"block_id":"block:tiled","rect":[0,0,1,1]}}));
                                     }
-                                    response["payload"]=if method=="session.attach" {json!({"view":view})} else {view};
+                                    if tiled {
+                                        let layer=&mut view["windows"][0]["layers"][0];
+                                        layer["kind"]=json!("tiled");
+                                        layer["blocks"].as_array_mut().unwrap().push(json!({"block_id":"block:mirror","creator_name":"com.superlogical.terminal","owner":"client:test"}));
+                                        layer["layout"]=json!({"rect":[0,0,1,1],"split":{"split_id":"split:test","direction":"horizontal","ratio":0.5,
+                                            "before":{"rect":[0,0,0.5,1],"block_id":"block:test"},"after":{"rect":[0.5,0,0.5,1],"block_id":"block:mirror"}}});
+                                    }
+                                    response["payload"]=if method=="session.attach" {json!({"view":view})}
+                                        else {views.lock().unwrap().pop_front().unwrap_or(view)};
                                 }
-                                let gate=gate.clone();replies.push(Box::pin(async move {
+                                let gate=gate.clone();
+                                let ticket_gate=ticket_gate.clone();
+                                replies.push(Box::pin(async move {
+                                    if mirror_ticket {ticket_gate.acquire().await.unwrap().forget();}
                                     if input {let permit=gate.acquire().await.unwrap();permit.forget();tokio::time::sleep(delay).await;}
                                     (response,input)
                                 }));
@@ -156,6 +219,8 @@ impl Peer {
             endpoint,
             gate,
             snapshot_gate,
+            mirror_gate,
+            mirror_disconnect,
             writes,
             acknowledged,
             methods,
@@ -218,6 +283,99 @@ async fn input(tx: &mpsc::Sender<Value>, text: &str) {
 }
 async fn shutdown(tx: &mpsc::Sender<Value>) {
     tx.send(json!({"type":"shutdown"})).await.unwrap();
+}
+
+fn floating_view(minimized: &str) -> Value {
+    let layers: Vec<_> = ["block:tiled", "block:test", "block:floating"].into_iter().map(|id| {
+        json!({"kind":if id=="block:tiled" {"tiled"} else {"floating"},"layer_id":format!("layer:{id}"),"bounds":[0,0,1,1],
+            "state":if id == minimized {"minimized"} else {"normal"},
+            "layout":{"block_id":id,"rect":[0,0,1,1]},
+            "blocks":[{"block_id":id,"creator_name":"com.superlogical.terminal"}]})
+    }).collect();
+    let focused = if minimized == "block:test" {
+        "block:floating"
+    } else {
+        "block:test"
+    };
+    json!({"windows":[{"window_id":"window:test","focused_block_id":focused,"layers":layers}]})
+}
+
+#[tokio::test]
+async fn refresh_stops_when_all_three_views_minimize_the_selected_pane() {
+    let views = ["block:test", "block:floating", "block:test", ""]
+        .map(floating_view)
+        .to_vec();
+    let peer = Peer::with_views(Duration::ZERO, false, false, false, false, false, views).await;
+    let (mut actor, shared) = peer.actor(1, false).await;
+    actor.mirror.request(
+        "session:test",
+        vec![crate::mirror::Wanted {
+            block: "block:tiled".into(),
+            columns: 80,
+            rows: 24,
+        }],
+    );
+    actor.refresh_view().await.unwrap();
+    assert_eq!(
+        peer.methods
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|method| *method == "session.view")
+            .count(),
+        3
+    );
+    assert!(actor.selected_block.is_empty() && actor.data.is_none() && !actor.controlled);
+    assert!(actor.mirror.wants("session:test", "block:tiled"));
+    assert!(actor.error.contains("Floating panes are changing"));
+    let awaiting_selection = || {
+        serde_json::from_str::<Value>(&shared.lock().unwrap().json).unwrap()["awaitingPaneSelection"]
+            == true
+    };
+    assert!(awaiting_selection());
+    actor
+        .command(json!({"type":"block","id":"block:tiled"}))
+        .await
+        .unwrap();
+    assert_eq!(actor.selected_block, "block:tiled");
+    assert!(!awaiting_selection());
+}
+
+#[tokio::test]
+async fn acknowledged_restore_opens_the_stream_before_fetching_the_view() {
+    let peer = Peer::with_views(
+        Duration::ZERO,
+        false,
+        false,
+        false,
+        false,
+        false,
+        vec![floating_view("")],
+    )
+    .await;
+    let (mut actor, _) = peer.actor(1, false).await;
+    actor.set_view(&floating_view("block:floating"));
+    peer.methods.lock().unwrap().clear();
+    actor
+        .command(json!({"type":"block","id":"block:floating","restoreMinimized":true}))
+        .await
+        .unwrap();
+    let methods = peer.methods.lock().unwrap();
+    let relevant: Vec<_> = methods
+        .iter()
+        .map(String::as_str)
+        .filter(|method| {
+            matches!(
+                *method,
+                "session.set_layer_state" | "data.connect" | "session.view"
+            )
+        })
+        .collect();
+    assert_eq!(
+        relevant,
+        ["session.set_layer_state", "data.connect", "session.view"]
+    );
+    assert_eq!(actor.selected_block, "block:floating");
 }
 
 #[tokio::test]
@@ -287,6 +445,47 @@ async fn output_and_rendering_continue_before_input_acknowledgment() {
         shutdown(&tx).await;
     };
     tokio::join!(actor.run(rx), scenario);
+}
+
+#[tokio::test]
+async fn wheel_echo_renders_with_two_batches_in_flight_and_coalesces_waiting_motion() {
+    let peer = Peer::new(Duration::ZERO, false, false).await;
+    let (mut actor, shared) = peer.actor(8, true).await;
+    actor
+        .replica
+        .as_mut()
+        .unwrap()
+        .feed(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h")
+        .unwrap();
+    let (tx, rx) = mpsc::channel(128);
+    let wheel = || json!({"type":"wheel","lines":1,"col":4,"row":5,"cw":10,"ch":20});
+    tokio::join!(actor.run(rx), async {
+        tx.send(wheel()).await.unwrap();
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .frame
+                .as_ref()
+                .is_some_and(|frame| frame.text().contains("VT_BEFORE_ACK"))
+        })
+        .await;
+        assert_eq!(peer.acknowledged.load(Ordering::SeqCst), 0);
+        tx.send(wheel()).await.unwrap();
+        until(|| peer.writes.lock().unwrap().len() == 2).await;
+        for _ in 0..8 {
+            tx.send(wheel()).await.unwrap();
+        }
+        until(|| tx.capacity() == 128).await;
+        assert_eq!(peer.writes.lock().unwrap().len(), 2);
+        assert_eq!(peer.acknowledged.load(Ordering::SeqCst), 0);
+        peer.gate.add_permits(1);
+        until(|| peer.writes.lock().unwrap().len() == 3).await;
+        assert_eq!(peer.writes.lock().unwrap()[2], "\x1b[<65;5;6M".repeat(8));
+        peer.gate.add_permits(2);
+        until(|| peer.acknowledged.load(Ordering::SeqCst) == 3).await;
+        shutdown(&tx).await;
+    });
 }
 
 #[tokio::test]
@@ -372,7 +571,7 @@ async fn timed_run(limit: usize) -> Duration {
     });
     assert_eq!(
         *peer.writes.lock().unwrap(),
-        Vec::from_fn(24, |n| format!("{n},"))
+        (0..24).map(|n| format!("{n},")).collect::<Vec<_>>()
     );
     start.elapsed()
 }
@@ -423,7 +622,7 @@ async fn minimized_floating_terminal_reopens_live_without_another_snapshot() {
     actor.controlled = false; // Viewing must never take ownership.
     actor.refresh_view().await.unwrap();
     let nonce = actor.data.as_ref().unwrap().nonce;
-    actor.open_block("block:tiled".into()).await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
     assert_eq!(
         actor.retained_floating.as_ref().unwrap().block,
         "block:test"
@@ -440,7 +639,7 @@ async fn minimized_floating_terminal_reopens_live_without_another_snapshot() {
         .iter()
         .filter(|m| m.as_str() == "data.connect")
         .count();
-    actor.open_block("block:test".into()).await.unwrap();
+    actor.open_block("block:test".into(), None).await.unwrap();
     assert_eq!(actor.data.as_ref().unwrap().nonce, nonce);
     assert!(
         actor
@@ -467,10 +666,52 @@ async fn minimized_floating_terminal_reopens_live_without_another_snapshot() {
     );
     // Recovery must never reuse a stream from the old connection.
     actor.controlled = false;
-    actor.open_block("block:tiled".into()).await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
     assert!(actor.retained_floating.is_some());
     actor.lose_connections();
     assert!(actor.retained_floating.is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn opening_a_floating_overlay_keeps_the_tiled_stream_for_return_focus() {
+    let peer = Peer::with_floating(Duration::ZERO, false, false, true).await;
+    let (mut actor, _) = peer.actor(8, true).await;
+    actor.controlled = false;
+    actor.refresh_view().await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
+    let count_data_opens = || {
+        peer.methods
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|m| m.as_str() == "data.connect")
+            .count()
+    };
+    let before = count_data_opens();
+
+    actor
+        .command(json!({"type":"block","id":"block:test","keepTiled":true}))
+        .await
+        .unwrap();
+    assert_eq!(actor.selected_block, "block:test");
+    assert!(actor.mirror.wants("session:test", "block:tiled"));
+
+    actor
+        .command(json!({"type":"block","id":"block:tiled","keepTiled":true}))
+        .await
+        .unwrap();
+    assert_eq!(actor.selected_block, "block:tiled");
+    assert!(actor.mirror.wants("session:test", "block:test"));
+    assert!(actor.retained_floating.is_none());
+    actor
+        .command(
+            json!({"type":"mirror","session":"session:test","window":"window:test",
+        "panes":[{"block":"block:test","rows":24,"columns":80}]}),
+        )
+        .await
+        .unwrap();
+    assert!(actor.mirror.wants("session:test", "block:test"));
+    assert_eq!(count_data_opens(), before);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -478,7 +719,7 @@ async fn retained_floating_stream_consumes_hidden_output_without_publishing_or_c
     let peer = Peer::with_floating(Duration::ZERO, false, false, true).await;
     let (mut actor, shared) = peer.actor(8, true).await;
     actor.refresh_view().await.unwrap();
-    actor.open_block("block:tiled".into()).await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
     let before = peer
         .methods
         .lock()
@@ -565,6 +806,186 @@ async fn renders_the_screen_while_initial_history_is_still_blocked_on_the_networ
                 .is_some_and(|f| f.text().contains("LIVE_AFTER_HISTORY"))
         })
         .await;
+        shutdown(&tx).await;
+    });
+}
+
+#[tokio::test]
+async fn slow_mirror_ticket_does_not_block_input_and_two_pane_focus_reuses_both_streams() {
+    let peer = Peer::with_options(Duration::ZERO, false, false, false, false, true).await;
+    let (mut actor, shared) = peer.actor(1, false).await;
+    actor.refresh_view().await.unwrap();
+    actor.dirty = true;
+    let (tx, rx) = mpsc::channel(128);
+    let ticket_count = || {
+        peer.methods
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|m| *m == "data.connect")
+            .count()
+    };
+    let mirror = |block| {
+        json!({"type":"mirror","session":"session:test","window":"window:test",
+        "panes":[{"block":block,"columns":40,"rows":20}]})
+    };
+    tokio::join!(actor.run(rx), async {
+        tx.send(mirror("block:mirror")).await.unwrap();
+        until(|| ticket_count() == 2).await;
+        input(&tx, "while-the-ticket-is-held").await;
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            until(|| {
+                shared
+                    .lock()
+                    .unwrap()
+                    .frame
+                    .as_ref()
+                    .is_some_and(|frame| frame.text().contains("VT_BEFORE_ACK"))
+            }),
+        )
+        .await
+        .expect("focused input must echo before the held mirror ticket times out");
+        peer.gate.add_permits(1);
+        peer.mirror_gate.add_permits(1);
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .pending_previews
+                .contains_key("block:mirror")
+        })
+        .await;
+
+        // A failed mirror retries independently and advertises stale content until it has a frame.
+        peer.mirror_disconnect.add_permits(1);
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .json
+                .contains(r#""mirrorWaiting":["block:mirror"]"#)
+        })
+        .await;
+        until(|| ticket_count() == 3).await;
+        peer.mirror_gate.add_permits(1);
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .json
+                .contains(r#""mirrorWaiting":[]"#)
+        })
+        .await;
+
+        for (next, previous) in [
+            ("block:mirror", "block:test"),
+            ("block:test", "block:mirror"),
+        ] {
+            tx.send(json!({"type":"block","id":next})).await.unwrap();
+            until(|| {
+                let state = shared.lock().unwrap();
+                state.key.ends_with(next) && state.frame.is_some()
+            })
+            .await;
+            tx.send(mirror(previous)).await.unwrap();
+            until(|| {
+                shared
+                    .lock()
+                    .unwrap()
+                    .pending_previews
+                    .contains_key(previous)
+            })
+            .await;
+            assert_eq!(
+                ticket_count(),
+                3,
+                "focus handoff must preserve both data streams"
+            );
+        }
+        shutdown(&tx).await;
+    });
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn opening_a_non_handoff_block_with_size_resizes_before_data_connect() {
+    let peer = Peer::with_floating(Duration::ZERO, false, false, true).await;
+    let (mut actor, _) = peer.actor(8, true).await;
+    actor.refresh_view().await.unwrap();
+    peer.methods.lock().unwrap().clear();
+
+    actor
+        .open_block("block:tiled".into(), Some((71, 27)))
+        .await
+        .unwrap();
+
+    let methods = peer.methods.lock().unwrap().clone();
+    let resize_pos = methods
+        .iter()
+        .position(|m| m == "com.superlogical.terminal.resize")
+        .expect("pre-resize RPC must run when opening a non-handoff block with a grid");
+    let connect_pos = methods
+        .iter()
+        .position(|m| m == "data.connect")
+        .expect("data.connect must follow pre-resize");
+    assert!(
+        resize_pos < connect_pos,
+        "pre-resize must precede data.connect: {methods:?}"
+    );
+}
+
+#[tokio::test]
+async fn mirror_handoff_with_size_skips_pre_resize_and_reuses_stream() {
+    let peer = Peer::with_options(Duration::ZERO, false, false, false, false, true).await;
+    let (mut actor, shared) = peer.actor(1, false).await;
+    actor.refresh_view().await.unwrap();
+    actor.dirty = true;
+    let (tx, rx) = mpsc::channel(128);
+    tokio::join!(actor.run(rx), async {
+        tx.send(json!({
+            "type": "mirror",
+            "session": "session:test",
+            "window": "window:test",
+            "panes": [{"block": "block:mirror", "columns": 40, "rows": 20}]
+        }))
+        .await
+        .unwrap();
+        peer.mirror_gate.add_permits(1);
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .pending_previews
+                .contains_key("block:mirror")
+        })
+        .await;
+
+        peer.methods.lock().unwrap().clear();
+        tx.send(json!({
+            "type": "block",
+            "id": "block:mirror",
+            "columns": 71,
+            "rows": 27
+        }))
+        .await
+        .unwrap();
+        until(|| {
+            let state = shared.lock().unwrap();
+            state.key.ends_with("block:mirror") && state.frame.is_some()
+        })
+        .await;
+
+        let methods = peer.methods.lock().unwrap().clone();
+        assert!(
+            !methods
+                .iter()
+                .any(|m| m == "com.superlogical.terminal.resize"),
+            "mirror handoff must skip pre-resize: {methods:?}"
+        );
+        assert!(
+            !methods.iter().any(|m| m == "data.connect"),
+            "mirror handoff must reuse the mirror stream: {methods:?}"
+        );
         shutdown(&tx).await;
     });
 }

@@ -1,4 +1,6 @@
 //! Loopback protocol peers only; no production server or network settings.
+//! tungstenite's upgrade callback returns a large ErrorResponse; the size is fixed by the API.
+#![allow(clippy::result_large_err)]
 use anyhow::Context;
 use futures_util::{SinkExt, StreamExt};
 use rexling_core::{

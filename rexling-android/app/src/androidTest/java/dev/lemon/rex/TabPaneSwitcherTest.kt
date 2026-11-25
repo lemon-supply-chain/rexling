@@ -1,186 +1,288 @@
 package dev.lemon.rex
 
 import android.graphics.Bitmap
-import androidx.compose.ui.test.*
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class TabPaneSwitcherTest {
-    @get:Rule val ui=createComposeRule()
-    private val windows=mutableStateOf(listOf(WindowItem("w1","Project",listOf(BlockItem("a","Terminal"),BlockItem("b","Claude"),BlockItem("d","nvim")),
-        listOf(PanePlacement("a",0f,0f,.4f,1f),PanePlacement("b",.4f,0f,.6f,.5f),PanePlacement("d",.4f,.5f,.6f,.5f))),
-        WindowItem("w2","Terminal 2",listOf(BlockItem("c","Codex")))))
-    private val programs=mapOf("a" to ProgramIdentity.resolve(listOf("fish")),"b" to ProgramIdentity.resolve(listOf("claude")),"c" to ProgramIdentity.resolve(listOf("codex")),"d" to ProgramIdentity.resolve(listOf("nvim")))
-    private val calls=mutableListOf<String>()
-    private fun show(enabled: Boolean=true,initialPage: Int=0,empty: Boolean=false,dark: Boolean=false,selectedBlock: String="b",withoutLayout: Boolean=false) {
-        ui.setContent {RexTheme(dark,ThemeCatalog.defaults[if(dark) 0 else 1]) {
-            TabPaneSwitcher(if(empty) emptyList() else if(withoutLayout) windows.value.map {it.copy(layout=emptyList())} else windows.value,"w1",selectedBlock,programs,
-                mapOf("b" to "Plan next steps","c" to "Review changes"),mapOf("a" to "~/Dev/rexling","b" to "~/Dev/portside"),
-                {if(it.id=="w1") 1 else 0},enabled,enabled,enabled && !empty,
-                {calls+="tab:$it"},{calls+="pane:$it"},{calls+="new-tab"},{anchor,split->calls+="new-pane:$anchor:${split.direction}"},
-                {calls+="close-tab:${it.id}"},{calls+="close-pane:${it.id}"},{calls+="dismiss"},initialPage)
-        }}
+    @get:Rule val ui = createComposeRule()
+    private val windows =
+        mutableStateOf(
+            listOf(
+                WindowItem(
+                    "w1",
+                    "Project",
+                    listOf(
+                        BlockItem("a", "Terminal"),
+                        BlockItem("b", "Claude"),
+                        BlockItem("d", "nvim"),
+                    ),
+                    listOf(
+                        PanePlacement("a", 0f, 0f, .4f, 1f),
+                        PanePlacement("b", .4f, 0f, .6f, .5f),
+                        PanePlacement("d", .4f, .5f, .6f, .5f),
+                    ),
+                ),
+                WindowItem("w2", "Terminal 2", listOf(BlockItem("c", "Codex"))),
+            ),
+        )
+    private val programs =
+        mapOf(
+            "a" to ProgramIdentity.resolve(listOf("fish")),
+            "b" to ProgramIdentity.resolve(listOf("claude")),
+            "c" to ProgramIdentity.resolve(listOf("codex")),
+            "d" to ProgramIdentity.resolve(listOf("nvim")),
+        )
+    private val calls = mutableListOf<String>()
+
+    private fun show(
+        enabled: Boolean = true,
+        initialPage: Int = 0,
+        empty: Boolean = false,
+        dark: Boolean = false,
+        selectedBlock: String = "b",
+        withoutLayout: Boolean = false,
+    ) {
+        ui.setContent {
+            RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1]) {
+                TabPaneSwitcher(
+                    if (empty) emptyList()
+                    else if (withoutLayout) windows.value.map { it.copy(layout = emptyList()) }
+                    else windows.value,
+                    "w1",
+                    selectedBlock,
+                    programs,
+                    mapOf("b" to "Plan next steps", "c" to "Review changes"),
+                    mapOf("a" to "~/Dev/rexling", "b" to "~/Dev/portside"),
+                    { if (it.id == "w1") 1 else 0 },
+                    enabled,
+                    enabled,
+                    enabled && !empty,
+                    { calls += "tab:$it" },
+                    { calls += "pane:$it" },
+                    { calls += "new-tab" },
+                    { anchor, split -> calls += "new-pane:$anchor:${split.direction}" },
+                    { calls += "close-tab:${it.id}" },
+                    { calls += "close-pane:${it.id}" },
+                    { calls += "dismiss" },
+                    initialPage,
+                )
+            }
+        }
     }
-    @Test fun tabsSelectLocallyUntilOpenIsPressed() {
+
+    private fun row(description: String) = ui.onNodeWithContentDescription(description)
+
+    private fun action(label: String) = ui.onNodeWithContentDescription(label)
+
+    @Test
+    fun tappingATabOrPaneOpensItDirectly() {
         show()
-        ui.onNodeWithContentDescription("Tab Project").assertIsSelected()
-        ui.onNodeWithContentDescription("Tab Review changes").assertIsNotSelected()
+        row(appString(R.string.a11y_tab_title, "Project")).assertIsSelected()
+        ui.onNodeWithText("Open tab").assertDoesNotExist()
         capture("tabs-light")
-        ui.onNodeWithContentDescription("Tab Review changes").performClick().assertIsSelected()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-        ui.onNodeWithText("Open tab").performClick()
-        ui.runOnIdle {assertEquals(listOf("tab:w2"),calls)}
+        row(appString(R.string.a11y_tab_title, "Review changes")).performTouchInput { click() }
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
+        row(appString(R.string.a11y_pane_title, "Plan next steps")).assertIsSelected()
+        row(appString(R.string.a11y_pane_title, "fish")).performTouchInput { click() }
+        ui.onNodeWithText("Open pane").assertDoesNotExist()
+        ui.runOnIdle { assertEquals(listOf("tab:w2", "pane:a"), calls) }
     }
-    @Test fun swipingChangesSectionsAndPaneSelectionUsesTheCorrectId() {
-        show(dark=true)
-        ui.onNodeWithContentDescription("Tab and pane pages").performTouchInput {swipeLeft()}
-        ui.onNodeWithText("Open pane").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Pane Plan next steps").assertIsSelected()
-        ui.onNodeWithContentDescription("Pane fish").assertIsNotSelected()
-        ui.onNodeWithText("~/Dev/rexling",substring=true).assertIsDisplayed()
-        ui.onNodeWithContentDescription("Pane Review changes").assertDoesNotExist()
+
+    @Test
+    fun horizontalSwipesRevealOneRowAtATimeAndKeepTheSection() {
+        show(dark = true)
+        row(appString(R.string.a11y_tab_title, "Project")).swipeForSwitcherActions()
+        action(appString(R.string.label_rename_tab)).assertIsDisplayed()
+        if (
+            ui.onAllNodesWithContentDescription(
+                    appString(R.string.a11y_tab_title, "Review changes"),
+                )
+                .fetchSemanticsNodes()
+                .isEmpty()
+        ) {
+            row(appString(R.string.reorder_tabs)).performScrollToKey("w2")
+        }
+        row(appString(R.string.a11y_tab_title, "Review changes"))
+            .performScrollTo()
+            .swipeForSwitcherActions()
+        action(appString(R.string.label_rename_tab)).assertIsDisplayed()
+        val rowBounds =
+            row(appString(R.string.a11y_tab_title, "Review changes"))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertTrue(
+            action(appString(R.string.label_rename_tab))
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .center
+                .y in rowBounds.top..rowBounds.bottom,
+        )
+        row(appString(R.string.a11y_tab_title, "Review changes")).performTouchInput { swipeRight() }
+        action(appString(R.string.label_rename_tab)).assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).assertIsDisplayed()
+        ui.runOnIdle { assertTrue(calls.isEmpty()) }
+    }
+
+    @Test
+    fun closeAndSplitActionsUseTheSwipedRow() {
+        show()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).performClick()
+        row(appString(R.string.a11y_tab_title, "Project")).swipeForSwitcherActions()
+        action(appString(R.string.close_tab)).performTouchInput { click() }
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
+        row(appString(R.string.a11y_pane_title, "Plan next steps")).swipeForSwitcherActions()
+        action(appString(R.string.split_right)).performTouchInput { click() }
+        row(appString(R.string.a11y_pane_title, "nvim")).swipeForSwitcherActions()
+        capture("pane-actions")
+        action(appString(R.string.split_below)).performTouchInput { click() }
+        row(appString(R.string.a11y_pane_title, "fish")).swipeForSwitcherActions()
+        action(appString(R.string.close_pane)).performTouchInput { click() }
+        ui.runOnIdle {
+            assertEquals(
+                listOf(
+                    "new-tab",
+                    "close-tab:w1",
+                    "new-pane:b:horizontal",
+                    "new-pane:d:vertical",
+                    "close-pane:a",
+                ),
+                calls,
+            )
+        }
+    }
+
+    @Test
+    fun tappingARevealedPaneDismissesItsActionsBeforeItCanOpen() {
+        show(initialPage = 1)
+        val pane = row(appString(R.string.a11y_pane_title, "nvim"))
+        pane.swipeForSwitcherActions()
+        action(appString(R.string.label_rename_pane)).assertIsDisplayed()
+        ui.onNodeWithTag("Pane position: d", useUnmergedTree = true).performTouchInput { click() }
+        action(appString(R.string.label_rename_pane)).assertDoesNotExist()
+        ui.runOnIdle { assertTrue(calls.isEmpty()) }
+        pane.performTouchInput { click() }
+        ui.runOnIdle { assertEquals(listOf("pane:d"), calls) }
+    }
+
+    @Test
+    fun busyStateDisablesTerminalActionsButAllowsBrowsingSections() {
+        show(enabled = false)
+        row(appString(R.string.a11y_tab_title, "Project"))
+            .assertIsNotEnabled()
+            .swipeForSwitcherActions()
+        action(appString(R.string.close_tab)).assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).assertIsNotEnabled()
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
+        row(appString(R.string.a11y_pane_title, "fish"))
+            .assertIsNotEnabled()
+            .swipeForSwitcherActions()
+        action(appString(R.string.split_right)).assertDoesNotExist()
+        ui.runOnIdle { assertTrue(calls.isEmpty()) }
+    }
+
+    @Test
+    fun emptySessionOffersANewTabButCannotAddAnUnanchoredPane() {
+        show(empty = true)
+        ui.onNodeWithText(appString(R.string.no_tabs_yet)).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.label_new_tab)).performClick()
+        ui.onNodeWithText(appString(R.string.section_panes)).performClick()
+        ui.onNodeWithText(appString(R.string.no_panes_yet)).assertIsDisplayed()
+        action(appString(R.string.split_below)).assertDoesNotExist()
+        ui.runOnIdle { assertEquals(listOf("new-tab"), calls) }
+    }
+
+    @Test
+    fun paneIndicatorCanOpenDirectlyAndTheLayoutOpensItsPane() {
+        show(initialPage = 1, dark = true)
+        row(appString(R.string.a11y_pane_title, "Plan next steps")).assertIsSelected()
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
+        for (id in listOf("a", "b", "d")) ui.onNodeWithTag(
+                "Pane position: $id",
+                useUnmergedTree = true,
+            )
+            .assertIsDisplayed()
         capture("panes-dark")
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-        ui.onNodeWithContentDescription("Pane fish").performClick().assertIsSelected()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-        ui.onNodeWithText("Open pane").performClick()
-        ui.onNodeWithContentDescription("Tab and pane pages").performTouchInput {swipeRight()}
-        ui.onNodeWithText("New tab").assertIsDisplayed()
-        ui.runOnIdle {assertEquals(listOf("pane:a"),calls)}
+        ui.onNodeWithText(appString(R.string.show_map)).performClick()
+        row(appString(R.string.a11y_pane_layout)).assertIsDisplayed()
+        row(appString(R.string.a11y_layout_pane_format, "nvim")).performClick()
+        ui.onNodeWithText(appString(R.string.hide_map)).performClick()
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
+        ui.runOnIdle { assertEquals(listOf("pane:d"), calls) }
     }
-    @Test fun addAndCloseActionsBelongToTheirOwnSection() {
-        show()
-        ui.onNodeWithText("New tab").performClick()
-        ui.onNodeWithContentDescription("Actions for tab Project").performClick()
-        ui.onNodeWithText("Close tab").performClick()
-        ui.onNodeWithText("Panes").performClick()
-        chooseSplit("Split right")
-        chooseSplit("Split below")
-        ui.onNodeWithContentDescription("Actions for pane fish").performClick()
-        ui.onNodeWithText("Close pane").performClick()
-        ui.runOnIdle {assertEquals(listOf("new-tab","close-tab:w1","new-pane:b:horizontal","new-pane:b:vertical","close-pane:a"),calls)}
+
+    @Test
+    fun unavailableGeometryStillAllowsSplittingTheSwipedPane() {
+        show(initialPage = 1, withoutLayout = true, selectedBlock = "stale-pane")
+        ui.onNodeWithText(appString(R.string.show_map)).assertDoesNotExist()
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
+        ui.onNodeWithTag("Pane position: a", useUnmergedTree = true).assertDoesNotExist()
+        row(appString(R.string.a11y_pane_title, "fish")).swipeForSwitcherActions()
+        action(appString(R.string.split_below)).performClick()
+        ui.runOnIdle { assertEquals(listOf("new-pane:a:vertical"), calls) }
     }
-    @Test fun busyStateDisablesTerminalActionsButAllowsBrowsingSections() {
-        show(enabled=false)
-        ui.onNodeWithContentDescription("Tab Project").assertIsNotEnabled()
-        ui.onNodeWithText("New tab").assertIsNotEnabled()
-        ui.onNodeWithContentDescription("Actions for tab Project").assertIsNotEnabled()
-        ui.onNodeWithText("Panes").performClick()
-        ui.onNodeWithContentDescription("Pane fish").assertIsNotEnabled()
-        ui.onNodeWithText("New pane").assertIsNotEnabled()
-        ui.onNodeWithContentDescription("Actions for pane fish").assertIsNotEnabled()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
+
+    @Test
+    fun removingTheRevealedPaneHidesItsActions() {
+        show(initialPage = 1, selectedBlock = "a")
+        row(appString(R.string.a11y_pane_title, "nvim")).swipeForSwitcherActions()
+        action(appString(R.string.split_right)).assertIsDisplayed()
+        ui.runOnIdle {
+            windows.value =
+                windows.value.map {
+                    it.copy(
+                        blocks = it.blocks.filterNot { b -> b.id == "d" },
+                        layout = it.layout.filterNot { p -> p.id == "d" },
+                    )
+                }
+        }
+        action(appString(R.string.split_right)).assertDoesNotExist()
+        ui.runOnIdle { assertTrue(calls.isEmpty()) }
     }
-    @Test fun emptySessionOffersANewTabButCannotAddAnUnanchoredPane() {
-        show(empty=true)
-        ui.onNodeWithText("No tabs yet").assertIsDisplayed()
-        ui.onNodeWithText("New tab").performClick()
-        ui.onNodeWithText("Panes").performClick()
-        ui.onNodeWithText("No panes yet").assertIsDisplayed()
-        ui.onNodeWithText("New pane").assertIsNotEnabled()
-        ui.runOnIdle {assertEquals(listOf("new-tab"),calls)}
-    }
-    @Test fun paneIndicatorCanOpenDirectlyOnThePaneSection() {
-        show(initialPage=1)
-        ui.onNodeWithText("New pane").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Pane Plan next steps").assertIsSelected()
-        capture("panes-light")
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-        ui.runOnIdle {assertEquals(listOf("dismiss"),calls)}
-    }
-    @Test fun aMissingSelectedPaneCannotCreateASplit() {
-        show(initialPage=1,selectedBlock="stale-pane")
-        ui.onNodeWithText("New pane").assertIsNotEnabled().performClick()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-    }
-    @Test fun unavailableGeometryKeepsThePaneListAndSplitActions() {
-        show(initialPage=1,withoutLayout=true)
-        ui.onNodeWithText("Layout unavailable").assertIsDisplayed()
-        ui.onNodeWithContentDescription("Pane layout").assertDoesNotExist()
-        ui.onNodeWithContentDescription("Pane fish").performClick()
-        chooseSplit("Split below")
-        ui.runOnIdle {assertEquals(listOf("new-pane:a:vertical"),calls)}
-    }
-    @Test fun splitPaneThreeWhileViewingPaneOneWithoutNavigating() {
-        show(initialPage=1,selectedBlock="a")
-        ui.onNodeWithContentDescription("Layout pane nvim").performClick().assertIsSelected()
-        ui.onNodeWithContentDescription("Pane nvim").assertIsSelected()
-        ui.onNodeWithContentDescription("Pane fish").assertIsNotSelected()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-        capture("selected-three-light")
-        chooseSplit("Split below")
-        ui.runOnIdle {assertEquals(listOf("new-pane:d:vertical"),calls)}
-    }
-    @Test fun selectingATabLetsYouManageItsPanesWithoutOpeningIt() {
-        show()
-        ui.onNodeWithContentDescription("Tab Review changes").performClick()
-        ui.onNodeWithText("Panes").performClick()
-        ui.onNodeWithContentDescription("Pane Review changes").assertIsSelected()
-        ui.onNodeWithContentDescription("Pane fish").assertDoesNotExist()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-        chooseSplit("Split right")
-        ui.runOnIdle {assertEquals(listOf("new-pane:c:horizontal"),calls)}
-    }
-    @Test fun fivePanesFitWithTheLayoutAndActionsVisible() {
-        val blocks=windows.value.first().blocks+listOf(BlockItem("e","Build"),BlockItem("f","Logs"))
-        windows.value=windows.value.mapIndexed {index,w->if(index==0) w.copy(blocks=blocks,layout=blocks.mapIndexed {i,b->PanePlacement(b.id,i*.2f,0f,.2f,1f)}) else w}
-        show(initialPage=1)
-        ui.onNodeWithContentDescription("Pane layout").assertIsDisplayed()
-        for(title in listOf("fish","Plan next steps","nvim","Build","Logs")) ui.onNodeWithContentDescription("Pane $title").assertIsDisplayed()
-        ui.onNodeWithText("Open pane").assertIsDisplayed()
-        ui.onNodeWithText("New pane").assertIsDisplayed()
+
+    @Test
+    fun compactDrawerShowsFivePanesWithTheirPositions() {
+        val blocks =
+            windows.value.first().blocks + listOf(BlockItem("e", "Build"), BlockItem("f", "Logs"))
+        windows.value =
+            windows.value.mapIndexed { index, w ->
+                if (index == 0)
+                    w.copy(
+                        blocks = blocks,
+                        layout =
+                            blocks.mapIndexed { i, b -> PanePlacement(b.id, i * .2f, 0f, .2f, 1f) },
+                    )
+                else w
+            }
+        show(initialPage = 1)
+        row(appString(R.string.a11y_pane_layout)).assertDoesNotExist()
+        for (title in listOf("fish", "Plan next steps", "nvim", "Build", "Logs")) row(
+                appString(R.string.a11y_pane_title, title),
+            )
+            .assertIsDisplayed()
         capture("five-panes")
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
     }
-    @Test fun removingTheSelectedTargetDisablesOpenAndSplitInsteadOfUsingAnotherPane() {
-        show(initialPage=1,selectedBlock="a")
-        ui.onNodeWithContentDescription("Pane nvim").performClick()
-        ui.runOnIdle {windows.value=windows.value.map {it.copy(blocks=it.blocks.filterNot {b->b.id=="d"},layout=it.layout.filterNot {p->p.id=="d"})}}
-        ui.onNodeWithText("Open pane").assertIsNotEnabled().performClick()
-        ui.onNodeWithText("New pane").assertIsNotEnabled().performClick()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-    }
-    @Test fun directionMenuCanBeDismissedWithoutCreatingOrNavigating() {
-        show(initialPage=1,dark=true)
-        ui.onNodeWithText("Split right").assertDoesNotExist()
-        ui.onNodeWithText("Split below").assertDoesNotExist()
-        ui.onNodeWithText("New pane").performClick()
-        ui.onNodeWithText("Split right").assertIsDisplayed()
-        ui.onNodeWithText("Split below").assertIsDisplayed()
-        capture("direction-menu-dark")
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-        ui.onNodeWithText("Split right").assertDoesNotExist()
-        ui.onNodeWithText("New pane").assertIsDisplayed()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-    }
-    @Test fun removingTheAnchorWhileTheDirectionMenuIsOpenDismissesIt() {
-        show(initialPage=1,selectedBlock="a")
-        ui.onNodeWithText("New pane").performClick()
-        ui.onNodeWithText("Split right").assertIsDisplayed()
-        capture("direction-menu-light")
-        ui.runOnIdle {windows.value=windows.value.map {it.copy(blocks=it.blocks.filterNot {b->b.id=="a"},layout=it.layout.filterNot {p->p.id=="a"})}}
-        ui.onNodeWithText("Split right").assertDoesNotExist()
-        ui.onNodeWithText("New pane").assertIsNotEnabled()
-        ui.runOnIdle {assertTrue(calls.isEmpty())}
-    }
-    private fun chooseSplit(label: String) {
-        ui.onNodeWithText("New pane").performClick()
-        ui.onNodeWithText(label).performClick()
-    }
+
     private fun capture(name: String) {
         ui.waitForIdle()
-        val instrumentation=InstrumentationRegistry.getInstrumentation()
-        instrumentation.waitForIdleSync();Thread.sleep(300)
-        File(instrumentation.targetContext.cacheDir,"switcher-$name.png").outputStream().use {
-            instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG,100,it)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.waitForIdleSync()
+        Thread.sleep(300)
+        File(instrumentation.targetContext.cacheDir, "switcher-$name.png").outputStream().use {
+            instrumentation.uiAutomation
+                .takeScreenshot()
+                .compress(Bitmap.CompressFormat.PNG, 100, it)
         }
     }
 }
+
+internal fun SemanticsNodeInteraction.swipeForSwitcherActions() = performTouchInput { swipeLeft() }

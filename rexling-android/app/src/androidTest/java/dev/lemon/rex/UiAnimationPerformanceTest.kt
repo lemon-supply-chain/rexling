@@ -51,7 +51,7 @@ class UiAnimationPerformanceTest {
             activity.setContent {
                 RexTheme(true, ThemeCatalog.defaults[0]) {
                     Column(
-                        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+                        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                     ) {
                         SessionHeader(
                             listOf(SessionItem("s", "preview · Offline")),
@@ -149,9 +149,7 @@ class UiAnimationPerformanceTest {
                     picture.drawTile(Canvas(bitmap), width, height)
                     File(context.cacheDir, "performance-tile-$name-${widthDp}x$heightDp.png")
                         .outputStream()
-                        .use {
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-                        }
+                        .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
                     bitmap.recycle()
                 }
             }

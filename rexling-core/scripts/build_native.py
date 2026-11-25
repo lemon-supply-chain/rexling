@@ -67,7 +67,7 @@ def main():
     rustup = shutil.which("rustup") or str(Path.home() / ".cargo/bin/rustup")
     env["CARGO_TARGET_DIR"] = str(ROOT / ".build/rust")
     prefix = ROOT / (".build/ghostty-host" if args.host_test else ".build/ghostty-arm64")
-    command = [zig_root / "zig", "build", "-Demit-lib-vt", "-Demit-macos-app=false", "-Demit-xcframework=false", "-Doptimize=ReleaseFast", "--prefix", prefix]
+    command = [zig_root / "zig", "build", "-Demit-lib-vt", "-Demit-macos-app=false", "-Demit-xcframework=false", "-Doptimize=ReleaseSmall", "--prefix", prefix]
     if not args.host_test:
         sdk = Path(env.get("ANDROID_HOME") or env.get("ANDROID_SDK_ROOT") or Path.home() / "Library/Android/sdk")
         ndks = sdk / "ndk"
@@ -88,7 +88,16 @@ def main():
         network_prefix.mkdir(parents=True, exist_ok=True)
         network_env = env.copy()
         network_env.update({"GOOS":"android", "GOARCH":"arm64", "CGO_ENABLED":"1", "CC":str(compiler), "CGO_LDFLAGS":"-Wl,-z,max-page-size=16384"})
-        run(["go", "build", "-mod=readonly", "-trimpath", "-buildmode=c-shared", "-ldflags=-s -w", "-o", network_prefix / "librex_network.so", "."], cwd=network, env=network_env)
+        tags = subprocess.check_output(
+            [
+                "go", "run", "tailscale.com/cmd/featuretags",
+                "--min",
+                "--add=netstack,ipnbus,serve,acme,udptransport,nattraversal,portmapper,bakedroots,useproxy",
+            ],
+            cwd=network,
+            text=True,
+        ).strip()
+        run(["go", "build", "-mod=readonly", "-trimpath", "-buildmode=c-shared", "-ldflags=-s -w", "-tags", tags, "-o", network_prefix / "librex_network.so", "."], cwd=network, env=network_env)
         env["REXLING_NETWORK_PREFIX"] = str(network_prefix)
     run(command, cwd=source_root, env=env)
     env["GHOSTTY_PREFIX"] = str(prefix)
@@ -101,7 +110,6 @@ def main():
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / f".build/rust/{TARGET}/release/librex_android.so", destination / "librex_android.so")
     shutil.copyfile(network_prefix / "librex_network.so", destination / "librex_network.so")
-    shutil.copyfile(compiler_root / "sysroot/usr/lib/aarch64-linux-android/libc++_shared.so", destination / "libc++_shared.so")
     print(f"Android arm64 JNI libraries built in {destination}")
 
 

@@ -2,8 +2,8 @@ package dev.lemon.rex
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -14,10 +14,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,142 +25,374 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 internal object SettingsType {
-    val title=TextStyle(fontSize=20.sp,lineHeight=26.sp,fontWeight=FontWeight.Bold)
-    val row=TextStyle(fontSize=14.sp,lineHeight=20.sp,fontWeight=FontWeight.Medium)
-    val body=TextStyle(fontSize=14.sp,lineHeight=20.sp)
-    val detail=TextStyle(fontSize=12.sp,lineHeight=18.sp)
-    val section=detail.copy(fontWeight=FontWeight.SemiBold)
+    val title = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold)
+    val row = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+    val body = TextStyle(fontSize = 14.sp, lineHeight = 20.sp)
+    val detail = TextStyle(fontSize = 12.sp, lineHeight = 18.sp)
+    val section = detail.copy(fontWeight = FontWeight.SemiBold)
 }
 
-@Composable internal fun SettingsHeader(title: String,closeDescription: String,onClose: ()->Unit,subtitle: String?=null) {
-    Row(Modifier.fillMaxWidth().padding(bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
-        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-            Text(title,style=SettingsType.title,color=MaterialTheme.colorScheme.onSurface)
-            subtitle?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+@Composable
+internal fun SettingsHeader(
+    title: String,
+    closeDescription: String,
+    onClose: () -> Unit,
+    subtitle: String? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = SettingsType.title, color = MaterialTheme.colorScheme.onSurface)
+            subtitle?.let {
+                Text(
+                    it,
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        IconButton(onClick=onClose,modifier=Modifier.semantics {contentDescription=closeDescription}) {ChromeSymbol(ChromeIcon.CLOSE,Modifier.size(20.dp))}
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.semantics { contentDescription = closeDescription },
+        ) {
+            ChromeSymbol(ChromeIcon.CLOSE, Modifier.size(20.dp))
+        }
     }
 }
 
-@Composable internal fun SettingsSection(title: String,compact: Boolean=true,content: @Composable ColumnScope.()->Unit) {
-    Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        Text(title,Modifier.padding(start=4.dp),style=SettingsType.section,color=MaterialTheme.colorScheme.primary)
-        Surface(shape=RoundedCornerShape(if(compact) 12.dp else 20.dp),color=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)) {  // alpha-ok section surface
-            Column(Modifier.fillMaxWidth(),content=content)
-        }
+@Composable
+internal fun SettingsSection(
+    title: String,
+    compact: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            title,
+            Modifier.padding(start = 4.dp),
+            style = SettingsType.section,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        SettingsCard(compact = compact) { Column(Modifier.fillMaxWidth(), content = content) }
     }
 }
 
-@Composable internal fun SettingsDivider() {
-    HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))  // alpha-ok divider tint
+@Composable
+internal fun SettingsCard(
+    modifier: Modifier = Modifier,
+    compact: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier,
+        shape = RoundedCornerShape(if (compact) 12.dp else 20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f),
+        content = content,
+    )
 }
 
-internal enum class SettingsGlyph { APPEARANCE,FONT,ALERTS,UPLOAD,INFO,SERVER,COMMAND,NETWORK,KEY }
+@Composable
+internal fun SettingsDivider() {
+    HorizontalDivider(
+        Modifier.padding(start = 64.dp, end = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f),
+    ) // alpha-ok divider tint
+}
 
-@Composable internal fun SettingsRow(title: String,subtitle: String,glyph: SettingsGlyph,onClick: ()->Unit,badge: String?=null) {
-    val chevronColor=MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.fillMaxWidth().clickable(role=Role.Button,onClick=onClick).padding(horizontal=16.dp,vertical=14.dp),
-        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+internal enum class SettingsGlyph {
+    APPEARANCE,
+    FONT,
+    ALERTS,
+    UPLOAD,
+    INFO,
+    SERVER,
+    COMMAND,
+    NETWORK,
+    KEY,
+    LANGUAGE,
+}
+
+@Composable
+internal fun SettingsRow(
+    title: String,
+    subtitle: String,
+    glyph: SettingsGlyph,
+    onClick: () -> Unit,
+    badge: String? = null,
+) {
+    val chevronColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         SettingsIcon(glyph)
-        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-            Text(title,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
-            Text(subtitle,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=3,overflow=TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = SettingsType.row, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                subtitle,
+                style = SettingsType.detail,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        badge?.let {Text(it,style=SettingsType.section,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        badge?.let {
+            Text(
+                it,
+                style = SettingsType.section,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         // A chevron indicates navigation without implying a terminal key action.
         Canvas(Modifier.size(16.dp)) {
-            val u=size.minDimension/24f
-            drawLine(chevronColor,Offset(9f*u,5f*u),Offset(16f*u,12f*u),1.8f*u,StrokeCap.Round)
-            drawLine(chevronColor,Offset(16f*u,12f*u),Offset(9f*u,19f*u),1.8f*u,StrokeCap.Round)
+            val u = size.minDimension / 24f
+            drawLine(
+                chevronColor,
+                Offset(9f * u, 5f * u),
+                Offset(16f * u, 12f * u),
+                1.8f * u,
+                StrokeCap.Round,
+            )
+            drawLine(
+                chevronColor,
+                Offset(16f * u, 12f * u),
+                Offset(9f * u, 19f * u),
+                1.8f * u,
+                StrokeCap.Round,
+            )
         }
     }
 }
 
-@Composable internal fun SettingsIcon(glyph: SettingsGlyph) {
-    val color=MaterialTheme.colorScheme.primary
-    Surface(shape=RoundedCornerShape(11.dp),color=color.copy(alpha=.09f)) {  // alpha-ok decorative glyph tile
-        Box(Modifier.size(36.dp),contentAlignment=Alignment.Center) {
-            if(glyph==SettingsGlyph.FONT) Text("Aa",style=SettingsType.row,color=color)
-            else Canvas(Modifier.size(20.dp)) {
-                val u=size.minDimension/24f
-                val stroke=Stroke(1.7f*u,cap=StrokeCap.Round)
-                fun line(x1: Float,y1: Float,x2: Float,y2: Float)=drawLine(color,Offset(x1*u,y1*u),Offset(x2*u,y2*u),1.7f*u,StrokeCap.Round)
-                when(glyph) {
-                    SettingsGlyph.APPEARANCE->{
-                        drawCircle(color,8f*u,style=stroke)
-                        drawArc(color,-90f,180f,true,Offset(4f*u,4f*u),Size(16f*u,16f*u))
-                    }
-                    SettingsGlyph.ALERTS->{
-                        val path=androidx.compose.ui.graphics.Path().apply {
-                            moveTo(5f*u,17f*u);lineTo(7f*u,14f*u);lineTo(7f*u,10f*u)
-                            cubicTo(7f*u,3f*u,17f*u,3f*u,17f*u,10f*u)
-                            lineTo(17f*u,14f*u);lineTo(19f*u,17f*u);close()
+@Composable
+internal fun SettingsIcon(glyph: SettingsGlyph) {
+    val color = MaterialTheme.colorScheme.primary
+    Surface(
+        shape = RoundedCornerShape(11.dp),
+        color = color.copy(alpha = .09f),
+    ) { // alpha-ok decorative glyph tile
+        Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+            if (glyph == SettingsGlyph.FONT) Text("Aa", style = SettingsType.row, color = color)
+            else if (glyph == SettingsGlyph.LANGUAGE)
+                Text("文A", style = SettingsType.row.copy(fontSize = 13.sp), color = color)
+            else
+                Canvas(Modifier.size(20.dp)) {
+                    val u = size.minDimension / 24f
+                    val stroke = Stroke(1.7f * u, cap = StrokeCap.Round)
+                    fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
+                        drawLine(
+                            color,
+                            Offset(x1 * u, y1 * u),
+                            Offset(x2 * u, y2 * u),
+                            1.7f * u,
+                            StrokeCap.Round,
+                        )
+                    when (glyph) {
+                        SettingsGlyph.APPEARANCE -> {
+                            drawCircle(color, 8f * u, style = stroke)
+                            drawArc(
+                                color,
+                                -90f,
+                                180f,
+                                true,
+                                Offset(4f * u, 4f * u),
+                                Size(16f * u, 16f * u),
+                            )
                         }
-                        drawPath(path,color,style=stroke);line(10f,21f,14f,21f);line(12f,3f,12f,4f)
-                    }
-                    SettingsGlyph.UPLOAD->{line(12f,16f,12f,4f);line(7f,9f,12f,4f);line(12f,4f,17f,9f);line(4f,16f,4f,21f);line(4f,21f,20f,21f);line(20f,21f,20f,16f)}
-                    SettingsGlyph.INFO->{drawCircle(color,9f*u,style=stroke);drawCircle(color,1f*u,Offset(12f*u,7f*u));line(12f,11f,12f,17f)}
-                    SettingsGlyph.SERVER->{
-                        for(y in listOf(4f,14f)) {
-                            drawRoundRect(color,Offset(3f*u,y*u),Size(18f*u,6f*u),CornerRadius(1.5f*u),style=stroke)
-                            drawCircle(color,.8f*u,Offset(7f*u,(y+3)*u))
+                        SettingsGlyph.ALERTS -> {
+                            val path =
+                                androidx.compose.ui.graphics.Path().apply {
+                                    moveTo(5f * u, 17f * u)
+                                    lineTo(7f * u, 14f * u)
+                                    lineTo(7f * u, 10f * u)
+                                    cubicTo(7f * u, 3f * u, 17f * u, 3f * u, 17f * u, 10f * u)
+                                    lineTo(17f * u, 14f * u)
+                                    lineTo(19f * u, 17f * u)
+                                    close()
+                                }
+                            drawPath(path, color, style = stroke)
+                            line(10f, 21f, 14f, 21f)
+                            line(12f, 3f, 12f, 4f)
+                        }
+                        SettingsGlyph.UPLOAD -> {
+                            line(12f, 16f, 12f, 4f)
+                            line(7f, 9f, 12f, 4f)
+                            line(12f, 4f, 17f, 9f)
+                            line(4f, 16f, 4f, 21f)
+                            line(4f, 21f, 20f, 21f)
+                            line(20f, 21f, 20f, 16f)
+                        }
+                        SettingsGlyph.INFO -> {
+                            drawCircle(color, 9f * u, style = stroke)
+                            drawCircle(color, 1f * u, Offset(12f * u, 7f * u))
+                            line(12f, 11f, 12f, 17f)
+                        }
+                        SettingsGlyph.SERVER -> {
+                            for (y in listOf(4f, 14f)) {
+                                drawRoundRect(
+                                    color,
+                                    Offset(3f * u, y * u),
+                                    Size(18f * u, 6f * u),
+                                    CornerRadius(1.5f * u),
+                                    style = stroke,
+                                )
+                                drawCircle(color, .8f * u, Offset(7f * u, (y + 3) * u))
+                            }
+                        }
+                        SettingsGlyph.NETWORK -> {
+                            line(12f, 8f, 12f, 12f)
+                            line(5f, 12f, 19f, 12f)
+                            line(5f, 12f, 5f, 16f)
+                            line(19f, 12f, 19f, 16f)
+                            for ((x, y) in listOf(12f to 5f, 5f to 19f, 19f to 19f)) {
+                                drawCircle(color, 3f * u, Offset(x * u, y * u), style = stroke)
+                            }
+                        }
+                        SettingsGlyph.KEY -> {
+                            drawCircle(color, 4f * u, Offset(7f * u, 8f * u), style = stroke)
+                            line(10f, 11f, 20f, 21f)
+                            line(15f, 16f, 18f, 13f)
+                            line(18f, 19f, 21f, 16f)
+                        }
+                        SettingsGlyph.FONT,
+                        SettingsGlyph.LANGUAGE -> Unit
+                        SettingsGlyph.COMMAND -> {
+                            line(9f, 6f, 3f, 12f)
+                            line(3f, 12f, 9f, 18f)
+                            line(15f, 6f, 21f, 12f)
+                            line(21f, 12f, 15f, 18f)
                         }
                     }
-                    SettingsGlyph.NETWORK->{
-                        line(12f,8f,12f,12f);line(5f,12f,19f,12f)
-                        line(5f,12f,5f,16f);line(19f,12f,19f,16f)
-                        for((x,y) in listOf(12f to 5f,5f to 19f,19f to 19f)) {
-                            drawCircle(color,3f*u,Offset(x*u,y*u),style=stroke)
-                        }
-                    }
-                    SettingsGlyph.KEY->{drawCircle(color,4f*u,Offset(7f*u,8f*u),style=stroke);line(10f,11f,20f,21f);line(15f,16f,18f,13f);line(18f,19f,21f,16f)}
-                    SettingsGlyph.FONT->Unit
-                    SettingsGlyph.COMMAND->{line(9f,6f,3f,12f);line(3f,12f,9f,18f);line(15f,6f,21f,12f);line(21f,12f,15f,18f)}
                 }
-            }
         }
     }
 }
 
 /** A labelled switch row; the whole row toggles. */
-@Composable internal fun SettingsToggleRow(title: String,checked: Boolean,onChange: (Boolean)->Unit,subtitle: String?=null) {
-    Row(Modifier.fillMaxWidth().toggleable(checked,role=Role.Switch,onValueChange=onChange).padding(horizontal=16.dp,vertical=14.dp),
-        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-            Text(title,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
-            subtitle?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+@Composable
+internal fun SettingsToggleRow(
+    title: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+    subtitle: String? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .toggleable(checked, role = Role.Switch, onValueChange = onChange)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = SettingsType.row, color = MaterialTheme.colorScheme.onSurface)
+            subtitle?.let {
+                Text(
+                    it,
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        Switch(checked=checked,onCheckedChange=null)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
 /** A labelled single choice among a few options. */
-@Composable internal fun <T> SettingsChoiceRow(title: String,options: List<T>,selected: T,label: @Composable (T)->String,onSelect: (T)->Unit,subtitle: String?=null) {
-    Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-        Text(title,style=SettingsType.row,color=MaterialTheme.colorScheme.onSurface)
-        subtitle?.let {Text(it,style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            options.forEach {option->
-                FilterChip(selected=selected==option,onClick={onSelect(option)},label={Text(label(option),style=SettingsType.row)})
+@Composable
+internal fun <T> SettingsChoiceRow(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    subtitle: String? = null,
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(title, style = SettingsType.row, color = MaterialTheme.colorScheme.onSurface)
+        subtitle?.let {
+            Text(
+                it,
+                style = SettingsType.detail,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = selected == option,
+                    onClick = { onSelect(option) },
+                    label = { Text(label(option), style = SettingsType.row) },
+                )
             }
         }
     }
 }
 
 /** A labelled text field; [mono] for key notation and commands. */
-@Composable internal fun SettingsTextField(label: String,value: String,onChange: (String)->Unit,modifier: Modifier=Modifier,
-    mono: Boolean=false,singleLine: Boolean=true,minLines: Int=1,maxLines: Int=if(singleLine) 1 else 10,isError: Boolean=false,supporting: String?=null) {
-    OutlinedTextField(value,onChange,modifier.fillMaxWidth(),label={Text(label)},singleLine=singleLine,minLines=minLines,maxLines=maxLines,
-        textStyle=if(mono) SettingsType.body.copy(fontFamily=MonoUi) else SettingsType.body,isError=isError,shape=RoundedCornerShape(14.dp),
-        supportingText=supporting?.let {{Text(it,style=SettingsType.detail)}})
+@Composable
+internal fun SettingsTextField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    mono: Boolean = false,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    maxLines: Int = if (singleLine) 1 else 10,
+    isError: Boolean = false,
+    supporting: String? = null,
+) {
+    OutlinedTextField(
+        value,
+        onChange,
+        modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = singleLine,
+        minLines = minLines,
+        maxLines = maxLines,
+        textStyle = if (mono) SettingsType.body.copy(fontFamily = MonoUi) else SettingsType.body,
+        isError = isError,
+        shape = RoundedCornerShape(14.dp),
+        supportingText = supporting?.let { { Text(it, style = SettingsType.detail) } },
+    )
 }
 
 /** Two choices: a confirming action and Cancel. */
-@Composable internal fun SettingsConfirmDialog(title: String,body: String,confirm: String,onConfirm: ()->Unit,onDismiss: ()->Unit,detail: String?=null) {
-    AlertDialog(onDismissRequest=onDismiss,title={Text(title,style=SettingsType.title)},text={
-        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text(body,style=SettingsType.body)
-            detail?.let {Text(it,style=SettingsType.body.copy(fontFamily=MonoUi),color=MaterialTheme.colorScheme.primary)}
-        }
-    },confirmButton={TextButton(onClick=onConfirm) {Text(confirm)}},dismissButton={TextButton(onClick=onDismiss) {Text(stringResource(R.string.cancel))}})
+@Composable
+internal fun SettingsConfirmDialog(
+    title: String,
+    body: String,
+    confirm: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    detail: String? = null,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = SettingsType.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(body, style = SettingsType.body)
+                detail?.let {
+                    Text(
+                        it,
+                        style = SettingsType.body.copy(fontFamily = MonoUi),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm) } },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }

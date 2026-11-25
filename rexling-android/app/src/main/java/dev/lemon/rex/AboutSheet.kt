@@ -23,61 +23,175 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal data class AppBuildInfo(val version: String,val number: Int,val type: String,val revision: String,val modified: Boolean) {
-    val commit: String get()=revision+if(modified) " (local changes)" else ""
-    val description: String get()="Rexling $version (build $number)\n$type · $commit"
+internal data class AppBuildInfo(
+    val version: String,
+    val number: Int,
+    val type: String,
+    val revision: String,
+    val modified: Boolean,
+) {
+    val commit: String
+        get() = revision + if (modified) " (local changes)" else ""
+
+    val description: String
+        get() = "Rexling $version (build $number)\n$type · $commit"
+
     companion object {
-        val current get()=AppBuildInfo(BuildConfig.VERSION_NAME,BuildConfig.VERSION_CODE,BuildConfig.BUILD_TYPE,BuildConfig.GIT_REVISION,BuildConfig.LOCAL_CHANGES)
-        const val repository="https://github.com/shulhi/rexling"
+        val current
+            get() =
+                AppBuildInfo(
+                    BuildConfig.VERSION_NAME,
+                    BuildConfig.VERSION_CODE,
+                    BuildConfig.BUILD_TYPE,
+                    BuildConfig.GIT_REVISION,
+                    BuildConfig.LOCAL_CHANGES,
+                )
+
+        const val repository = "https://github.com/shulhi/rexling"
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AboutSheet(hazeState: dev.chrisbanes.haze.HazeState?=null,onClose: ()->Unit) {
-    val context=LocalContext.current
-    val uri=LocalUriHandler.current
-    SettingsDrawer(stringResource(R.string.about),stringResource(R.string.close_about),onClose,hazeState) {
-        AboutContent(AppBuildInfo.current,onClose,onCopy={text->
-            (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Rexling build",text))
-        },onOpen={url->
-            runCatching {uri.openUri(url)}.onFailure {Toast.makeText(context,context.getString(R.string.no_browser),Toast.LENGTH_SHORT).show()}
-        },showHeader=false)
+@Composable
+internal fun AboutSheet(hazeState: dev.chrisbanes.haze.HazeState? = null, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val uri = LocalUriHandler.current
+    SettingsDrawer(
+        stringResource(R.string.about),
+        stringResource(R.string.close_about),
+        onClose,
+        hazeState,
+    ) {
+        AboutContent(
+            AppBuildInfo.current,
+            onClose,
+            onCopy = { text ->
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                    .setPrimaryClip(ClipData.newPlainText("Rexling build", text))
+            },
+            onOpen = { url ->
+                runCatching { uri.openUri(url) }
+                    .onFailure {
+                        Toast.makeText(
+                                context,
+                                context.getString(R.string.no_browser),
+                                Toast.LENGTH_SHORT,
+                            )
+                            .show()
+                    }
+            },
+            showHeader = false,
+        )
     }
 }
 
-@Composable internal fun AboutContent(info: AppBuildInfo,onClose: ()->Unit,onCopy: (String)->Unit,onOpen: (String)->Unit,showHeader: Boolean=true) {
-    Column(Modifier.fillMaxWidth().heightIn(max=620.dp).verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=8.dp,bottom=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        if(showHeader) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-            Text(stringResource(R.string.about),Modifier.weight(1f),style=SettingsType.row,fontWeight=FontWeight.Bold)
-            ChromeButton(ChromeIcon.CLOSE,stringResource(R.string.close_about),onClick=onClose)
-        }
-        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
-            Image(painterResource(R.drawable.rex_app_icon),contentDescription=null,
-                modifier=Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
-            Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.app_name),fontSize=24.sp,fontWeight=FontWeight.Bold)
-                Text(stringResource(R.string.app_subtitle),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+@Composable
+internal fun AboutContent(
+    info: AppBuildInfo,
+    onClose: () -> Unit,
+    onCopy: (String) -> Unit,
+    onOpen: (String) -> Unit,
+    showHeader: Boolean = true,
+) {
+    Column(
+        Modifier.fillMaxWidth()
+            .heightIn(max = 620.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (showHeader)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.about),
+                    Modifier.weight(1f),
+                    style = SettingsType.row,
+                    fontWeight = FontWeight.Bold,
+                )
+                ChromeButton(
+                    ChromeIcon.CLOSE,
+                    stringResource(R.string.close_about),
+                    onClick = onClose,
+                )
+            }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Image(
+                painterResource(R.drawable.rex_app_icon),
+                contentDescription = null,
+                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    stringResource(R.string.app_name),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    stringResource(R.string.app_subtitle),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.45f)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {  // alpha-ok build info card
-            BuildInfoRow(stringResource(R.string.version),info.version)
-            BuildInfoRow(stringResource(R.string.build),"${info.number} · ${info.type}")
-            BuildInfoRow(stringResource(R.string.commit),info.commit)
+        Column(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) { // alpha-ok build info card
+            BuildInfoRow(stringResource(R.string.version), info.version)
+            BuildInfoRow(stringResource(R.string.build), "${info.number} · ${info.type}")
+            BuildInfoRow(stringResource(R.string.commit), info.commit)
         }
-        OutlinedButton(onClick={onCopy(info.description)}) {ChromeSymbol(ChromeIcon.COPY,Modifier.size(16.dp));Spacer(Modifier.width(8.dp));Text(stringResource(R.string.copy_build_info))}
+        OutlinedButton(onClick = { onCopy(info.description) }) {
+            ChromeSymbol(ChromeIcon.COPY, Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.copy_build_info))
+        }
         Column {
-            TextButton(onClick={onOpen(AppBuildInfo.repository)}) {Text(stringResource(R.string.source_code_github))}
-            TextButton(onClick={onOpen("${AppBuildInfo.repository}/blob/main/LICENSE")}) {Text(stringResource(R.string.apache_license))}
-            TextButton(onClick={onOpen("${AppBuildInfo.repository}/blob/main/THIRD_PARTY_NOTICES.md")}) {Text(stringResource(R.string.opensource_notices))}
+            TextButton(onClick = { onOpen(AppBuildInfo.repository) }) {
+                Text(stringResource(R.string.source_code_github))
+            }
+            TextButton(onClick = { onOpen("${AppBuildInfo.repository}/blob/main/LICENSE") }) {
+                Text(stringResource(R.string.apache_license))
+            }
+            TextButton(
+                onClick = { onOpen("${AppBuildInfo.repository}/blob/main/THIRD_PARTY_NOTICES.md") },
+            ) {
+                Text(stringResource(R.string.opensource_notices))
+            }
         }
-        Text(stringResource(R.string.about_built_with),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(stringResource(R.string.about_warranty),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            stringResource(R.string.about_built_with),
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(R.string.about_warranty),
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
-@Composable private fun BuildInfoRow(label: String,value: String) {
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.Top) {
-        Text(label,Modifier.width(64.dp),fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value,fontSize=13.sp,fontWeight=FontWeight.Medium)
+@Composable
+private fun BuildInfoRow(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            label,
+            Modifier.width(64.dp),
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }

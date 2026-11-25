@@ -86,10 +86,10 @@ pub fn create(value: Value) -> Result<u64> {
                 Ok(Err(error)) => Some(error.to_string()),
                 Err(_) => Some("Upload worker failed".into()),
             };
-            if let Some(error) = error {
-                if let Ok(mut state) = shared.lock() {
-                    *state = upload::status(Phase::Uncertain, 0, 0, &error);
-                }
+            if let Some(error) = error
+                && let Ok(mut state) = shared.lock()
+            {
+                *state = upload::status(Phase::Uncertain, 0, 0, &error);
             }
         });
     worker.context("Could not start upload worker")?;
@@ -113,11 +113,10 @@ pub fn poll(id: u64) -> Value {
         .unwrap_or_else(|| json!({"phase":"failed","error":"Upload is no longer available"}))
 }
 pub fn destroy(id: u64) {
-    if let Ok(mut jobs) = jobs().lock() {
-        if let Some(mut job) = jobs.remove(&id) {
-            if let Some(cancel) = job.cancel.take() {
-                let _ = cancel.send(());
-            }
-        }
+    if let Ok(mut jobs) = jobs().lock()
+        && let Some(mut job) = jobs.remove(&id)
+        && let Some(cancel) = job.cancel.take()
+    {
+        let _ = cancel.send(());
     }
 }

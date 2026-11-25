@@ -31,7 +31,19 @@ impl Target {
     }
 }
 pub(crate) fn is_input(value: &Value) -> bool {
-    matches!(value["type"].as_str(), Some("input" | "paste" | "click"))
+    matches!(
+        value["type"].as_str(),
+        Some("input" | "paste" | "click" | "wheel")
+    )
+}
+const WHEEL_IN_FLIGHT: usize = 2;
+const WHEEL_LINE_LIMIT: i64 = 32;
+
+pub(crate) fn wheel_lines(value: &Value) -> i64 {
+    value["lines"]
+        .as_i64()
+        .unwrap_or(0)
+        .clamp(-WHEEL_LINE_LIMIT, WHEEL_LINE_LIMIT)
 }
 fn plain(value: &Value) -> bool {
     value["type"] == "input"
@@ -46,26 +58,55 @@ pub(crate) struct Commands {
 }
 impl Commands {
     pub fn push(&mut self, mut value: Value, target: &Target) -> Result<()> {
+        if is_input(&value) {
+            target.bind(&mut value);
+        }
+        if value["type"] == "wheel" {
+            let lines = wheel_lines(&value);
+            if lines == 0 {
+                return Ok(());
+            }
+            if let Some(queued) = self.items.back_mut()
+                && queued["type"] == "wheel"
+                && wheel_lines(queued).signum() == lines.signum()
+                && [
+                    "session",
+                    "block",
+                    "navigationId",
+                    "connectionEpoch",
+                    "col",
+                    "row",
+                    "cw",
+                    "ch",
+                    "columns",
+                    "rows",
+                ]
+                .iter()
+                .all(|key| queued[key] == value[key])
+            {
+                // Keep at most one batch of unsent motion for a continuous swipe.
+                queued["lines"] =
+                    json!((wheel_lines(queued) + lines).clamp(-WHEEL_LINE_LIMIT, WHEEL_LINE_LIMIT));
+                return Ok(());
+            }
+        }
         let bytes = value["text"].as_str().map_or(0, str::len);
         ensure!(
             self.items.len() < 128 && self.bytes.saturating_add(bytes) <= 1_048_576,
             "Input queue is full; queued input was not resent"
         );
-        if is_input(&value) {
-            target.bind(&mut value);
-        }
         self.bytes += bytes;
         self.items.push_back(value);
         Ok(())
     }
     pub fn ready(&self, pending: usize, limit: usize) -> bool {
-        self.items.front().is_some_and(|v| {
-            if v["type"] == "input" {
-                pending < limit
-            } else {
-                pending == 0
-            }
-        })
+        self.items
+            .front()
+            .is_some_and(|v| match v["type"].as_str() {
+                Some("input") => pending < limit,
+                Some("wheel") => pending < limit.min(WHEEL_IN_FLIGHT),
+                _ => pending == 0,
+            })
     }
     pub fn pop(&mut self, batch: bool) -> Option<Value> {
         let mut value = self.items.pop_front()?;
@@ -134,6 +175,36 @@ mod tests {
         assert!(!queue.ready(1, 8));
         assert!(queue.ready(0, 8));
         assert_eq!(queue.pop(true).unwrap()["type"], "release");
+    }
+    #[test]
+    fn wheel_batches_are_bounded_and_preserve_reversals_and_input_order() {
+        let mut queue = Commands::default();
+        let target = target("a");
+        for lines in [12, 12, 12, -2] {
+            queue
+                .push(json!({"type":"wheel","lines":lines,"col":2}), &target)
+                .unwrap();
+        }
+        queue
+            .push(json!({"type":"wheel","lines":-3,"col":4}), &target)
+            .unwrap();
+        queue
+            .push(json!({"type":"paste","text":"text after swipe"}), &target)
+            .unwrap();
+        queue
+            .push(json!({"type":"wheel","lines":-4,"col":4}), &target)
+            .unwrap();
+        assert!(queue.ready(1, 8));
+        assert!(!queue.ready(2, 8));
+        let batch = queue.pop(true).unwrap();
+        assert!(target.matches(&batch));
+        assert_eq!(wheel_lines(&batch), 32);
+        assert_eq!(wheel_lines(&queue.pop(true).unwrap()), -2);
+        assert_eq!(wheel_lines(&queue.pop(true).unwrap()), -3);
+        assert!(!queue.ready(1, 8));
+        assert_eq!(queue.pop(true).unwrap()["type"], "paste");
+        queue.discard_input();
+        assert!(queue.pop(true).is_none());
     }
     #[test]
     fn bindings_do_not_cross_panes_reconnects_or_navigation() {

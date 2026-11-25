@@ -1,34 +1,45 @@
 package dev.lemon.rex
 
+import java.io.File
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ProgramCatalogDataTest {
-    private val root=JSONObject(File("src/main/assets/program_tiles.json").readText())
+    private val root = JSONObject(File("src/main/assets/program_tiles.json").readText())
 
-    @Test fun skinsCoverEveryKindAndEveryTargetExists() {
-        val icons=root.getJSONObject("icons")
-        val glyphs=root.getJSONObject("glyphs")
-        val skins=root.getJSONObject("skins")
-        assertEquals(ProgramKind.values().map(ProgramKind::name).toSet(),skins.keys().asSequence().toSet())
-        for(kind in skins.keys()) {
-            val skin=skins.getJSONObject(kind)
-            skin.optString("tile").takeIf(String::isNotEmpty)?.let {assertTrue("$kind tile $it",icons.has(it))}
-            skin.optString("glyph").takeIf(String::isNotEmpty)?.let {assertTrue("$kind glyph $it",glyphs.has(it))}
-            val variants=skin.optJSONObject("variants")
-            variants?.keys()?.forEach {assertTrue("$kind variant $it",icons.has(variants.getString(it)))}
-            skin.optJSONArray("colors")?.let {assertEquals("$kind colors",3,it.length())}
+    @Test
+    fun skinsCoverEveryKindAndEveryTargetExists() {
+        val icons = root.getJSONObject("icons")
+        val glyphs = root.getJSONObject("glyphs")
+        val skins = root.getJSONObject("skins")
+        assertEquals(
+            ProgramKind.values().map(ProgramKind::name).toSet(),
+            skins.keys().asSequence().toSet(),
+        )
+        for (kind in skins.keys()) {
+            val skin = skins.getJSONObject(kind)
+            skin.optString("tile").takeIf(String::isNotEmpty)?.let {
+                assertTrue("$kind tile $it", icons.has(it))
+            }
+            skin.optString("glyph").takeIf(String::isNotEmpty)?.let {
+                assertTrue("$kind glyph $it", glyphs.has(it))
+            }
+            val variants = skin.optJSONObject("variants")
+            variants?.keys()?.forEach {
+                assertTrue("$kind variant $it", icons.has(variants.getString(it)))
+            }
+            skin.optJSONArray("colors")?.let { assertEquals("$kind colors", 3, it.length()) }
         }
-        val aliases=root.getJSONObject("aliases")
-        aliases.keys().forEach {assertTrue("alias $it",icons.has(aliases.getString(it)))}
+        val aliases = root.getJSONObject("aliases")
+        aliases.keys().forEach { assertTrue("alias $it", icons.has(aliases.getString(it))) }
     }
 
-    @Test fun catalogKeepsTilesAndGlyphsPaired() {
-        val icons=root.getJSONObject("icons")
-        val glyphs=root.getJSONObject("glyphs")
+    @Test
+    fun catalogKeepsTilesAndGlyphsPaired() {
+        val icons = root.getJSONObject("icons")
+        val glyphs = root.getJSONObject("glyphs")
         assertTrue(icons.has("docker"))
         assertTrue(glyphs.has("docker"))
         assertTrue(icons.has("mole"))
@@ -40,7 +51,8 @@ class ProgramCatalogDataTest {
         assertTrue(glyphs.has("ssh"))
     }
 
-    @Test fun indexMatchesTilesCatalog() {
+    @Test
+    fun indexMatchesTilesCatalog() {
         val indexFile = File("src/main/assets/program_index.json")
         assertTrue(indexFile.exists())
         val index = JSONObject(indexFile.readText())
@@ -58,7 +70,39 @@ class ProgramCatalogDataTest {
         }
     }
 
-    @Test fun everyTileDeclaresFlatSurfaceAndSymbolLayers() {
+    @Test
+    fun everyProgramTileIsReachableFromTheVocabulary() {
+        val icons = root.getJSONObject("icons")
+        // shell_manual is a catalog style variant for the manual shell card, not a program name.
+        val styleTiles = setOf("shell_manual")
+        val unreachable =
+            icons
+                .keys()
+                .asSequence()
+                .filterNot(styleTiles::contains)
+                .filter { ProgramVocabulary.Default.mapping(it) == null }
+                .toList()
+        assertEquals(emptyList<String>(), unreachable)
+    }
+
+    @Test
+    fun catalogAliasesResolveThroughTheVocabulary() {
+        val aliases = root.getJSONObject("aliases")
+        val mismatched =
+            aliases
+                .keys()
+                .asSequence()
+                .mapNotNull { alias ->
+                    val target = aliases.getString(alias)
+                    val resolved = ProgramVocabulary.Default.mapping(alias)
+                    if (resolved == target) null else "$alias -> $resolved, expected $target"
+                }
+                .toList()
+        assertEquals(emptyList<String>(), mismatched)
+    }
+
+    @Test
+    fun everyTileDeclaresFlatSurfaceAndSymbolLayers() {
         val icons = root.getJSONObject("icons")
         val layers = root.getJSONObject("layers")
         assertEquals(icons.length(), layers.length())
@@ -73,7 +117,10 @@ class ProgramCatalogDataTest {
             assertTrue("$name symbol", symbol < commands.length())
             assertEquals("path", commands.getJSONObject(flat).getString("op"))
             assertEquals("path", commands.getJSONObject(surface + 1).getString("op"))
-            assertTrue("$name flat paint", commands.getJSONObject(flat).getJSONObject("paint").has("color"))
+            assertTrue(
+                "$name flat paint",
+                commands.getJSONObject(flat).getJSONObject("paint").has("color"),
+            )
         }
     }
 }

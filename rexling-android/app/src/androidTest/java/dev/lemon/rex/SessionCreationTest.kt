@@ -11,32 +11,64 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SessionCreationTest {
-    @get:Rule val ui=createComposeRule()
-    @Test fun creationKeepsTheNameWhenRejectedAndAcceptsAnAutomaticName() {
-        val visible=mutableStateOf(true);val enabled=mutableStateOf(true)
-        var accepted=false;val names=mutableListOf<String>();var dismissed=0
-        ui.setContent {RexTheme(false,ThemeCatalog.defaults[1]) {
-            if(visible.value) NewSessionDialog("Shulhi MBP",enabled.value,{name->names+=name;accepted}) {dismissed++;visible.value=false}
-        }}
-        ui.onNodeWithText("On Shulhi MBP").assertIsDisplayed()
+    @get:Rule val ui = createComposeRule()
+
+    @Test
+    fun creationKeepsTheNameWhenRejectedAndAcceptsAnAutomaticName() {
+        val visible = mutableStateOf(true)
+        val enabled = mutableStateOf(true)
+        var accepted = false
+        val names = mutableListOf<String>()
+        var dismissed = 0
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                if (visible.value)
+                    NewSessionDialog(
+                        "Shulhi MBP",
+                        enabled.value,
+                        { name ->
+                            names += name
+                            accepted
+                        },
+                    ) {
+                        dismissed++
+                        visible.value = false
+                    }
+            }
+        }
+        ui.onNodeWithText(appString(R.string.on_server_format, "Shulhi MBP")).assertIsDisplayed()
         ui.onNode(hasSetTextAction()).performTextInput("New project")
-        ui.onNodeWithText("Create").performClick()
+        ui.onNodeWithText(appString(R.string.create)).performClick()
         ui.onNode(hasSetTextAction()).assertTextContains("New project")
-        ui.runOnIdle {assertEquals(listOf("New project"),names);assertEquals(0,dismissed);enabled.value=false}
-        ui.onNodeWithText("Create").assertIsNotEnabled()
-        ui.runOnIdle {enabled.value=true;accepted=true}
+        ui.runOnIdle {
+            assertEquals(listOf("New project"), names)
+            assertEquals(0, dismissed)
+            enabled.value = false
+        }
+        ui.onNodeWithText(appString(R.string.create)).assertIsNotEnabled()
+        ui.runOnIdle {
+            enabled.value = true
+            accepted = true
+        }
         ui.onNode(hasSetTextAction()).performTextClearance()
-        ui.onNodeWithText("Create").performClick()
-        ui.runOnIdle {assertEquals(listOf("New project",""),names);assertEquals(1,dismissed)}
-        ui.onNodeWithText("New session").assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.create)).performClick()
+        ui.runOnIdle {
+            assertEquals(listOf("New project", ""), names)
+            assertEquals(1, dismissed)
+        }
+        ui.onNodeWithText(appString(R.string.new_session)).assertDoesNotExist()
     }
-    @Test fun emptyConnectedServerHasAnExplicitCreationAction() {
-        var requested=0
-        ui.setContent {RexTheme(true,ThemeCatalog.defaults[0]) {
-            EmptySessionContent("Ubuntu",true,{requested++})
-        }}
-        ui.onNodeWithText("Start a session on Ubuntu.").assertIsDisplayed()
-        ui.onNodeWithText("New session").assertIsEnabled().performClick()
-        ui.runOnIdle {assertEquals(1,requested)}
+
+    @Test
+    fun emptyConnectedServerHasAnExplicitCreationAction() {
+        var requested = 0
+        ui.setContent {
+            RexTheme(true, ThemeCatalog.defaults[0]) {
+                EmptySessionContent("Ubuntu", true, { requested++ })
+            }
+        }
+        ui.onNodeWithText(appString(R.string.start_session_on_format, "Ubuntu")).assertIsDisplayed()
+        ui.onNodeWithText(appString(R.string.new_session)).assertIsEnabled().performClick()
+        ui.runOnIdle { assertEquals(1, requested) }
     }
 }

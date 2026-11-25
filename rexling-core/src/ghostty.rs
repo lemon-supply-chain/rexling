@@ -248,6 +248,9 @@ impl Frame {
     }
 }
 
+/// Consumed bytes and APC events produced by one snapshot decode step.
+type SnapshotStep = (usize, Vec<(u8, Vec<u8>)>);
+
 pub struct Terminal {
     handle: NonNull<c_void>,
     _owner_thread: PhantomData<Rc<()>>,
@@ -334,7 +337,7 @@ impl Terminal {
         )?;
         Ok((consumed, finished != 0))
     }
-    fn step(&mut self, bytes: &[u8]) -> Result<(usize, Vec<(u8, Vec<u8>)>)> {
+    fn step(&mut self, bytes: &[u8]) -> Result<SnapshotStep> {
         unsafe extern "C" fn apc(userdata: *mut c_void, kind: u8, bytes: *const u8, len: usize) {
             // Synchronous callback, borrowed bytes copied before native code returns.
             unsafe {
@@ -1340,7 +1343,7 @@ mod tests {
     fn frame_retains_color_roles_for_client_side_appearance() {
         let mut terminal = Terminal::new(20, 3).unwrap();
         terminal
-            .write(b"A\x1b[31mB\x1b[38;2;12;34;56mC\x1b[0m\x1b[42m ")
+            .write(b"A\x1b[31mB\x1b[38;2;12;34;56mC\x1b[0m\x1b[42m \x1b[0m\x1b[48;2;244;244;244mP")
             .unwrap();
         let frame = terminal.frame().unwrap();
         let a = &frame.cells[0];
@@ -1355,6 +1358,10 @@ mod tests {
         assert_eq!(c.foreground, [12, 34, 56]);
         assert_ne!(bg.attributes & 1024, 0);
         assert_eq!((bg.attributes >> 19) & 255, 2);
+        let prompt = &frame.cells[4];
+        assert_ne!(prompt.attributes & 128, 0);
+        assert_eq!(prompt.attributes & (256 | 1024), 0);
+        assert_eq!(prompt.background, [244, 244, 244]);
     }
     #[test]
     fn synchronized_redraw_holds_partial_frames_and_has_a_bounded_timeout() {

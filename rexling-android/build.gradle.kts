@@ -2,6 +2,7 @@ plugins {
     id("com.android.application") version "9.1.1" apply false
     id("com.android.test") version "9.1.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.10" apply false
+    id("com.ncorti.ktfmt.gradle") version "0.28.0" apply false
 }
 
 // This root project applies no Android plugin, so an unprefixed task name sent by an IDE or
@@ -18,3 +19,13 @@ val appVariants = listOf("Debug", "Release", "Optimized", "Profile")
             dependsOn(":app:$name")
         }
     }
+
+// ktfmt runs per module (see app/build.gradle.kts); mirror it here so
+// `./gradlew ktfmtCheck` from the Android project checks every module.
+listOf("ktfmtCheck", "ktfmtFormat").forEach { name ->
+    tasks.register(name) {
+        group = "verification"
+        description = "Runs the $name task in every module."
+        dependsOn(":app:$name", ":benchmark:$name")
+    }
+}

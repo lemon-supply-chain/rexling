@@ -29,7 +29,8 @@ public final class NativeBridge {
             }
             long revision=awaitUpdate(handle,0,1000);
             byte[] packet=readUpdate(handle,0);
-            if (revision<=0 || packet.length<17 || packet[0]!='R' || packet[1]!='X' || packet[2]!='T' || packet[3]!='7') throw new AssertionError("Binary update missing");
+            if (revision<=0 || packet.length<17) throw new AssertionError("Binary update missing");
+            if (packet[0]!='R' || packet[1]!='X' || packet[2]!='T' || packet[3]!='8') throw new AssertionError("Expected RXT8 update header");
             String bytes=new String(packet,java.nio.charset.StandardCharsets.UTF_8);
             if (!bytes.contains("λ") || !bytes.contains("🦀")) throw new AssertionError("Binary UTF8 lost");
             final long waitingHandle=handle;

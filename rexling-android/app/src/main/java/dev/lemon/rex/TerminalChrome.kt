@@ -22,6 +22,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.MaterialTheme
@@ -33,8 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -45,21 +48,28 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import dev.chrisbanes.haze.HazeState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -73,6 +83,8 @@ import kotlinx.coroutines.launch
 
 internal enum class ChromeIcon {
     SPLIT,
+    SPLIT_RIGHT,
+    SPLIT_BELOW,
     SEARCH,
     CHEVRON,
     SESSIONS,
@@ -110,9 +122,15 @@ internal enum class ChromeIcon {
     DELETE,
     QR,
     FLOAT,
+    MINIMIZE,
+    RESIZE,
     CHECK,
     PLAY,
     STOP,
+    MOVE,
+    WAFFLE,
+    ZOOM,
+    UNZOOM,
 }
 
 @Composable
@@ -165,9 +183,69 @@ internal fun ChromeSymbol(
                 box(3f, 7f, 14f, 14f)
                 box(10f, 3f, 11f, 10f)
             }
+            ChromeIcon.MINIMIZE -> line(5f, 12f, 19f, 12f)
+            ChromeIcon.RESIZE -> {
+                line(6f, 18f, 18f, 6f)
+                line(12f, 18f, 18f, 12f)
+            }
             ChromeIcon.SPLIT -> {
                 box(3f, 4f, 18f, 16f)
                 line(12f, 4f, 12f, 20f)
+            }
+            ChromeIcon.SPLIT_RIGHT,
+            ChromeIcon.SPLIT_BELOW -> {
+                val right = icon == ChromeIcon.SPLIT_RIGHT
+                val fillOrigin = if (right) Offset(12f * u, 5f * u) else Offset(4f * u, 12f * u)
+                val fillSize = if (right) Size(8f * u, 14f * u) else Size(16f * u, 7f * u)
+                drawRoundRect(
+                    color.copy(alpha = color.alpha * .23f),
+                    fillOrigin,
+                    fillSize,
+                    CornerRadius(u),
+                )
+                box(3f, 4f, 18f, 16f)
+                if (right) line(12f, 4f, 12f, 20f) else line(3f, 12f, 21f, 12f)
+            }
+            ChromeIcon.MOVE -> {
+                line(4f, 12f, 20f, 12f)
+                line(12f, 4f, 12f, 20f)
+                line(4f, 12f, 7f, 9f)
+                line(4f, 12f, 7f, 15f)
+                line(20f, 12f, 17f, 9f)
+                line(20f, 12f, 17f, 15f)
+                line(12f, 4f, 9f, 7f)
+                line(12f, 4f, 15f, 7f)
+                line(12f, 20f, 9f, 17f)
+                line(12f, 20f, 15f, 17f)
+            }
+            ChromeIcon.WAFFLE -> {
+                // A bento (waffle) menu grip: a 3×3 grid of rounded tiles.
+                for (row in 0..2) {
+                    for (col in 0..2) {
+                        drawRoundRect(
+                            color,
+                            Offset((4.5f + col * 5.5f) * u, (4.5f + row * 5.5f) * u),
+                            Size(4f * u, 4f * u),
+                            CornerRadius(1.2f * u),
+                        )
+                    }
+                }
+            }
+            ChromeIcon.ZOOM -> {
+                line(13f, 11f, 20f, 4f)
+                line(15f, 4f, 20f, 4f)
+                line(20f, 4f, 20f, 9f)
+                line(11f, 13f, 4f, 20f)
+                line(4f, 15f, 4f, 20f)
+                line(4f, 20f, 9f, 20f)
+            }
+            ChromeIcon.UNZOOM -> {
+                line(20f, 4f, 13f, 11f)
+                line(13f, 6f, 13f, 11f)
+                line(13f, 11f, 18f, 11f)
+                line(4f, 20f, 11f, 13f)
+                line(6f, 13f, 11f, 13f)
+                line(11f, 13f, 11f, 18f)
             }
             ChromeIcon.SEARCH -> {
                 drawCircle(color, 6f * u, Offset(10f * u, 10f * u), style = Stroke(width))
@@ -519,6 +597,7 @@ internal fun SessionHeader(
     expanded: Boolean = false,
     serverIcons: Map<String, ServerIcon> = emptyMap(),
     progress: TerminalProgress? = null,
+    onCollapse: (() -> Unit)? = null,
     menu: @Composable () -> Unit,
 ) {
     val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
@@ -684,7 +763,7 @@ internal fun SessionHeader(
                         scaleX = 1f - .06f * progress
                         scaleY = scaleX
                         alpha = 1f - .25f * progress
-                    }
+                    },
                 ) {
                     ProgramStack(
                         programs,
@@ -699,7 +778,18 @@ internal fun SessionHeader(
             }
             Spacer(Modifier.width(7.dp))
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+        Column(
+            Modifier.weight(1f)
+                .then(
+                    if (onCollapse != null)
+                        Modifier.clickable(
+                            onClickLabel = stringResource(R.string.a11y_collapse_top_bar),
+                            onClick = onCollapse,
+                        )
+                    else Modifier,
+                ),
+            verticalArrangement = Arrangement.Center,
+        ) {
             if (!expanded) {
                 Text(
                     title.ifBlank { program.title },
@@ -719,7 +809,7 @@ internal fun SessionHeader(
                                     constraints.copy(
                                         minHeight = 0,
                                         maxHeight = Constraints.Infinity,
-                                    )
+                                    ),
                                 )
                             layout(
                                 text.width,
@@ -744,7 +834,7 @@ internal fun SessionHeader(
                 )
             }
             BoxWithConstraints(
-                Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight)
+                Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight),
             ) {
                 val pageWidth = if (expanded) 160.dp else maxWidth.coerceAtLeast(40.dp)
                 val pagePadding =
@@ -802,7 +892,7 @@ internal fun SessionHeader(
                                         if (connected) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.outline,
                                         RoundedCornerShape(4.dp),
-                                    )
+                                    ),
                             )
                             serverIcons[item?.id]?.let {
                                 ServerGlyph(it, Modifier.size(if (expanded) 13.dp else 11.dp))
@@ -810,7 +900,7 @@ internal fun SessionHeader(
                             Text(
                                 item?.label
                                     ?: stringResource(
-                                        if (connected) R.string.sessions else R.string.connect
+                                        if (connected) R.string.sessions else R.string.connect,
                                     ),
                                 fontFamily = MonoUi,
                                 fontWeight = if (expanded) FontWeight.Bold else FontWeight.Normal,
@@ -820,8 +910,8 @@ internal fun SessionHeader(
                                     androidx.compose.ui.text.TextStyle(
                                         platformStyle =
                                             androidx.compose.ui.text.PlatformTextStyle(
-                                                includeFontPadding = false
-                                            )
+                                                includeFontPadding = false,
+                                            ),
                                     ),
                                 letterSpacing = 0.sp,
                                 maxLines = 1,
@@ -836,7 +926,7 @@ internal fun SessionHeader(
                                                     (if (expanded) 50.dp else 24.dp) -
                                                     (if (serverIcons[item?.id] != null) 15.dp
                                                     else 0.dp))
-                                                .coerceAtLeast(10.dp)
+                                                .coerceAtLeast(10.dp),
                                     ),
                             )
                             ChromeSymbol(
@@ -856,8 +946,96 @@ internal fun SessionHeader(
             }
         }
         if (!expanded) {
+            if (onCollapse != null) {
+                ChromeButton(
+                    ChromeIcon.CHEVRON,
+                    stringResource(R.string.a11y_collapse_top_bar),
+                    modifier = Modifier.graphicsLayer { rotationZ = 180f },
+                    onClick = onCollapse,
+                )
+            }
             menu()
         }
+    }
+}
+
+@Composable
+internal fun CompactSessionHeader(
+    title: String,
+    directory: String,
+    programs: List<ProgramIdentity>,
+    paneIndex: Int,
+    working: Boolean = false,
+    isPaneWorking: (Int) -> Boolean = { if (it == paneIndex) working else false },
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
+    val displayTitle = title.ifBlank { program.title }
+    val anyWorking = working || programs.indices.any(isPaneWorking)
+    val marquee = rememberRainbowMarquee(anyWorking)
+    val expandDescription = stringResource(R.string.a11y_expand_top_bar)
+    val fullText = if (directory.isNotBlank()) "$displayTitle - $directory" else displayTitle
+    val annotatedText = buildAnnotatedString {
+        withStyle(
+            SpanStyle(
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+        ) {
+            append(displayTitle)
+        }
+        if (directory.isNotBlank()) {
+            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                append(" - ")
+            }
+            withStyle(
+                SpanStyle(
+                    fontFamily = MonoUi,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            ) {
+                append(directory)
+            }
+        }
+    }
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .heightIn(min = 34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClickLabel = expandDescription) { onExpand() }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .semantics { contentDescription = fullText },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(
+            Modifier.weight(1f, fill = false),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (anyWorking) {
+                Box(
+                    Modifier.size(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .rainbowMarquee(marquee, corner = 3.dp, thickness = 1.dp),
+                )
+            }
+            Text(
+                text = annotatedText,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        ChromeSymbol(
+            ChromeIcon.CHEVRON,
+            Modifier.size(12.dp),
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -878,7 +1056,7 @@ internal fun rememberWorkingPhase(working: Boolean): State<Float> {
                     androidx.compose.animation.core.tween(
                         1200,
                         easing = androidx.compose.animation.core.LinearEasing,
-                    )
+                    ),
             ),
         label = "Working highlight",
     )
@@ -890,7 +1068,7 @@ internal fun TerminalControlButton(controlled: Boolean, enabled: Boolean, onClic
     val label =
         stringResource(
             if (controlled) R.string.a11y_release_terminal_control
-            else R.string.a11y_take_terminal_control
+            else R.string.a11y_take_terminal_control,
         )
     androidx.compose.material3.TooltipBox(
         positionProvider =
@@ -900,8 +1078,8 @@ internal fun TerminalControlButton(controlled: Boolean, enabled: Boolean, onClic
                 Text(
                     stringResource(
                         if (controlled) R.string.a11y_release_control
-                        else R.string.a11y_take_control
-                    )
+                        else R.string.a11y_take_control,
+                    ),
                 )
             }
         },
@@ -917,7 +1095,7 @@ internal fun TerminalControlButton(controlled: Boolean, enabled: Boolean, onClic
                     RoundedCornerShape(16.dp),
                 )
                 .background(
-                    if (controlled) MaterialTheme.colorScheme.primary else Color.Transparent
+                    if (controlled) MaterialTheme.colorScheme.primary else Color.Transparent,
                 )
                 .semantics {
                     contentDescription = label
@@ -955,11 +1133,18 @@ internal fun PositionDots(index: Int, count: Int, modifier: Modifier = Modifier)
                         if (active) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         RoundedCornerShape(3.dp),
-                    )
+                    ),
             )
         }
     }
 }
+
+/**
+ * A floating tab bar keeps one length along the bottom, so its tabs scroll inside; a floating side
+ * rail hugs its tabs instead.
+ */
+internal val FloatingTabBarWidth = 360.dp
+internal val FloatingTabBarHeight = 52.dp
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -978,18 +1163,45 @@ internal fun TerminalTabs(
     reorderKey: String = "",
     animateWorking: Boolean = true,
     contentReady: Boolean = true,
+    floating: Boolean = false,
+    hazeState: HazeState? = null,
+    handle: (@Composable () -> Unit)? = null,
     paneProgress: (WindowItem) -> TerminalProgress? = { null },
     tabAttention: (WindowItem) -> Int = { 0 },
+    onFanToggle: ((String) -> Unit)? = null,
+    onFanDismiss: () -> Unit = {},
+    onFanAnchorBounds: (Rect) -> Unit = {},
+    onFanBarBounds: (Rect) -> Unit = {},
+    onFanAnchorGone: (String) -> Unit = {},
+    onMenuOpenChange: (Boolean) -> Unit = {},
     actions: @Composable () -> Unit,
 ) {
+    val currentOnMenuOpenChange by rememberUpdatedState(onMenuOpenChange)
+    DisposableEffect(floating) { onDispose { if (floating) currentOnMenuOpenChange(false) } }
+    // A floating bar is a fixed-length rounded card over the terminal, so its tabs scroll inside
+    // it.
+    val barShape = RexTokens.shape.tabCell
+    val barHeight = if (floating) FloatingTabBarHeight else 45.dp
+    val barModifier =
+        if (floating)
+            Modifier.fillMaxWidth()
+                .height(barHeight)
+                .shadow(3.dp, barShape, clip = false)
+                .then(
+                    if (hazeState == null)
+                        Modifier.clip(barShape).background(MaterialTheme.colorScheme.surface)
+                    else Modifier.paneFrost(hazeState, barShape),
+                )
+                .onGloballyPositioned { onFanBarBounds(it.boundsInRoot()) }
+                .testTag("Floating tab bar")
+                .padding(horizontal = 6.dp)
+        else Modifier.fillMaxWidth().height(barHeight).padding(start = 11.dp, end = 6.dp)
     var revealed by remember(reorderKey) { mutableStateOf(false) }
     LaunchedEffect(reorderKey, contentReady) { if (contentReady) revealed = true }
     if (!contentReady && !revealed) {
         // Reserve the dock's normal bounds so first-load metadata cannot resize the terminal.
-        Row(
-            Modifier.fillMaxWidth().height(45.dp).padding(start = 11.dp, end = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
+            handle?.invoke()
             Spacer(Modifier.weight(1f).fillMaxHeight())
             actions()
         }
@@ -998,8 +1210,10 @@ internal fun TerminalTabs(
     val list = rememberLazyListState()
     val tabsDescription = stringResource(R.string.a11y_tabs)
     val context = androidx.compose.ui.platform.LocalContext.current
-    val marquee = rememberRainbowMarquee(animateWorking && windows.any(paneWorking))
-    val settledMarquee = remember { RainbowMarquee(mutableStateOf(0f), mutableStateOf(0f)) }
+    val marquee =
+        rememberRainbowMarquee(
+            animateWorking && windows.any { paneWorking(it) || paneProgress(it)?.busy == true },
+        )
     val drag = remember(reorderKey) { TabDrag() }
     var menuId by remember(reorderKey) { mutableStateOf<String?>(null) }
     val ids = windows.map { it.id }
@@ -1046,6 +1260,10 @@ internal fun TerminalTabs(
         drag.cancel()
         menuId = null
     }
+    LaunchedEffect(floating, drag.id, menuId) {
+        if (floating && (drag.id != null || menuId != null)) onFanDismiss()
+        currentOnMenuOpenChange(floating && menuId != null)
+    }
     LaunchedEffect(drag.id) {
         var previous = withFrameNanos { it }
         while (drag.id != null) {
@@ -1067,10 +1285,8 @@ internal fun TerminalTabs(
             }
         }
     }
-    Row(
-        Modifier.fillMaxWidth().height(45.dp).padding(start = 11.dp, end = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
+        handle?.invoke()
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             val density = LocalDensity.current.density
             val widths =
@@ -1151,7 +1367,7 @@ internal fun TerminalTabs(
                             animateWorking &&
                                 active &&
                                 if (progress != null) progress.busy && progress.percent == null
-                                else busy
+                                else busy,
                         )
                     val programs = panePrograms(w)
                     val pane = selectedPane(w)
@@ -1178,13 +1394,23 @@ internal fun TerminalTabs(
                                     else androidx.compose.animation.core.spring(),
                             )
                             .zIndex(if (drag.id == w.id) 1f else 0f)
-                            .graphicsLayer { translationX = drag.translation(w.id, list) * sign }
+                            .graphicsLayer { translationX = drag.translation(w.id, list) * sign },
                     ) {
+                        if (floating && active) {
+                            DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
+                        }
                         val barTrack =
                             tintOver(indicatorColor, MaterialTheme.colorScheme.surface, .18f)
                         Column(
                             Modifier.height(45.dp)
                                 .width(width)
+                                .then(
+                                    if (floating && active)
+                                        Modifier.onGloballyPositioned {
+                                            onFanAnchorBounds(it.boundsInRoot())
+                                        }
+                                    else Modifier,
+                                )
                                 .drawWithContent {
                                     drawContent()
                                     if (active) {
@@ -1224,7 +1450,7 @@ internal fun TerminalTabs(
                                 .background(
                                     if (drag.id == w.id && drag.moved)
                                         MaterialTheme.colorScheme.surfaceVariant
-                                    else Color.Transparent
+                                    else Color.Transparent,
                                 )
                                 .semantics(mergeDescendants = true) {
                                     contentDescription = tabContentDescription
@@ -1247,13 +1473,13 @@ internal fun TerminalTabs(
                                                 add(
                                                     CustomAccessibilityAction(leftLabel) {
                                                         moveBy(-1)
-                                                    }
+                                                    },
                                                 )
                                             if (windowIndex < windows.lastIndex)
                                                 add(
                                                     CustomAccessibilityAction(rightLabel) {
                                                         moveBy(1)
-                                                    }
+                                                    },
                                                 )
                                         }
                                     }
@@ -1261,7 +1487,19 @@ internal fun TerminalTabs(
                                 .clickable(
                                     enabled = enabled,
                                     role = Role.Tab,
-                                    onClick = { onSelect(w.id) },
+                                    onClick = {
+                                        if (
+                                            floating &&
+                                                active &&
+                                                w.blocks.size > 1 &&
+                                                onFanToggle != null
+                                        ) {
+                                            onFanToggle(w.id)
+                                        } else {
+                                            if (floating) onFanDismiss()
+                                            onSelect(w.id)
+                                        }
+                                    },
                                 ),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
@@ -1277,10 +1515,11 @@ internal fun TerminalTabs(
                                         programs,
                                         pane,
                                         fixedSlot = true,
-                                        marquee =
-                                            if (active || marquee == null) marquee
-                                            else settledMarquee,
-                                        isPaneWorking = { isPaneWorking(w, it) },
+                                        marquee = marquee,
+                                        isPaneWorking = {
+                                            isPaneWorking(w, it) ||
+                                                (it == pane && progress?.busy == true)
+                                        },
                                         progress = progress,
                                     )
                                     if (unread > 0) {
@@ -1300,7 +1539,7 @@ internal fun TerminalTabs(
                                                     MaterialTheme.colorScheme.primary,
                                                     androidx.compose.foundation.shape.CircleShape,
                                                 )
-                                                .semantics { testTag = "Tab unread dot ${w.id}" }
+                                                .semantics { testTag = "Tab unread dot ${w.id}" },
                                         )
                                     }
                                 }
@@ -1314,8 +1553,8 @@ internal fun TerminalTabs(
                                             androidx.compose.ui.text.TextStyle(
                                                 platformStyle =
                                                     androidx.compose.ui.text.PlatformTextStyle(
-                                                        includeFontPadding = false
-                                                    )
+                                                        includeFontPadding = false,
+                                                    ),
                                             ),
                                         fontWeight =
                                             if (active) FontWeight.Bold else FontWeight.Normal,
@@ -1380,17 +1619,34 @@ internal fun TerminalActions(
     attentionCount: Int = 0,
     keyboardLabel: String = "",
     onKeyboard: (() -> Unit)? = null,
+    vertical: Boolean = false,
+    sideRail: Boolean = false,
 ) {
     val activityDescription = stringResource(R.string.activity)
     val activityState =
         if (attentionCount > 0) stringResource(R.string.a11y_activity_new_items, attentionCount)
         else stringResource(R.string.a11y_activity_all_seen)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    @Composable
+    fun Group(content: @Composable () -> Unit) =
+        if (vertical)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                content()
+            }
+        else
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                content()
+            }
+    val keyboardButton: @Composable () -> Unit = {
         if (onKeyboard != null)
             ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = onKeyboard)
+    }
+    val switcherButton: @Composable () -> Unit = {
         ChromeButton(
             ChromeIcon.SPLIT,
             stringResource(R.string.a11y_tabs_and_panes),
@@ -1398,11 +1654,13 @@ internal fun TerminalActions(
             readable = activityEnabled,
             onClick = onSwitcher,
         )
+    }
+    val activityButton: @Composable () -> Unit = {
         Box(Modifier.size(41.dp), contentAlignment = Alignment.Center) {
             Box(
                 Modifier.matchParentSize()
                     .clip(RoundedCornerShape(23.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             )
             Box(
                 Modifier.size(36.dp)
@@ -1436,8 +1694,19 @@ internal fun TerminalActions(
                         )
                         .padding(1.dp)
                         .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
-                        .semantics { testTag = "Activity unread dot" }
+                        .semantics { testTag = "Activity unread dot" },
                 )
+        }
+    }
+    Group {
+        if (sideRail) {
+            activityButton()
+            switcherButton()
+            keyboardButton()
+        } else {
+            keyboardButton()
+            switcherButton()
+            activityButton()
         }
     }
 }
@@ -1473,7 +1742,7 @@ internal fun KeyboardBar(
     val hideExtraKeys = stringResource(R.string.a11y_hide_extra_keys)
     val extraKeysState =
         stringResource(
-            if (expanded) R.string.a11y_state_expanded else R.string.a11y_state_collapsed
+            if (expanded) R.string.a11y_state_expanded else R.string.a11y_state_collapsed,
         )
     val terminalKeysDescription = stringResource(R.string.a11y_terminal_keys)
     val pasteKeyDescription = stringResource(R.string.a11y_paste_key)
@@ -1484,7 +1753,7 @@ internal fun KeyboardBar(
                 !controlled -> R.string.a11y_take_control_and_show_keyboard
                 keyboardVisible -> R.string.a11y_hide_keyboard
                 else -> R.string.a11y_show_keyboard
-            }
+            },
         )
     // The extra-key trigger lives just before Esc, outside the initial viewport.
     val keyScroll = rememberScrollState(initial = Int.MAX_VALUE)
@@ -1504,8 +1773,8 @@ internal fun KeyboardBar(
                         MaterialTheme.colorScheme.outline,
                         MaterialTheme.colorScheme.surface,
                         .4f,
-                    )
-                )
+                    ),
+                ),
         )
         Row(
             Modifier.fillMaxWidth().height(45.dp).padding(vertical = 4.dp),
@@ -1724,7 +1993,7 @@ private fun DockKey(
             .clip(RoundedCornerShape(11.dp))
             .background(
                 if (active) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
+                else MaterialTheme.colorScheme.surfaceVariant,
             )
             .semantics(mergeDescendants = true) {
                 contentDescription = description
@@ -1736,7 +2005,7 @@ private fun DockKey(
                     Modifier.clickable(enabled = enabled, role = Role.Button) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onClick()
-                    }
+                    },
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -1782,7 +2051,7 @@ private fun ShiftDockKey(
             .clip(RoundedCornerShape(11.dp))
             .background(
                 if (active) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
+                else MaterialTheme.colorScheme.surfaceVariant,
             )
             .semantics {
                 contentDescription = shiftDescription

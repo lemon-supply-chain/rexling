@@ -7,7 +7,7 @@ arm64-v8a Android 9/API 28 or newer; other Android ABIs are not built yet.
 
 ## Prerequisites
 
-- Rust 1.93+ and rustup, with Cargo available on PATH or under `~/.cargo/bin`.
+- Rust 1.100+ and rustup, with Cargo available on PATH or under `~/.cargo/bin`.
 - Python 3.9+ and curl for the native build helper.
 - Android Studio, or an Android SDK plus JDK 25.
 - SDK platform `platforms;android-37`, Build Tools `build-tools;36.0.0`, NDK
@@ -96,6 +96,33 @@ The probe's optional `ghostty` feature enables `rex-view`. Build the host Ghostt
 library first with the helper below, then use `--features rex-probe/ghostty` for
 workspace commands. Protocol-probe usage and evidence are in
 `rexling-core/probe/README.md` and `rexling-core/probe/PROTOCOL.md`.
+
+## Code style
+
+Rust is formatted with `cargo fmt`. Before committing, run `cargo fmt --check`,
+`cargo clippy --workspace --all-targets -- -D warnings` and the workspace tests
+(see "Checks without a phone"); this repository has no CI, so these are manual.
+
+Kotlin uses [ktfmt](https://github.com/Kotlin/ktfmt) through the
+[ktfmt-gradle](https://github.com/cortinico/ktfmt-gradle) plugin (0.28.0,
+Kotlin style, 4-space indent), applied to `:app` and `:benchmark`:
+
+```sh
+cd rexling-android
+./gradlew ktfmtCheck     # report drift for every source set and build script
+./gradlew ktfmtFormat    # rewrite Kotlin sources and build scripts in place
+```
+
+The plugin registers per-source-set tasks (`ktfmtCheckMain`,
+`ktfmtCheckAndroidTest`, ...) and wires them into each module's `check` task,
+so `./gradlew build` fails while drift exists. The root tasks above aggregate
+both modules.
+
+Most of the tree predates the formatter, so a whole-tree pass is a separate,
+whitespace-only change. Do that pass together with `AlphaAuditTest`: the audit
+looks for the `// alpha-ok` marker on the same line as `copy(alpha`, and reflowing
+a long call can move the marker off that line. Either keep the call and marker on
+one line or widen the audit to a statement window before running it.
 
 ## Checks without a phone
 

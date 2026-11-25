@@ -257,6 +257,11 @@ impl Predictor {
         }
     }
 
+    /// Returns the latest complete server frame stored as the prediction base.
+    pub fn base(&self) -> Option<Arc<Frame>> {
+        self.base.clone()
+    }
+
     /// Records predictions for input about to be sent to `target`.
     pub fn input(&mut self, target: &str, text: &str, program: Program, now: Instant) {
         self.retarget(target);
@@ -313,7 +318,7 @@ impl Predictor {
                     cell.text = c.to_string();
                     cell.width = 1;
                     cell.hyperlink = None;
-                    cell.attributes &= !(INVERSE | PREDICTED);
+                    cell.attributes &= !(INVERSE | PREDICTED | (1 << 6));
                     let id = self.push(x, y, cell, Kind::Char, 0, origin, now);
                     self.floor = match self.floor {
                         Some((fx, fy)) if fy == y => Some((fx.min(x), y)),
@@ -344,7 +349,7 @@ impl Predictor {
                     cell.text = " ".into();
                     cell.width = 1;
                     cell.hyperlink = None;
-                    cell.attributes &= !(INVERSE | PREDICTED);
+                    cell.attributes &= !(INVERSE | PREDICTED | (1 << 6));
                     if hidden_cursor {
                         // pi: at the end of its input, the reverse-video cursor steps back over a blank.
                         let at_end = self
@@ -516,7 +521,9 @@ impl Predictor {
         let mut cells = frame.cells.clone();
         for p in shown.iter().filter(|p| p.kind != Kind::Move) {
             let mut cell = p.cell.clone();
-            if self.flagging && p.kind != Kind::FakeCursor {
+            if self.flagging && p.kind == Kind::Char {
+                cell.attributes |= PREDICTED | (1 << 6);
+            } else if self.flagging && p.kind != Kind::FakeCursor {
                 cell.attributes |= PREDICTED;
             }
             match cells.binary_search_by(|c| (c.y, c.x).cmp(&(p.y, p.x))) {

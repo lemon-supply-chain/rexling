@@ -46,6 +46,10 @@ impl Data {
         trace: Trace,
     ) -> Result<Self> {
         let ticket = control.call("data.connect", json!({"session_id":session,"block_id":block,"data_ref_id":"terminal","subprotocol":TERMINAL})).await?;
+        Self::open_ticket(endpoint, ticket, trace).await
+    }
+    /// Complete the data handshake after the control connection has issued a ticket.
+    pub async fn open_ticket(endpoint: &Endpoint, ticket: Value, trace: Trace) -> Result<Self> {
         let bytes = URL_SAFE_NO_PAD.decode(ticket["ticket"].as_str().context("no ticket")?)?;
         ensure!(bytes.len() == 16, "ticket must be 16 bytes");
         let mut hello = vec![1];

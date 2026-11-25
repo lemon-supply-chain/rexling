@@ -6,6 +6,7 @@ package dev.lemon.rex
  * comes back as the command's error.
  */
 internal object RexActions {
-    const val SEPARATOR=" := "
-    fun editorText(label: String,action: String): String = "$label$SEPARATOR$action"
+    const val SEPARATOR = " := "
+
+    fun editorText(label: String, action: String): String = "$label$SEPARATOR$action"
 }

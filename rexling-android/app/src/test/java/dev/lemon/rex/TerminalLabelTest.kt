@@ -4,7 +4,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalLabelTest {
-    @Test fun labelsSupportResetAndUnicodeButRejectControlCharactersAndOversize() {
+    @Test
+    fun labelsSupportResetAndUnicodeButRejectControlCharactersAndOversize() {
         assertNull(terminalLabelError(""))
         assertNull(terminalLabelError("🦀".repeat(128)))
         assertNotNull(terminalLabelError("🦀".repeat(129)))

@@ -1,11 +1,13 @@
-<resources>
-    <!-- Dark counterpart of Theme.Rex; see values/styles.xml. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Dark twin of values/styles.xml: the canvas and bar glyphs of the built-in dark theme,
+         so the first frame matches what RexTheme draws a moment later. -->
+    <color name="launch_canvas">#090c11</color>
     <style name="Theme.Rex" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/launch_canvas</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/launch_paper</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:colorAccent">#FF315CF4</item>
-        <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#FF090C11</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

@@ -174,6 +174,23 @@ Soft keyboards (like Gboard) naturally attempt dictionary lookups, predictive wo
 
 ---
 
+### 3.11 Pane Switches Carry the Current Grid
+
+Rex stores a terminal size per block, and a client sets it only for a block it
+owns (or when nobody owns it); there is no session-wide width. A layout change
+therefore resizes only the live pane. When another pane is opened, the app
+carries its current viewport grid (`columns` / `rows`) on the `block` / `session`
+command when the source and target share a compatible single-pane viewport (or
+when an explicit tile grid is provided); switches involving multi-pane tiled
+layouts omit the fallback `lastSize`. The engine resizes the incoming block
+before it opens the data stream — except on mirror handoffs, which already have
+a live stream at the multi-pane grid — so the first frame already matches the
+layout instead of showing the size the pane had while the rail was docked. Resizing every block when the floating
+toggle changes is deliberately avoided: multi-pane widths differ, background
+blocks may belong to another client, and every resize costs a SIGWINCH repaint.
+
+See `research/floating-layout-terminal-width.md`.
+
 ## 4. Verification & Testing
 
 - **Rust engine unit tests**:

@@ -23,72 +23,148 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-internal val ServerIcon.labelRes: Int get() = when(this) {
-    ServerIcon.GLOBE->R.string.server_icon_globe
-    ServerIcon.SERVER->R.string.server_icon_server
-    ServerIcon.CLOUD->R.string.server_icon_cloud
-    ServerIcon.MACBOOK->R.string.server_icon_macbook
-    ServerIcon.MAC_MINI->R.string.server_icon_mac_mini
-    ServerIcon.MAC_STUDIO->R.string.server_icon_mac_studio
-    ServerIcon.DESKTOP->R.string.server_icon_desktop
-}
+internal val ServerIcon.labelRes: Int
+    get() =
+        when (this) {
+            ServerIcon.GLOBE -> R.string.server_icon_globe
+            ServerIcon.SERVER -> R.string.server_icon_server
+            ServerIcon.CLOUD -> R.string.server_icon_cloud
+            ServerIcon.MACBOOK -> R.string.server_icon_macbook
+            ServerIcon.MAC_MINI -> R.string.server_icon_mac_mini
+            ServerIcon.MAC_STUDIO -> R.string.server_icon_mac_studio
+            ServerIcon.DESKTOP -> R.string.server_icon_desktop
+        }
 
 /** Small stroke icons stay sharp at header and picker sizes. */
-@Composable internal fun ServerGlyph(icon: ServerIcon,modifier: Modifier=Modifier,color: Color=MaterialTheme.colorScheme.onSurfaceVariant) {
+@Composable
+internal fun ServerGlyph(
+    icon: ServerIcon,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
     Canvas(modifier.size(20.dp)) {
-        val stroke=Stroke(1.6f)
-        withTransform({scale(size.width/24f,size.height/24f,pivot=Offset.Zero)}) {
-            fun line(x: Float,y: Float,x2: Float,y2: Float)=drawLine(color,Offset(x,y),Offset(x2,y2),1.6f)
-            fun box(x: Float,y: Float,w: Float,h: Float,r: Float=1.5f)=drawRoundRect(color,Offset(x,y),Size(w,h),CornerRadius(r),style=stroke)
-            when(icon) {
-                ServerIcon.GLOBE->{
-                    drawCircle(color,9f,Offset(12f,12f),style=stroke)
-                    drawOval(color,Offset(8f,3f),Size(8f,18f),style=stroke)
-                    line(3f,12f,21f,12f);line(5f,7f,19f,7f);line(5f,17f,19f,17f)
+        val stroke = Stroke(1.6f)
+        withTransform({ scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) }) {
+            fun line(x: Float, y: Float, x2: Float, y2: Float) =
+                drawLine(color, Offset(x, y), Offset(x2, y2), 1.6f)
+            fun box(x: Float, y: Float, w: Float, h: Float, r: Float = 1.5f) =
+                drawRoundRect(color, Offset(x, y), Size(w, h), CornerRadius(r), style = stroke)
+            when (icon) {
+                ServerIcon.GLOBE -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    drawOval(color, Offset(8f, 3f), Size(8f, 18f), style = stroke)
+                    line(3f, 12f, 21f, 12f)
+                    line(5f, 7f, 19f, 7f)
+                    line(5f, 17f, 19f, 17f)
                 }
-                ServerIcon.SERVER->{
-                    box(3f,4f,18f,7f);box(3f,13f,18f,7f)
-                    for(y in listOf(7.5f,16.5f)) {drawCircle(color,1f,Offset(6.5f,y));line(11f,y,18f,y)}
+                ServerIcon.SERVER -> {
+                    box(3f, 4f, 18f, 7f)
+                    box(3f, 13f, 18f, 7f)
+                    for (y in listOf(7.5f, 16.5f)) {
+                        drawCircle(color, 1f, Offset(6.5f, y))
+                        line(11f, y, 18f, y)
+                    }
                 }
-                ServerIcon.CLOUD->{
-                    val path=Path().apply {
-                        moveTo(6f,19f);cubicTo(0f,19f,0f,11f,6f,11f)
-                        cubicTo(5f,3f,17f,2f,18f,10f)
-                        cubicTo(25f,10f,25f,19f,18f,19f);close()
-                    };drawPath(path,color,style=stroke)
+                ServerIcon.CLOUD -> {
+                    val path =
+                        Path().apply {
+                            moveTo(6f, 19f)
+                            cubicTo(0f, 19f, 0f, 11f, 6f, 11f)
+                            cubicTo(5f, 3f, 17f, 2f, 18f, 10f)
+                            cubicTo(25f, 10f, 25f, 19f, 18f, 19f)
+                            close()
+                        }
+                    drawPath(path, color, style = stroke)
                 }
-                ServerIcon.MACBOOK->{
-                    box(5f,4f,14f,12f,1f)
-                    val path=Path().apply {moveTo(4f,17f);lineTo(20f,17f);lineTo(22f,20f);lineTo(2f,20f);close()}
-                    drawPath(path,color,style=stroke)
+                ServerIcon.MACBOOK -> {
+                    box(5f, 4f, 14f, 12f, 1f)
+                    val path =
+                        Path().apply {
+                            moveTo(4f, 17f)
+                            lineTo(20f, 17f)
+                            lineTo(22f, 20f)
+                            lineTo(2f, 20f)
+                            close()
+                        }
+                    drawPath(path, color, style = stroke)
                 }
-                ServerIcon.MAC_MINI->{box(3f,8f,18f,8f,2f);line(6f,12f,8f,12f);drawCircle(color,.8f,Offset(18f,12f))}
-                ServerIcon.MAC_STUDIO->{box(4f,5f,16f,14f,2f);line(4f,14f,20f,14f);line(7f,16.5f,10f,16.5f);drawCircle(color,.8f,Offset(17f,16.5f))}
-                ServerIcon.DESKTOP->{box(3f,3f,18f,13f,1f);line(12f,16f,12f,21f);line(8f,21f,16f,21f)}
+                ServerIcon.MAC_MINI -> {
+                    box(3f, 8f, 18f, 8f, 2f)
+                    line(6f, 12f, 8f, 12f)
+                    drawCircle(color, .8f, Offset(18f, 12f))
+                }
+                ServerIcon.MAC_STUDIO -> {
+                    box(4f, 5f, 16f, 14f, 2f)
+                    line(4f, 14f, 20f, 14f)
+                    line(7f, 16.5f, 10f, 16.5f)
+                    drawCircle(color, .8f, Offset(17f, 16.5f))
+                }
+                ServerIcon.DESKTOP -> {
+                    box(3f, 3f, 18f, 13f, 1f)
+                    line(12f, 16f, 12f, 21f)
+                    line(8f, 21f, 16f, 21f)
+                }
             }
         }
     }
 }
 
-@Composable internal fun ServerIconPicker(selected: ServerIcon,compact: Boolean=false,onSelect: (ServerIcon)->Unit) {
-    val chooseIconDescription=stringResource(R.string.a11y_choose_server_icon)
-    var open by remember {mutableStateOf(false)}
+@Composable
+internal fun ServerIconPicker(
+    selected: ServerIcon,
+    compact: Boolean = false,
+    onSelect: (ServerIcon) -> Unit,
+) {
+    val chooseIconDescription = stringResource(R.string.a11y_choose_server_icon)
+    var open by remember { mutableStateOf(false) }
     Box {
-        Row((if(compact) Modifier.height(56.dp).width(52.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh) else Modifier.fillMaxWidth())
-            .clickable(role=Role.Button) {open=true}.semantics {contentDescription=chooseIconDescription}
-            .padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(compact) Arrangement.Center else Arrangement.spacedBy(10.dp)) {
-            ServerGlyph(selected,color=MaterialTheme.colorScheme.onSurface)
-            if(!compact) {
-                Text(stringResource(R.string.icon),Modifier.weight(1f),style=SettingsType.row)
-                Text(stringResource(selected.labelRes),style=SettingsType.detail,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                ChromeSymbol(ChromeIcon.CHEVRON,Modifier.size(14.dp),MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            (if (compact)
+                    Modifier.height(56.dp)
+                        .width(52.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                else Modifier.fillMaxWidth())
+                .clickable(role = Role.Button) { open = true }
+                .semantics { contentDescription = chooseIconDescription }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement =
+                if (compact) Arrangement.Center else Arrangement.spacedBy(10.dp),
+        ) {
+            ServerGlyph(selected, color = MaterialTheme.colorScheme.onSurface)
+            if (!compact) {
+                Text(stringResource(R.string.icon), Modifier.weight(1f), style = SettingsType.row)
+                Text(
+                    stringResource(selected.labelRes),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ChromeSymbol(
+                    ChromeIcon.CHEVRON,
+                    Modifier.size(14.dp),
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             } else Spacer(Modifier.width(4.dp))
         }
-        DropdownMenu(open,{open=false},containerColor=MaterialTheme.colorScheme.surface,tonalElevation=0.dp) {
-            ServerIcon.entries.forEach {icon->
-                DropdownMenuItem(text={Text(stringResource(icon.labelRes),style=SettingsType.row)},
-                    leadingIcon={ServerGlyph(icon)},trailingIcon={if(selected==icon) Text("✓",color=MaterialTheme.colorScheme.primary)},
-                    onClick={onSelect(icon);open=false})
+        DropdownMenu(
+            open,
+            { open = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+        ) {
+            ServerIcon.entries.forEach { icon ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(icon.labelRes), style = SettingsType.row) },
+                    leadingIcon = { ServerGlyph(icon) },
+                    trailingIcon = {
+                        if (selected == icon) Text("✓", color = MaterialTheme.colorScheme.primary)
+                    },
+                    onClick = {
+                        onSelect(icon)
+                        open = false
+                    },
+                )
             }
         }
     }
