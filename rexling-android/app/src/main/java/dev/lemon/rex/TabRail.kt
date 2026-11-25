@@ -21,9 +21,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
@@ -138,6 +141,12 @@ internal fun TerminalTabRail(
     floating: Boolean = false,
     hazeState: HazeState? = null,
     handle: (@Composable () -> Unit)? = null,
+    fannedWindowId: String? = null,
+    onFanToggle: ((String) -> Unit)? = null,
+    onFanDismiss: () -> Unit = {},
+    onFanAnchorBounds: (Rect) -> Unit = {},
+    onFanBarBounds: (Rect) -> Unit = {},
+    onFanAnchorGone: (String) -> Unit = {},
     actions: @Composable () -> Unit,
 ) {
     val titles = style == TabRailStyle.TITLES
@@ -168,6 +177,7 @@ internal fun TerminalTabRail(
     val ids = windows.map { it.id }
     val index = ids.indexOf(selectedId)
     LaunchedEffect(ids) { menuId = null }
+    LaunchedEffect(floating, menuId) { if (floating && menuId != null) onFanDismiss() }
     LaunchedEffect(selectedId, reorderKey, index) {
         if (index >= 0) list.animateScrollToItem(index)
     }
@@ -236,7 +246,12 @@ internal fun TerminalTabRail(
                         else -> Modifier
                     },
                 )
-                .then(if (floating) Modifier.testTag("Floating tab rail") else Modifier)
+                .then(
+                    if (floating)
+                        Modifier.onGloballyPositioned { onFanBarBounds(it.boundsInRoot()) }
+                            .testTag("Floating tab rail")
+                    else Modifier,
+                )
                 .systemGestureExclusion { coordinates ->
                     val height = coordinates.size.height.toFloat()
                     androidx.compose.ui.geometry.Rect(
@@ -262,6 +277,7 @@ internal fun TerminalTabRail(
                             haptic.performHapticFeedback(
                                 androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
                             )
+                            if (floating) onFanDismiss()
                             onStyle(next)
                         }
                     },
@@ -328,6 +344,9 @@ internal fun TerminalTabRail(
                     val moveDownLabel = stringResource(R.string.move_down)
                     val tabOptionsLabel = stringResource(R.string.tab_options)
                     Box(Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)) {
+                        if (floating && active) {
+                            DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
+                        }
                         val workPhase =
                             rememberWorkingPhase(
                                 animateWorking &&
@@ -338,6 +357,13 @@ internal fun TerminalTabRail(
                         Row(
                             Modifier.fillMaxWidth()
                                 .height(48.dp)
+                                .then(
+                                    if (floating && active)
+                                        Modifier.onGloballyPositioned {
+                                            onFanAnchorBounds(it.boundsInRoot())
+                                        }
+                                    else Modifier,
+                                )
                                 .background(
                                     if (active) scheme.surfaceVariant else Color.Transparent,
                                 )
@@ -409,8 +435,23 @@ internal fun TerminalTabRail(
                                     enabled = enabled,
                                     role = Role.Tab,
                                     onLongClickLabel = tabOptionsLabel,
-                                    onLongClick = { menuId = w.id },
-                                    onClick = { onSelect(w.id) },
+                                    onLongClick = {
+                                        if (floating) onFanDismiss()
+                                        menuId = w.id
+                                    },
+                                    onClick = {
+                                        if (
+                                            floating &&
+                                                active &&
+                                                w.blocks.size > 1 &&
+                                                onFanToggle != null
+                                        ) {
+                                            onFanToggle(w.id)
+                                        } else {
+                                            if (floating) onFanDismiss()
+                                            onSelect(w.id)
+                                        }
+                                    },
                                 )
                                 .padding(horizontal = if (titles) 6.dp else 0.dp),
                             verticalAlignment = Alignment.CenterVertically,

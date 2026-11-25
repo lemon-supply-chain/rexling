@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -47,7 +48,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -1165,6 +1168,12 @@ internal fun TerminalTabs(
     handle: (@Composable () -> Unit)? = null,
     paneProgress: (WindowItem) -> TerminalProgress? = { null },
     tabAttention: (WindowItem) -> Int = { 0 },
+    fannedWindowId: String? = null,
+    onFanToggle: ((String) -> Unit)? = null,
+    onFanDismiss: () -> Unit = {},
+    onFanAnchorBounds: (Rect) -> Unit = {},
+    onFanBarBounds: (Rect) -> Unit = {},
+    onFanAnchorGone: (String) -> Unit = {},
     actions: @Composable () -> Unit,
 ) {
     // A floating bar is a fixed-length rounded card over the terminal, so its tabs scroll inside
@@ -1181,6 +1190,7 @@ internal fun TerminalTabs(
                         Modifier.clip(barShape).background(MaterialTheme.colorScheme.surface)
                     else Modifier.paneFrost(hazeState, barShape),
                 )
+                .onGloballyPositioned { onFanBarBounds(it.boundsInRoot()) }
                 .testTag("Floating tab bar")
                 .padding(horizontal = 6.dp)
         else Modifier.fillMaxWidth().height(barHeight).padding(start = 11.dp, end = 6.dp)
@@ -1247,6 +1257,9 @@ internal fun TerminalTabs(
     LaunchedEffect(ids, enabled) {
         drag.cancel()
         menuId = null
+    }
+    LaunchedEffect(floating, drag.id, menuId) {
+        if (floating && (drag.id != null || menuId != null)) onFanDismiss()
     }
     LaunchedEffect(drag.id) {
         var previous = withFrameNanos { it }
@@ -1380,11 +1393,21 @@ internal fun TerminalTabs(
                             .zIndex(if (drag.id == w.id) 1f else 0f)
                             .graphicsLayer { translationX = drag.translation(w.id, list) * sign },
                     ) {
+                        if (floating && active) {
+                            DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
+                        }
                         val barTrack =
                             tintOver(indicatorColor, MaterialTheme.colorScheme.surface, .18f)
                         Column(
                             Modifier.height(45.dp)
                                 .width(width)
+                                .then(
+                                    if (floating && active)
+                                        Modifier.onGloballyPositioned {
+                                            onFanAnchorBounds(it.boundsInRoot())
+                                        }
+                                    else Modifier,
+                                )
                                 .drawWithContent {
                                     drawContent()
                                     if (active) {
@@ -1461,7 +1484,19 @@ internal fun TerminalTabs(
                                 .clickable(
                                     enabled = enabled,
                                     role = Role.Tab,
-                                    onClick = { onSelect(w.id) },
+                                    onClick = {
+                                        if (
+                                            floating &&
+                                                active &&
+                                                w.blocks.size > 1 &&
+                                                onFanToggle != null
+                                        ) {
+                                            onFanToggle(w.id)
+                                        } else {
+                                            if (floating) onFanDismiss()
+                                            onSelect(w.id)
+                                        }
+                                    },
                                 ),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {

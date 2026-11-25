@@ -23,6 +23,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -499,6 +501,28 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             pendingShortcut != null ||
             closeTarget != null ||
             dockFloatingPane != null
+    var fannedTabId by remember { mutableStateOf<String?>(null) }
+    var fanAnchorBounds by remember { mutableStateOf(Rect.Zero) }
+    var fanBarBounds by remember { mutableStateOf(Rect.Zero) }
+    fun resolveFannedWindow() =
+        if (floatingTabs) windows.firstOrNull { it.id == fannedTabId && it.blocks.size > 1 }
+        else null
+    LaunchedEffect(
+        floatingTabs,
+        displayedSession,
+        activeWindowId,
+        tabLayout.position,
+        paneObscured,
+    ) {
+        fannedTabId = null
+        if (!floatingTabs) {
+            fanAnchorBounds = Rect.Zero
+            fanBarBounds = Rect.Zero
+        }
+    }
+    LaunchedEffect(fannedTabId, windows, floatingTabs) {
+        if (fannedTabId != null && resolveFannedWindow() == null) fannedTabId = null
+    }
     val zoomed = window?.zoomed.orEmpty()
     val activityPaneIds =
         remember(chosen, tiles, floatingOverlay, zoomed) {
@@ -944,6 +968,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         )
                     }
                     val tabRail: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
+                        val isFloatingRail = floatingTabs && handle != null
                         TerminalTabRail(
                             windows,
                             activeWindowId,
@@ -979,12 +1004,23 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             floating = floatingTabs,
                             hazeState = terminalHaze,
                             handle = handle,
+                            fannedWindowId =
+                                if (isFloatingRail) resolveFannedWindow()?.id else null,
+                            onFanToggle =
+                                if (isFloatingRail)
+                                    { id -> fannedTabId = if (fannedTabId == id) null else id }
+                                else null,
+                            onFanDismiss = { fannedTabId = null },
+                            onFanAnchorBounds = { if (isFloatingRail) fanAnchorBounds = it },
+                            onFanBarBounds = { if (isFloatingRail) fanBarBounds = it },
+                            onFanAnchorGone = { id -> if (fannedTabId == id) fannedTabId = null },
                         ) {
                             tabActions(tabLayout.style == TabRailStyle.ICONS, true)
                         }
                     }
                     // A floating strip always carries a grip; the docked strip never does.
                     val tabStrip: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
+                        val isFloatingStrip = floatingTabs && handle != null
                         TerminalTabs(
                             windows,
                             activeWindowId,
@@ -1026,6 +1062,16 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             floating = handle != null,
                             hazeState = terminalHaze,
                             handle = handle,
+                            fannedWindowId =
+                                if (isFloatingStrip) resolveFannedWindow()?.id else null,
+                            onFanToggle =
+                                if (isFloatingStrip)
+                                    { id -> fannedTabId = if (fannedTabId == id) null else id }
+                                else null,
+                            onFanDismiss = { fannedTabId = null },
+                            onFanAnchorBounds = { if (isFloatingStrip) fanAnchorBounds = it },
+                            onFanBarBounds = { if (isFloatingStrip) fanBarBounds = it },
+                            onFanAnchorGone = { id -> if (fannedTabId == id) fannedTabId = null },
                             actions = { tabActions(false, false) },
                         )
                     }
@@ -1267,20 +1313,89 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                         onExpandedChange = { floatingBackdrop = it },
                                     )
                                 }
-                                if (floatingTabs)
-                                    FloatingTabBar(
-                                        model.floatingTabPosition,
-                                        model::moveFloatingTab,
-                                        Modifier.fillMaxSize(),
-                                        // Only the left and right rails tuck themselves away.
-                                        hideAtEdges = tabLayout.side,
-                                    ) { handle ->
-                                        if (tabLayout.position == TabBarPosition.BOTTOM)
-                                            Box(Modifier.width(FloatingTabBarWidth)) {
-                                                tabStrip(handle)
+                                if (floatingTabs) {
+                                    val fannedWindow = resolveFannedWindow()
+                                    val fanSourceWindow =
+                                        fannedWindow ?: window?.takeIf { it.blocks.size > 1 }
+                                    val selectedFanBlockId =
+                                        fanSourceWindow
+                                            ?.blocks
+                                            ?.getOrNull(client.tabPaneIndex(fanSourceWindow))
+                                            ?.id ?: chosen
+                                    val fanItems =
+                                        remember(
+                                            fanSourceWindow,
+                                            selectedFanBlockId,
+                                            state.programs,
+                                            state.titles,
+                                            state.workingBlocks,
+                                            state.terminalProgress,
+                                        ) {
+                                            fanSourceWindow
+                                                ?.blocks
+                                                ?.map { block ->
+                                                    val program =
+                                                        state.programs[block.id]
+                                                            ?: ProgramIdentity.Loading
+                                                    TabFanItem(
+                                                        id = block.id,
+                                                        program = program,
+                                                        title =
+                                                            program.paneTitle(
+                                                                block.label,
+                                                                state.titles[block.id].orEmpty(),
+                                                            ),
+                                                        selected = block.id == selectedFanBlockId,
+                                                        working = block.id in state.workingBlocks,
+                                                        progress = state.terminalProgress[block.id],
+                                                    )
+                                                }
+                                                .orEmpty()
+                                        }
+                                    val fanMarquee =
+                                        rememberRainbowMarquee(
+                                            !workspaceBackdrop &&
+                                                fanItems.any {
+                                                    it.working || it.progress?.busy == true
+                                                },
+                                        )
+                                    TabStackFan(
+                                        visible = fannedWindow != null && !paneObscured,
+                                        items = fanItems,
+                                        anchorBounds = fanAnchorBounds,
+                                        barBounds = fanBarBounds,
+                                        preferredAxis =
+                                            if (tabLayout.side) Orientation.Vertical
+                                            else Orientation.Horizontal,
+                                        marquee = fanMarquee,
+                                        onSelect = { blockId ->
+                                            fannedTabId = null
+                                            openPane(blockId)
+                                        },
+                                        onDismiss = { fannedTabId = null },
+                                        bar = {
+                                            FloatingTabBar(
+                                                model.floatingTabPosition,
+                                                {
+                                                    fannedTabId = null
+                                                    model.moveFloatingTab(it)
+                                                },
+                                                Modifier.fillMaxSize(),
+                                                // Only the left and right rails tuck themselves
+                                                // away.
+                                                hideAtEdges = tabLayout.side,
+                                                keepVisible = fannedWindow != null && !paneObscured,
+                                                onDragStart = { fannedTabId = null },
+                                            ) { handle ->
+                                                if (tabLayout.position == TabBarPosition.BOTTOM)
+                                                    Box(Modifier.width(FloatingTabBarWidth)) {
+                                                        tabStrip(handle)
+                                                    }
+                                                else tabRail(handle)
                                             }
-                                        else tabRail(handle)
-                                    }
+                                        },
+                                    )
+                                }
                             }
                             if (!floatingTabs && tabLayout.position == TabBarPosition.RIGHT)
                                 tabRail(null)

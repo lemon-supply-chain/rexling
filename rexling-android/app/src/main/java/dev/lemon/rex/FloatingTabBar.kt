@@ -80,6 +80,8 @@ internal fun FloatingTabBar(
     onPosition: (Offset) -> Unit,
     modifier: Modifier = Modifier,
     hideAtEdges: Boolean = false,
+    keepVisible: Boolean = false,
+    onDragStart: () -> Unit = {},
     idleHideMillis: Long = FloatingTabBarIdleHideMillis,
     content: @Composable (handle: @Composable () -> Unit) -> Unit,
 ) {
@@ -125,9 +127,9 @@ internal fun FloatingTabBar(
                 resting.x + size.width >= areaWidth - margin - edgeZone -> FloatingEdge.RIGHT
                 else -> null
             }
-        LaunchedEffect(edge, interaction, moving) {
+        LaunchedEffect(edge, interaction, moving, keepVisible) {
             hidden = false
-            if (edge == null || moving) return@LaunchedEffect
+            if (edge == null || moving || keepVisible) return@LaunchedEffect
             delay(idleHideMillis)
             hidden = true
         }
@@ -162,6 +164,7 @@ internal fun FloatingTabBar(
                             onDragStart = {
                                 moving = true
                                 drag = resting
+                                onDragStart()
                                 haptic.performHapticFeedback(
                                     androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
                                 )
