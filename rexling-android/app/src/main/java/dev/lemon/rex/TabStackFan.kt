@@ -37,8 +37,11 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -453,9 +456,23 @@ internal fun TabStackFan(
     val active = visible && items.size > 1 && !anchorBounds.isEmpty
     val motion = LocalMotionEnabled.current
     val progress = remember { Animatable(0f) }
+    var cachedItems by remember { mutableStateOf<List<TabFanItem>>(emptyList()) }
+    var cachedAnchor by remember { mutableStateOf(Rect.Zero) }
+    var cachedBar by remember { mutableStateOf(Rect.Zero) }
+    if (active) {
+        cachedItems = items
+        cachedAnchor = anchorBounds
+        cachedBar = barBounds
+    }
+    val displayItems = if (active) items else cachedItems
+    val displayAnchor = if (active) anchorBounds else cachedAnchor
+    val displayBar = if (active) barBounds else cachedBar
     var windowStart by remember { mutableIntStateOf(0) }
     LaunchedEffect(visible) { if (visible) windowStart = 0 }
-    LaunchedEffect(items.size) { if (windowStart >= items.size) windowStart = 0 }
+    LaunchedEffect(displayItems.size) {
+        val maxStart = (displayItems.size - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
+        if (windowStart > maxStart) windowStart = maxStart
+    }
     LaunchedEffect(active) {
         if (active) {
             if (motion) progress.animateTo(1f, RexTokens.motion.fastSpatial())
@@ -463,18 +480,22 @@ internal fun TabStackFan(
         } else {
             if (motion) progress.animateTo(0f, RexTokens.motion.fastEffects())
             else progress.snapTo(0f)
+            cachedItems = emptyList()
         }
     }
     BackHandler(enabled = active) { onDismiss() }
 
+    val dismissFanDescription = stringResource(R.string.a11y_fan_dismiss)
+    val nextPanesDescription = stringResource(R.string.a11y_fan_next_panes)
+    val previousPanesDescription = stringResource(R.string.a11y_fan_previous_panes)
     var containerOrigin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(
         modifier.fillMaxSize().onGloballyPositioned { containerOrigin = it.boundsInRoot().topLeft },
     ) {
-        val localAnchor = anchorBounds.translate(-containerOrigin.x, -containerOrigin.y)
+        val localAnchor = displayAnchor.translate(-containerOrigin.x, -containerOrigin.y)
         val localBar =
-            if (barBounds.isEmpty) localAnchor
-            else barBounds.translate(-containerOrigin.x, -containerOrigin.y)
+            if (displayBar.isEmpty) localAnchor
+            else displayBar.translate(-containerOrigin.x, -containerOrigin.y)
         val density = LocalDensity.current
         val cardWidth = 48.dp
         val cardHeight = 38.dp
@@ -482,13 +503,14 @@ internal fun TabStackFan(
         val cardSizePx = with(density) { Size(cardWidth.toPx(), cardHeight.toPx()) }
         val touchSizePx = with(density) { touchSize.toPx() }
         val workspaceSize = Size(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
-        val showFan = active || progress.value > 0.005f
+        val showFan =
+            active || (progress.value > 0.005f && displayItems.size > 1 && !displayAnchor.isEmpty)
         val layout =
             if (showFan) {
                 val direction = resolveFanDirection(localAnchor, workspaceSize, preferredAxis)
                 with(density) {
                     computeFanLayout(
-                        itemCount = items.size,
+                        itemCount = displayItems.size,
                         windowStart = windowStart,
                         anchor = localAnchor,
                         workspace = workspaceSize,
@@ -515,9 +537,11 @@ internal fun TabStackFan(
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = true)
                             if (layout.safeZone.contains(down.position)) {
-                                // The bar itself is layered above this scrim; the rest of the safe
-                                // zone (the gap around the fan and the bar) stays open instead of
-                                // dismissing the fan.
+                                // The bar itself is layered above this scrim; consume taps on the
+                                // remaining safe-zone gap so they stay open without leaking through
+                                // to the terminal.
+                                down.consume()
+                                waitForUpOrCancellation()?.consume()
                                 return@awaitEachGesture
                             }
                             down.consume()
@@ -529,6 +553,7 @@ internal fun TabStackFan(
                         }
                     }
                     .semantics {
+                        contentDescription = dismissFanDescription
                         onClick {
                             currentDismiss()
                             true
@@ -554,22 +579,23 @@ internal fun TabStackFan(
             val spatialSpec = if (motion) RexTokens.motion.fastSpatial<Float>() else snap()
             val effectSpec = if (motion) RexTokens.motion.fastEffects<Float>() else snap()
             val hasLeading = layout.windowStart > 0
-            val hasTrailing = layout.visibleEnd < items.size
-            val leadingHead = items.getOrNull(layout.windowStart)
-            val trailingHead = items.getOrNull(layout.visibleEnd - 1)
-            val currentItemCount by rememberUpdatedState(items.size)
+            val hasTrailing = layout.visibleEnd < displayItems.size
+            val leadingHead = displayItems.getOrNull(layout.windowStart)
+            val trailingHead = displayItems.getOrNull(layout.visibleEnd - 1)
+            val currentItemCount by rememberUpdatedState(displayItems.size)
+            val currentWindowStart by rememberUpdatedState(layout.windowStart)
             val currentSelect by rememberUpdatedState(onSelect)
             fun pageBackward() {
-                windowStart = (windowStart - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
+                windowStart = (currentWindowStart - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
             }
             fun pageForward() {
                 val maxStart = (currentItemCount - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
-                windowStart = (windowStart + TAB_STACK_FAN_LIMIT).coerceAtMost(maxStart)
+                windowStart = (currentWindowStart + TAB_STACK_FAN_LIMIT).coerceAtMost(maxStart)
             }
 
             Box(Modifier.fillMaxSize().testTag("Tab stack fan")) {
                 for (pose in layout.cards) {
-                    val item = items.getOrNull(pose.itemIndex) ?: continue
+                    val item = displayItems.getOrNull(pose.itemIndex) ?: continue
                     key(item.id) {
                         val animX by
                             animateFloatAsState(
@@ -670,12 +696,35 @@ internal fun TabStackFan(
                                     if (isPrimary) {
                                         contentDescription = item.title
                                         selected = item.selected
-                                    }
-                                    if (active && pose.visibleInStack) {
-                                        onClick {
-                                            if (tapAction != FanTapAction.NONE) invokeSingleTap()
-                                            else currentSelect(currentTargetId)
-                                            true
+                                        if (active && pose.visibleInStack) {
+                                            onClick {
+                                                currentSelect(item.id)
+                                                true
+                                            }
+                                            if (tapAction != FanTapAction.NONE) {
+                                                val pageLabel =
+                                                    if (tapAction == FanTapAction.PAGE_BACKWARD)
+                                                        previousPanesDescription
+                                                    else nextPanesDescription
+                                                customActions =
+                                                    listOf(
+                                                        CustomAccessibilityAction(pageLabel) {
+                                                            invokeSingleTap()
+                                                            true
+                                                        },
+                                                    )
+                                            }
+                                        }
+                                    } else {
+                                        contentDescription =
+                                            if (pose.role == FanCardRole.LEADING_STACK)
+                                                previousPanesDescription
+                                            else nextPanesDescription
+                                        if (active && pose.visibleInStack) {
+                                            onClick {
+                                                invokeSingleTap()
+                                                true
+                                            }
                                         }
                                     }
                                 }

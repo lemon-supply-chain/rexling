@@ -141,7 +141,6 @@ internal fun TerminalTabRail(
     floating: Boolean = false,
     hazeState: HazeState? = null,
     handle: (@Composable () -> Unit)? = null,
-    fannedWindowId: String? = null,
     onFanToggle: ((String) -> Unit)? = null,
     onFanDismiss: () -> Unit = {},
     onFanAnchorBounds: (Rect) -> Unit = {},

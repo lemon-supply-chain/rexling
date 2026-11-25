@@ -1007,8 +1007,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             floating = floatingTabs,
                             hazeState = terminalHaze,
                             handle = handle,
-                            fannedWindowId =
-                                if (isFloatingRail) resolveFannedWindow()?.id else null,
                             onFanToggle =
                                 if (isFloatingRail)
                                     { id -> fannedTabId = if (fannedTabId == id) null else id }
@@ -1066,8 +1064,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             floating = handle != null,
                             hazeState = terminalHaze,
                             handle = handle,
-                            fannedWindowId =
-                                if (isFloatingStrip) resolveFannedWindow()?.id else null,
                             onFanToggle =
                                 if (isFloatingStrip)
                                     { id -> fannedTabId = if (fannedTabId == id) null else id }
@@ -1320,23 +1316,21 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 }
                                 if (floatingTabs) {
                                     val fannedWindow = resolveFannedWindow()
-                                    val fanSourceWindow =
-                                        fannedWindow ?: window?.takeIf { it.blocks.size > 1 }
                                     val selectedFanBlockId =
-                                        fanSourceWindow
+                                        fannedWindow
                                             ?.blocks
-                                            ?.getOrNull(client.tabPaneIndex(fanSourceWindow))
+                                            ?.getOrNull(client.tabPaneIndex(fannedWindow))
                                             ?.id ?: chosen
                                     val fanItems =
                                         remember(
-                                            fanSourceWindow,
+                                            fannedWindow,
                                             selectedFanBlockId,
                                             state.programs,
                                             state.titles,
                                             state.workingBlocks,
                                             state.terminalProgress,
                                         ) {
-                                            fanSourceWindow
+                                            fannedWindow
                                                 ?.blocks
                                                 ?.map { block ->
                                                     val program =
@@ -1359,7 +1353,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                         }
                                     val fanMarquee =
                                         rememberRainbowMarquee(
-                                            !workspaceBackdrop &&
+                                            fannedWindow != null &&
+                                                !workspaceBackdrop &&
                                                 fanItems.any {
                                                     it.working || it.progress?.busy == true
                                                 },

@@ -1168,7 +1168,6 @@ internal fun TerminalTabs(
     handle: (@Composable () -> Unit)? = null,
     paneProgress: (WindowItem) -> TerminalProgress? = { null },
     tabAttention: (WindowItem) -> Int = { 0 },
-    fannedWindowId: String? = null,
     onFanToggle: ((String) -> Unit)? = null,
     onFanDismiss: () -> Unit = {},
     onFanAnchorBounds: (Rect) -> Unit = {},
