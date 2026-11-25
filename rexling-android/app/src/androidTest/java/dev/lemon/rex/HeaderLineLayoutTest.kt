@@ -134,14 +134,19 @@ class HeaderLineLayoutTest {
         var menuOpens = 0
         var overlap = 0
         val title = "Task title"
-        val session = "ShipPDF · Shipyard"
+        val session = "Shipyard · ShipPDF"
+        val target =
+            SessionTarget(
+                ServerProfile.create("Shipyard", "https://shipyard", "shipyard"),
+                SessionItem("a", "ShipPDF"),
+            )
         ui.setContent {
             MaterialTheme {
                 val haze = remember { HazeState() }
                 Column(Modifier.width(340.dp).height(150.dp)) {
                     SessionHeader(
-                        listOf(SessionItem("a", session)),
-                        "a",
+                        SessionCatalog.strip(emptyList(), target),
+                        target.key,
                         true,
                         true,
                         emptyList(),
@@ -154,7 +159,7 @@ class HeaderLineLayoutTest {
                             if (compact != CompactHeaderMode.NEVER) WindowInsets(bottom = keyboard)
                             else null,
                         alwaysCompact = compact == CompactHeaderMode.ALWAYS,
-                        serverIcons = mapOf("a" to ServerIcon.CLOUD),
+                        serverIcons = mapOf(target.key to ServerIcon.CLOUD),
                         headerHaze = haze,
                         onHeaderOverlap = { overlap = it },
                         modifier = Modifier.testTag("header").zIndex(1f),
@@ -304,7 +309,12 @@ class HeaderLineLayoutTest {
         var width by mutableStateOf(400.dp)
         var compact by mutableStateOf(false)
         val title = "Rexling client"
-        val session = "Work · Shipyard"
+        val session = "Shipyard · Work"
+        val target =
+            SessionTarget(
+                ServerProfile.create("Shipyard", "https://shipyard", "shipyard"),
+                SessionItem("a", "Work"),
+            )
         val path = "~/Projects/ShipPDF/rexling"
         val tail = "…/rexling"
         ui.setContent {
@@ -313,8 +323,8 @@ class HeaderLineLayoutTest {
                 MaterialTheme {
                     Box(Modifier.width(width)) {
                         SessionHeader(
-                            listOf(SessionItem("a", session)),
-                            "a",
+                            SessionCatalog.strip(emptyList(), target),
+                            target.key,
                             true,
                             true,
                             emptyList(),
@@ -325,7 +335,7 @@ class HeaderLineLayoutTest {
                             title = title,
                             alwaysCompact = compact,
                             directory = path,
-                            serverIcons = mapOf("a" to ServerIcon.CLOUD),
+                            serverIcons = mapOf(target.key to ServerIcon.CLOUD),
                             menu = {
                                 ChromeButton(
                                     ChromeIcon.MORE,

@@ -1339,8 +1339,25 @@ internal fun TerminalTabs(
     onFanBarBounds: (Rect) -> Unit = {},
     onFanAnchorGone: (String) -> Unit = {},
     onMenuOpenChange: (Boolean) -> Unit = {},
+    onNewTab: (() -> Unit)? = null,
     actions: @Composable () -> Unit,
 ) {
+    val newTab =
+        if (!floating && currentTabWidth().first != TabWidthClass.NARROW) onNewTab else null
+    val markerHeight = 3.dp
+    val markerBottom = 5.dp
+    val markerSpace = markerHeight + markerBottom
+    val newTabLabel = stringResource(R.string.label_new_tab)
+    val newTabButton: @Composable () -> Unit = {
+        newTab?.let { onClick ->
+            Box(
+                Modifier.fillMaxHeight().padding(bottom = markerHeight),
+                contentAlignment = Alignment.Center,
+            ) {
+                ChromeButton(ChromeIcon.ADD, newTabLabel, enabled = enabled, onClick = onClick)
+            }
+        }
+    }
     val currentOnMenuOpenChange by rememberUpdatedState(onMenuOpenChange)
     DisposableEffect(floating) { onDispose { if (floating) currentOnMenuOpenChange(false) } }
     // A floating bar is a fixed-length rounded card over the terminal, so its tabs scroll inside
@@ -1381,6 +1398,7 @@ internal fun TerminalTabs(
         // Reserve the dock's normal bounds so first-load metadata cannot resize the terminal.
         Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
             handle?.invoke()
+            newTabButton()
             Spacer(Modifier.weight(1f).fillMaxHeight())
             actions()
         }
@@ -1466,6 +1484,7 @@ internal fun TerminalTabs(
     }
     Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
         handle?.invoke()
+        newTabButton()
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             val density = LocalDensity.current.density
             val widths =
@@ -1542,9 +1561,10 @@ internal fun TerminalTabs(
                     val indicatorColor = terminalProgressColor(progress)
                     val busy = paneWorking(w) || progress?.busy == true
                     val breathe =
-                        animateWorking &&
+                        active &&
+                            animateWorking &&
                             if (progress != null) progress.busy && progress.percent == null
-                            else active && busy
+                            else busy
                     val workPhase = rememberWorkingPhase(breathe)
                     val programs = panePrograms(w)
                     val pane = selectedPane(w)
@@ -1556,6 +1576,7 @@ internal fun TerminalTabs(
                             i + 1,
                             paneTitle(w, pane),
                         )
+                    val iconInset = (36.dp - programStackPaintedWidth(programs.size)) / 2
                     val tabOptionsLabel = stringResource(R.string.a11y_tab_options)
                     val tabContentDescription =
                         stringResource(R.string.a11y_tab_item, title, program.label) +
@@ -1576,8 +1597,7 @@ internal fun TerminalTabs(
                         if (floating && active) {
                             DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
                         }
-                        val markerHeight = 3.dp
-                        val markerBottom = 2.dp
+                        val layoutDirection = LocalLayoutDirection.current
                         Column(
                             Modifier.height(45.dp)
                                 .width(width)
@@ -1590,16 +1610,20 @@ internal fun TerminalTabs(
                                 )
                                 .drawWithContent {
                                     drawContent()
-                                    if (active || progress != null) {
-                                        val inset = 5.dp.toPx()
+                                    if (active) {
+                                        val end = 5.dp.toPx()
+                                        // A label makes the slot's invisible leading padding
+                                        // asymmetric.
+                                        val start = end + if (showTitle) iconInset.toPx() else 0f
                                         val bar =
                                             Size(
-                                                (size.width - 2 * inset).coerceAtLeast(0f),
+                                                (size.width - start - end).coerceAtLeast(0f),
                                                 markerHeight.toPx(),
                                             )
                                         val origin =
                                             Offset(
-                                                inset,
+                                                if (layoutDirection == LayoutDirection.Ltr) start
+                                                else end,
                                                 size.height - bar.height - markerBottom.toPx(),
                                             )
                                         val brightness =
@@ -1690,12 +1714,8 @@ internal fun TerminalTabs(
                                         progress = progress,
                                     )
                                     if (unread > 0) {
-                                        val layers = programs.size.coerceIn(1, 3)
-                                        val painted =
-                                            if (layers == 1) 22f else 21f + 4f * (layers - 1)
-                                        val right = (36f + painted) / 2f
                                         Box(
-                                            Modifier.offset(x = (right - 4).dp, y = (-.5).dp)
+                                            Modifier.offset(x = 32.dp - iconInset, y = (-.5).dp)
                                                 .size(8.dp)
                                                 .border(
                                                     1.5.dp,
@@ -1733,7 +1753,7 @@ internal fun TerminalTabs(
                                         letterSpacing = 0.sp,
                                     )
                             }
-                            Spacer(Modifier.height(markerHeight + markerBottom))
+                            Spacer(Modifier.height(markerSpace))
                         }
                         androidx.compose.material3.DropdownMenu(
                             menuId == w.id,

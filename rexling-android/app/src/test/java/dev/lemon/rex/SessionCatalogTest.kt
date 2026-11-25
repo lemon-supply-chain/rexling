@@ -27,7 +27,7 @@ class SessionCatalogTest {
                 ),
             )
         assertEquals(
-            listOf("first · Linux", "second · Linux", "other host · Mac"),
+            listOf("Linux · first", "Linux · second", "Mac · other host"),
             targets.map { it.stripItem.label },
         )
         assertEquals(3, targets.map { it.key }.toSet().size)

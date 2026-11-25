@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
@@ -364,6 +365,60 @@ class PaneChromeTest {
     }
 
     @Test
+    fun singlePaneCornerPillShowsSplitFloatDockAndCloseInOneRow() {
+        var floating by mutableStateOf(false)
+        val actions = mutableListOf<String>()
+        ui.setContent {
+            MaterialTheme {
+                Box(Modifier.size(320.dp, 380.dp)) {
+                    PaneCornerActions(
+                        Modifier.align(Alignment.TopEnd),
+                        enabled = true,
+                        onSplit = { actions += it.name },
+                        onFloat =
+                            if (!floating)
+                                ({
+                                    actions += "float"
+                                    floating = true
+                                })
+                            else null,
+                        onDock =
+                            if (floating)
+                                ({
+                                    actions += "dock"
+                                    floating = false
+                                })
+                            else null,
+                        onClose = { actions += "close" },
+                    )
+                }
+            }
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_more_pane_actions))
+            .assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.zoom_pane)).assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.label_dock_pane)).assertDoesNotExist()
+        val buttons =
+            listOf(
+                    appString(PaneSplit.RIGHT.labelRes),
+                    appString(PaneSplit.BELOW.labelRes),
+                    appString(R.string.label_float_pane),
+                    appString(R.string.close_pane),
+                )
+                .map { ui.onNodeWithContentDescription(it).assertIsDisplayed() }
+        val bounds = buttons.map { it.fetchSemanticsNode().boundsInRoot }
+        for ((left, right) in bounds.zipWithNext()) {
+            assertEquals(left.center.y, right.center.y, .5f)
+            assertTrue(left.right <= right.left)
+        }
+        buttons.take(3).forEach { it.performClick() }
+        ui.onNodeWithContentDescription(appString(R.string.label_float_pane)).assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.label_dock_pane)).performClick()
+        buttons.last().performClick()
+        ui.runOnIdle { assertEquals(listOf("RIGHT", "BELOW", "float", "dock", "close"), actions) }
+    }
+
+    @Test
     fun flushSideTabsKeepTheIconStackAndFooterActionsVisible() {
         val windows =
             listOf(
@@ -372,6 +427,8 @@ class PaneChromeTest {
                     "PDF preview",
                     listOf(BlockItem("a", "shell"), BlockItem("b", "shell")),
                 ),
+                WindowItem("other", "Other work", listOf(BlockItem("c", "shell"))),
+                WindowItem("progress", "Reported progress", listOf(BlockItem("d", "shell"))),
             )
         val programs =
             listOf(
@@ -401,9 +458,14 @@ class PaneChromeTest {
                         TabBarPosition.LEFT,
                         style,
                         paneWorking = { true },
-                        tabAttention = { unread.intValue },
+                        paneProgress = {
+                            if (it.id == "progress") TerminalProgress("indeterminate", null)
+                            else null
+                        },
+                        tabAttention = { if (it.id == "tab") unread.intValue else 0 },
                         onStyle = { style = it },
                         animateWorking = false,
+                        onNewTab = { actions += "new tab" },
                     ) {
                         TerminalActions(
                             true,
@@ -420,8 +482,11 @@ class PaneChromeTest {
                 }
             }
         }
-        // Only one active-indicator treatment belongs on a tab; when unread badge isn't set,
-        // working state must not draw an extra working dot.
+        ui.onNodeWithContentDescription(
+                appString(R.string.a11y_tab_working, "PDF preview", "Codex"),
+            )
+            .assertIsDisplayed()
+        ui.onNodeWithTag("Tab unread dot tab", useUnmergedTree = true).assertDoesNotExist()
         ui.onNodeWithTag("Tab working dot tab", useUnmergedTree = true).assertDoesNotExist()
         ui.runOnIdle { unread.intValue = 1 }
         fun check(
@@ -447,6 +512,14 @@ class PaneChromeTest {
                     )
                     .assertIsDisplayed()
                     .assertIsSelected()
+            val newTab =
+                ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
+                    .assertIsDisplayed()
+            assertTrue(
+                newTab.fetchSemanticsNode().boundsInRoot.bottom <=
+                    tab.fetchSemanticsNode().boundsInRoot.top,
+            )
+            newTab.performClick()
             val pixels = tab.captureToImage().toPixelMap()
             val markerX = (pixels.height * 6.5f / 48f).toInt()
             val rowCenter = pixels.height / 2
@@ -460,7 +533,41 @@ class PaneChromeTest {
                 pixels[1, pixels.height - 3],
                 pixels[1, rowCenter],
             )
-            ui.onNodeWithTag("Tab unread dot tab", useUnmergedTree = true).assertIsDisplayed()
+            val inactiveDescriptions =
+                listOf(
+                    appString(R.string.a11y_tab_working, "Other work", "Codex"),
+                    appString(R.string.a11y_tab, "Reported progress", "Codex"),
+                )
+            for (description in inactiveDescriptions) {
+                val inactive =
+                    ui.onNodeWithContentDescription(description, substring = true)
+                        .captureToImage()
+                        .toPixelMap()
+                assertEquals(
+                    "Only the active tab should have a marker",
+                    inactive[1, rowCenter],
+                    inactive[markerX, rowCenter],
+                )
+            }
+            val dot =
+                ui.onNodeWithTag("Tab unread dot tab", useUnmergedTree = true)
+                    .assertIsDisplayed()
+                    .assertWidthIsEqualTo(10.dp)
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            val icon =
+                ui.onNodeWithTag("Tab program icon tab", useUnmergedTree = true)
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            val paintedRight = icon.center.x + with(ui.density) { 12.5.dp.toPx() }
+            val paintedTop = icon.top + with(ui.density) { 3.5.dp.toPx() }
+            assertTrue(
+                "The dot should overlap the icon's top-right edge",
+                dot.left < paintedRight &&
+                    dot.right > paintedRight &&
+                    dot.top < paintedTop &&
+                    dot.bottom > paintedTop,
+            )
             // The side rail leads with activity; the bottom bar leads with the keyboard.
             val descriptions =
                 if (sideRail)
@@ -503,10 +610,67 @@ class PaneChromeTest {
         check(52.dp, "icons-bottom", vertical = true, sideRail = false, capture = false)
         ui.runOnIdle {
             assertEquals(
-                List(2) { listOf("activity", "switcher", "keyboard") }.flatten() +
-                    listOf("keyboard", "switcher", "activity"),
+                List(2) { listOf("new tab", "activity", "switcher", "keyboard") }.flatten() +
+                    listOf("new tab", "keyboard", "switcher", "activity"),
                 actions,
             )
         }
+    }
+
+    @Test
+    fun sidebarNewTabButtonMovesWithTheTabsWhenTheKeyboardCloses() {
+        var height by mutableStateOf(240.dp)
+        var count by mutableIntStateOf(2)
+        var created = 0
+        fun tabPrefix(index: Int) =
+            appString(R.string.a11y_tab, "Shell $index", "")
+                .substringBefore("，")
+                .substringBefore(",")
+                .trimEnd()
+        ui.setContent {
+            MaterialTheme {
+                Box(Modifier.size(320.dp, height)) {
+                    TerminalTabRail(
+                        List(count) {
+                            WindowItem(
+                                "tab-$it",
+                                "Shell $it",
+                                listOf(BlockItem("pane-$it", "shell")),
+                            )
+                        },
+                        "tab-0",
+                        true,
+                        {},
+                        { listOf(ProgramIdentity.resolve(listOf("fish"))) },
+                        { 0 },
+                        TabBarPosition.LEFT,
+                        TabRailStyle.ICONS,
+                        onNewTab = { created++ },
+                    ) {}
+                }
+            }
+        }
+        val newTab = ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
+        val firstTab = ui.onNodeWithContentDescription(tabPrefix(0), substring = true)
+        fun top(node: SemanticsNodeInteraction) = node.fetchSemanticsNode().boundsInRoot.top
+        val initialTab = top(firstTab)
+        val initialButton = top(newTab)
+        ui.mainClock.autoAdvance = false
+        ui.runOnIdle { height = 380.dp }
+        ui.mainClock.advanceTimeBy(64)
+        val movingTab = top(firstTab)
+        val movingButton = top(newTab)
+        ui.mainClock.advanceTimeBy(1000)
+        assertTrue(
+            "The tab should animate toward its new position",
+            movingTab > initialTab && movingTab < top(firstTab),
+        )
+        assertEquals(movingTab - initialTab, movingButton - initialButton, 1f)
+        ui.mainClock.autoAdvance = true
+        ui.runOnIdle { count = 12 }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performScrollToIndex(12)
+        ui.onNodeWithContentDescription(tabPrefix(11), substring = true).assertIsDisplayed()
+        newTab.assertIsDisplayed().performClick()
+        ui.runOnIdle { assertEquals(1, created) }
     }
 }

@@ -192,6 +192,9 @@ class MultiPaneMoveTest {
             assertEquals(accent, paneOutline())
             ui.runOnIdle { singlePane.value = true }
             assertTrue(paneOutline() != accent)
+            ui.onNodeWithContentDescription(appString(R.string.a11y_pane_actions)).performClick()
+            ui.onNodeWithContentDescription(appString(PaneSplit.RIGHT.labelRes)).assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_move_pane)).assertDoesNotExist()
         } finally {
             ui.runOnIdle {
                 client.close()

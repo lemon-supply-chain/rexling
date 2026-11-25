@@ -5788,8 +5788,14 @@ while True:
                 v["attentionCount"].as_u64().is_some_and(|n| n >= 2)
             });
             assert!(
-                closed["activity"].is_null(),
-                "Closed-sheet updates must carry only the attention count"
+                closed["activity"].as_array().is_some_and(|items| {
+                    items.iter().any(|item| {
+                        item["session"] == ids[1]
+                            && item["block"] == blocks[1]
+                            && item["state"] == "done"
+                    })
+                }),
+                "Tab badges need pane-scoped activity records even when the sheet is closed"
             );
             app.command(json!({"type":"activity","open":true})).unwrap();
             let listed = until(&app, |v| {
@@ -5865,7 +5871,14 @@ while True:
             assert!(background["screen"].is_null());
             assert_eq!(background["controlled"], false);
             let alerted = until(&app, |v| {
-                v["attentionCount"].as_u64().is_some_and(|n| n > 0) && v["activity"].is_null()
+                v["attentionCount"].as_u64().is_some_and(|n| n > 0)
+                    && v["activity"].as_array().is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item["block"] == blocks[1]
+                                && item["id"] == ""
+                                && item["state"] == "blocked"
+                        })
+                    })
             });
             assert_eq!(alerted["controlled"], false);
             app.command(json!({"type":"activity","open":true})).unwrap();
@@ -5895,7 +5908,10 @@ while True:
                     .is_some_and(|e| e.contains("no longer available"))
             });
             assert_eq!(stale["controlled"], false);
-            assert_eq!(stale["selectedBlock"], "");
+            assert_eq!(
+                stale["selectedBlock"], blocks[1],
+                "A stale Activity link must leave the current pane selected"
+            );
         }));
         for id in &ids {
             runtime.block_on(writer.attach(id)).unwrap();

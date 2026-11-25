@@ -779,4 +779,5 @@
     <string name="a11y_drawer_handle">Drawer handle</string>
     <string name="a11y_state_connected">Connected</string>
     <string name="a11y_state_disconnected">Disconnected</string>
+    <string name="a11y_show_pane_actions">Show pane actions</string>
 </resources>

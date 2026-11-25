@@ -572,7 +572,9 @@ internal fun MultiPaneLayout(
                             onFinish = { finishFloatAdjustment() },
                             onCancel = { cancelFloatAdjustment() },
                         )
-                    } else if (!floating && !isZoomed && paneActionsEnabled) {
+                    } else if (
+                        !floating && !isZoomed && paneActionsEnabled && shownTiles.size > 1
+                    ) {
                         val handleCoordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
                         val otherPanes = shownTiles.filter { it.id != pane.id }
                         val targetActions = otherPanes.map { other ->
@@ -773,16 +775,16 @@ internal fun MultiPaneLayout(
 }
 
 @Composable
-private fun PaneCornerActions(
+internal fun PaneCornerActions(
     modifier: Modifier,
-    zoomed: Boolean,
-    paneWidth: androidx.compose.ui.unit.Dp,
+    zoomed: Boolean = false,
+    paneWidth: androidx.compose.ui.unit.Dp? = null,
     enabled: Boolean,
     onSplit: (PaneSplit) -> Unit,
-    onZoom: () -> Unit,
-    onFloat: (() -> Unit)?,
-    onDock: (() -> Unit)?,
-    onMinimize: (() -> Unit)?,
+    onZoom: (() -> Unit)? = null,
+    onFloat: (() -> Unit)? = null,
+    onDock: (() -> Unit)? = null,
+    onMinimize: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
 ) {
     val actions = buildList {
@@ -816,13 +818,17 @@ private fun PaneCornerActions(
                 )
             }
         }
-        add(
-            PaneCornerAction(
-                if (zoomed) ChromeIcon.UNZOOM else ChromeIcon.ZOOM,
-                stringResource(if (zoomed) R.string.restore_pane_layout else R.string.zoom_pane),
-                onZoom,
-            ),
-        )
+        onZoom?.let {
+            add(
+                PaneCornerAction(
+                    if (zoomed) ChromeIcon.UNZOOM else ChromeIcon.ZOOM,
+                    stringResource(
+                        if (zoomed) R.string.restore_pane_layout else R.string.zoom_pane,
+                    ),
+                    it,
+                ),
+            )
+        }
         onMinimize?.let {
             add(
                 PaneCornerAction(
@@ -832,8 +838,17 @@ private fun PaneCornerActions(
                 ),
             )
         }
+        onClose?.let {
+            add(
+                PaneCornerAction(
+                    ChromeIcon.CLOSE,
+                    stringResource(R.string.close_pane),
+                    it,
+                ),
+            )
+        }
     }
-    if (!zoomed && paneWidth < 60.dp + 36.dp * actions.size) {
+    if (!zoomed && paneWidth != null && paneWidth < 60.dp + 36.dp * actions.size) {
         // Leave room for the move handle on narrow tiles.
         var expanded by remember { mutableStateOf(false) }
         Box(modifier) {

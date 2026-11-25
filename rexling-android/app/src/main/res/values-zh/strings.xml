@@ -775,4 +775,5 @@
     <string name="a11y_drawer_handle">抽屉手柄</string>
     <string name="a11y_state_connected">已连接</string>
     <string name="a11y_state_disconnected">未连接</string>
+    <string name="a11y_show_pane_actions">显示窗格操作</string>
 </resources>
