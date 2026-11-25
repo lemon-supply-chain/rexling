@@ -107,7 +107,7 @@ internal fun ControlShortcutsSheet(
         stringResource(R.string.close_ctrl_shortcuts),
         onClose,
         hazeState,
-        swipeToDismiss = false,
+        fixed = true,
     ) {
         Column(
             Modifier.fillMaxWidth()
@@ -312,7 +312,7 @@ private fun ControlShortcutRecorder(
             onCancel()
         },
         hazeState,
-        swipeToDismiss = false,
+        fixed = true,
     ) {
         Column(
             Modifier.fillMaxWidth()

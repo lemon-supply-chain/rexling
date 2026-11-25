@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
@@ -123,14 +125,42 @@ class NetworkUiTest {
 
     @Test
     fun serverEditorOffersPerServerNetworkAndSetup() {
-        compose.setContent { MaterialTheme { ServerEditor(null, {}, { _, _, _ -> null }) } }
+        var dark by mutableStateOf(false)
+        var editor by mutableStateOf(false)
+        compose.setContent {
+            RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1]) {
+                EmptyServerContent { editor = true }
+                if (editor) ServerEditor(null, { editor = false }, { _, _, _ -> null })
+            }
+        }
+        compose.onNodeWithText(appString(R.string.add_server_title)).performClick()
         compose.onNodeWithText(appString(R.string.connection_network)).assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.name)).performTextInput("Shipyard")
         compose.onNodeWithText(appString(R.string.server_url)).performTextInput("https://shipyard")
         compose
             .onNodeWithText(appString(R.string.network_route_system))
             .performScrollTo()
             .performClick()
         compose.onNodeWithText(appString(R.string.builtin_tailscale)).performClick()
+        compose
+            .onNodeWithText(appString(R.string.setup_or_signin))
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        compose.onNodeWithText(appString(R.string.control_server_optional)).assertIsDisplayed()
+        compose.onNodeWithText(appString(R.string.save_and_connect)).assertDoesNotExist()
+        for (isDark in listOf(false, true)) {
+            compose.runOnIdle { dark = isDark }
+            val sheet = compose.onNodeWithTag("Frosted overlay").captureToImage().toPixelMap()
+            val surface =
+                rexColorScheme(isDark, ThemeCatalog.defaults[if (isDark) 0 else 1].ui).surface
+            assertEquals(surface, sheet[sheet.width / 4, 6])
+        }
+        compose
+            .onNodeWithContentDescription(appString(R.string.close_network_settings))
+            .performClick()
+        compose.onNodeWithText("Shipyard").assertIsDisplayed()
+        compose.onNodeWithText("https://shipyard").assertIsDisplayed()
         compose.onNodeWithText(appString(R.string.setup_or_signin)).assertIsDisplayed()
         compose.onNodeWithText(appString(R.string.builtin_tailscale)).performClick()
         compose.onNodeWithText(appString(R.string.network_route_system)).performClick()

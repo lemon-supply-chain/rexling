@@ -43,22 +43,14 @@ internal fun PortForwardSheet(
     // Built outside the sheet on purpose: drawerFrost captures backdrop blur from the main activity
     // host on open.
     val frost = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 0.dp,
-        dragHandle = null,
-        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Top) },
-    ) {
+    DrawerSheet(onClose) { dismiss ->
         Column(
             frost
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                 .padding(bottom = 4.dp),
         ) {
-            DrawerHandle()
+            DrawerHandle(dismiss)
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -79,7 +71,7 @@ internal fun PortForwardSheet(
                 ChromeButton(
                     ChromeIcon.CLOSE,
                     stringResource(R.string.close_port_forwarding),
-                    onClick = onClose,
+                    onClick = dismiss,
                 )
             }
             Text(

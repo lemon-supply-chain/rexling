@@ -79,6 +79,8 @@ internal fun TerminalCarousel(
     extendsUnderNavigation: Boolean = false,
     navigationClearance: Dp = 0.dp,
     bottomOverlayInset: Dp = 0.dp,
+    headerHeightSaved: () -> Int = { 0 },
+    headerOverlap: () -> Int = { 0 },
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val switchLayout =
@@ -252,6 +254,8 @@ internal fun TerminalCarousel(
                                                     profile.imeAnchor,
                                                     extendsUnderNavigation = extendsUnderNavigation,
                                                     keyboardChrome = keyboardChrome,
+                                                    headerHeightSaved = headerHeightSaved,
+                                                    headerOverlap = headerOverlap,
                                                 ) {
                                                     keyboardFocus
                                                 }

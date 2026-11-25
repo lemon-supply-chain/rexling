@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -109,12 +110,13 @@ internal fun MultiPaneLayout(
     hazeState: HazeState,
     captureBackdrop: Boolean,
     bottomPaddingDp: Int = 6,
-    bottomMargin: Boolean = true,
-    sideRail: TabBarPosition = TabBarPosition.BOTTOM,
+    navigationClearance: Dp = 0.dp,
     splits: List<PaneSplitLine> = emptyList(),
     zoomed: String = "",
     ime: WindowInsets = WindowInsets.ime,
     navigation: WindowInsets = WindowInsets.navigationBars,
+    headerHeightSaved: () -> Int = { 0 },
+    headerOverlap: () -> Int = { 0 },
     paneActionsEnabled: Boolean = true,
     floatingPanes: List<PanePlacement> = emptyList(),
     allowFloat: Boolean = false,
@@ -214,6 +216,7 @@ internal fun MultiPaneLayout(
     val shownSplits = if (zoomedPane != null || zoomedFloat != null) emptyList() else laidOutSplits
     val imeHandoff = remember { TerminalImeHandoff(PanePlacement::id) }
     val shownPanes = shownTiles + shownFloating
+    val showFocusOutline = shownPanes.size > 1
     val outgoingEditor = imeHandoff.retainFor(shownPanes)
     val mountedPanes = shownPanes + listOfNotNull(outgoingEditor?.pane)
     // Keep the controls visible for as long as the move handle is held.
@@ -247,21 +250,13 @@ internal fun MultiPaneLayout(
     // and
     // a thin accent outline on the focused one.
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
-    val gap = 4.dp
-    val paneInset = gap / 2
-    val edgeInset = 8.dp - paneInset
-    // The workspace reserves the navigation clearance when the bottom row has no extra margin.
+    val paneInset = 2.dp
     BoxWithConstraints(
         Modifier.fillMaxSize()
             .clipToBounds()
             .frostSource(hazeState, captureBackdrop)
             .background(scheme.background)
-            .padding(
-                start = if (sideRail == TabBarPosition.LEFT) paneInset else edgeInset,
-                end = if (sideRail == TabBarPosition.RIGHT) paneInset else edgeInset,
-                top = edgeInset,
-                bottom = if (bottomMargin) edgeInset else 0.dp,
-            ),
+            .padding(paneInset),
     ) {
         val visibleHeight = maxHeight
         val canAdjustFloat =
@@ -321,13 +316,7 @@ internal fun MultiPaneLayout(
             val active = !retiring && pane.id == focused
             val dropPosition = move?.drop?.takeIf { it.target == pane.id }?.position
             val moveSource = move?.source == pane.id
-            val lastRow = !bottomMargin && pane.y + pane.height >= top + spanY - .001f
-            val trim =
-                when {
-                    floating -> inset * 2
-                    lastRow -> paneInset
-                    else -> gap
-                }
+            val trim = inset * 2
             Box(
                 Modifier.offset(x + inset, y + inset)
                     .size(
@@ -380,7 +369,7 @@ internal fun MultiPaneLayout(
                     .border(
                         1.5.dp,
                         when {
-                            moveSource || active -> scheme.primary
+                            showFocusOutline && (moveSource || active) -> scheme.primary
                             else -> scheme.outline.copy(alpha = .25f)
                         },
                         shape,
@@ -414,17 +403,27 @@ internal fun MultiPaneLayout(
                         Modifier.fillMaxSize().clipToBounds().stableTerminalViewport(
                             panToCursor = live,
                             coverage = {
+                                // The parent releases its navigation clearance as imePadding
+                                // consumes
+                                // the inset.
+                                val reclaimed =
+                                    minOf(navigationClearance.roundToPx(), ime.getBottom(this))
                                 val cover =
-                                    keyboardCoverage(
-                                        ime,
-                                        navigation,
-                                        keyboardChrome,
-                                        extendsUnderNavigation,
-                                    )
+                                    (keyboardCoverage(
+                                            ime,
+                                            navigation,
+                                            keyboardChrome,
+                                            extendsUnderNavigation,
+                                            headerHeightSaved,
+                                        ) - reclaimed)
+                                        .coerceAtLeast(0)
                                 val fullHeight = visibleHeight + cover.toDp()
                                 (fullHeight * heightFraction - trim)
                                     .coerceAtLeast(0.dp)
                                     .roundToPx() - (height - trim).coerceAtLeast(0.dp).roundToPx()
+                            },
+                            topOcclusion = {
+                                headerOverlap() - (paneInset + y + inset + 1.5.dp).roundToPx()
                             },
                         ) {
                             keyboardFocus.takeIf { live }
@@ -974,7 +973,6 @@ internal fun multiPaneTiles(
     val placements = window?.layout.orEmpty().filter { it.width > 0f && it.height > 0f }
     val tiled = placements.filterNot { it.floating }
     val hasOverlay = allowFloatingOverlay && placements.any { it.floating }
-    val minimum = if (hasOverlay) 1 else 2
     val focusable = if (hasOverlay) placements.filterNot { it.minimized } else tiled
-    return tiled.takeIf { it.size in minimum..4 && focusable.any { pane -> pane.id == focused } }
+    return tiled.takeIf { it.size in 1..4 && focusable.any { pane -> pane.id == focused } }
 }

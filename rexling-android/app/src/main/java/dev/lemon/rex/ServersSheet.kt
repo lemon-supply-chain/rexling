@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,182 +59,170 @@ internal fun ServersSheet(
     // the
     // sheet that host is the sheet's own window, which then redraws itself every frame while open.
     val frost = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 0.dp,
-        dragHandle = null,
-        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Top) },
-    ) {
-        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-            Column(
-                frost
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+    DrawerSheet(onDismiss) { dismiss ->
+        Column(
+            frost
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+        ) {
+            DrawerHandle(dismiss)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                DrawerHandle()
-                Row(
-                    Modifier.fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .padding(start = 16.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(R.string.servers),
-                        Modifier.weight(1f),
-                        style = SettingsType.row,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    IconButton(onClick = { scanning = true }) {
-                        ChromeSymbol(ChromeIcon.QR, color = MaterialTheme.colorScheme.primary)
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    ChromeButton(ChromeIcon.ADD, stringResource(R.string.add_server_title)) {
-                        editing = null
-                        editor = true
-                    }
-                    ChromeButton(
-                        ChromeIcon.CLOSE,
-                        stringResource(R.string.close_servers),
-                        onClick = onDismiss,
-                    )
+                Text(
+                    stringResource(R.string.servers),
+                    Modifier.weight(1f),
+                    style = SettingsType.row,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                IconButton(onClick = { scanning = true }) {
+                    ChromeSymbol(ChromeIcon.QR, color = MaterialTheme.colorScheme.primary)
                 }
-                Column(
-                    Modifier.fillMaxWidth()
-                        .heightIn(max = 560.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 12.dp),
-                ) {
+                Spacer(Modifier.width(4.dp))
+                ChromeButton(ChromeIcon.ADD, stringResource(R.string.add_server_title)) {
+                    editing = null
+                    editor = true
+                }
+                ChromeButton(
+                    ChromeIcon.CLOSE,
+                    stringResource(R.string.close_servers),
+                    onClick = dismiss,
+                )
+            }
+            Column(
+                Modifier.fillMaxWidth()
+                    .heightIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.count_connected_format, model.connectedCount),
+                    Modifier.padding(top = 4.dp, bottom = 8.dp),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (model.servers.isEmpty())
                     Text(
-                        stringResource(R.string.count_connected_format, model.connectedCount),
-                        Modifier.padding(top = 4.dp, bottom = 8.dp),
-                        style = SettingsType.detail,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        stringResource(R.string.add_rex_server_started),
+                        Modifier.padding(vertical = 16.dp),
                     )
-                    if (model.servers.isEmpty())
-                        Text(
-                            stringResource(R.string.add_rex_server_started),
-                            Modifier.padding(vertical = 16.dp),
-                        )
-                    for (server in model.servers) {
-                        val selected = server.id == model.activeServerId
-                        val status = model.serverStatuses[server.id] ?: ServerStatus()
-                        var menu by remember(server.id) { mutableStateOf(false) }
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .padding(bottom = 4.dp)
-                                .heightIn(min = 56.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = if (selected) .8f else .35f,
-                                    ),
-                                ) // alpha-ok server row background
-                                .clickable {
-                                    onDismiss()
-                                    model.connectServer(server.id)
-                                }
-                                .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                Modifier.size(7.dp)
-                                    .background(
-                                        if (status.connected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(4.dp),
-                                    ),
-                            )
-                            Spacer(Modifier.width(11.dp))
-                            ServerGlyph(server.icon, Modifier.size(22.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    server.label,
-                                    style = SettingsType.row,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    server.endpoint,
-                                    style = SettingsType.detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    if (status.phase == "connected" && selected)
-                                        stringResource(R.string.status_connected_viewing)
-                                    else phaseLabel(status.phase),
-                                    style = SettingsType.detail,
-                                    color =
-                                        if (status.connected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                if (status.error.isNotBlank())
-                                    Text(
-                                        status.error,
-                                        style = SettingsType.detail,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
+                for (server in model.servers) {
+                    val selected = server.id == model.activeServerId
+                    val status = model.serverStatuses[server.id] ?: ServerStatus()
+                    var menu by remember(server.id) { mutableStateOf(false) }
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .padding(bottom = 4.dp)
+                            .heightIn(min = 56.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(
+                                    alpha = if (selected) .8f else .35f,
+                                ),
+                            ) // alpha-ok server row background
+                            .clickable {
+                                onDismiss()
+                                model.connectServer(server.id)
                             }
-                            Box {
-                                ChromeButton(
-                                    ChromeIcon.MORE,
-                                    stringResource(R.string.a11y_server_actions, server.label),
-                                ) {
-                                    menu = true
-                                }
-                                DropdownMenu(
-                                    menu,
-                                    { menu = false },
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    tonalElevation = 0.dp,
-                                ) {
+                            .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier.size(7.dp)
+                                .background(
+                                    if (status.connected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outline,
+                                    RoundedCornerShape(4.dp),
+                                ),
+                        )
+                        Spacer(Modifier.width(11.dp))
+                        ServerGlyph(server.icon, Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                server.label,
+                                style = SettingsType.row,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                server.endpoint,
+                                style = SettingsType.detail,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                if (status.phase == "connected" && selected)
+                                    stringResource(R.string.status_connected_viewing)
+                                else phaseLabel(status.phase),
+                                style = SettingsType.detail,
+                                color =
+                                    if (status.connected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (status.error.isNotBlank())
+                                Text(
+                                    status.error,
+                                    style = SettingsType.detail,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                        }
+                        Box {
+                            ChromeButton(
+                                ChromeIcon.MORE,
+                                stringResource(R.string.a11y_server_actions, server.label),
+                            ) {
+                                menu = true
+                            }
+                            DropdownMenu(
+                                menu,
+                                { menu = false },
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                tonalElevation = 0.dp,
+                            ) {
+                                TerminalMenuItem(
+                                    stringResource(R.string.edit),
+                                    ChromeIcon.EDIT,
+                                    onClick = {
+                                        menu = false
+                                        editing = server
+                                        editor = true
+                                    },
+                                )
+                                if (status.maintained)
                                     TerminalMenuItem(
-                                        stringResource(R.string.edit),
-                                        ChromeIcon.EDIT,
+                                        stringResource(R.string.disconnect),
+                                        ChromeIcon.UNPLUG,
                                         onClick = {
                                             menu = false
-                                            editing = server
-                                            editor = true
+                                            model.disconnectServer(server.id)
                                         },
                                     )
-                                    if (status.maintained)
-                                        TerminalMenuItem(
-                                            stringResource(R.string.disconnect),
-                                            ChromeIcon.UNPLUG,
-                                            onClick = {
-                                                menu = false
-                                                model.disconnectServer(server.id)
-                                            },
-                                        )
-                                    TerminalMenuItem(
-                                        stringResource(R.string.forget_server),
-                                        ChromeIcon.DELETE,
-                                        onClick = {
-                                            menu = false
-                                            model.forgetServer(server.id)
-                                        },
-                                    )
-                                }
+                                TerminalMenuItem(
+                                    stringResource(R.string.forget_server),
+                                    ChromeIcon.DELETE,
+                                    onClick = {
+                                        menu = false
+                                        model.forgetServer(server.id)
+                                    },
+                                )
                             }
                         }
                     }
-                    Text(
-                        stringResource(R.string.switch_servers_hint),
-                        Modifier.padding(top = 9.dp),
-                        style = SettingsType.detail,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
+                Text(
+                    stringResource(R.string.switch_servers_hint),
+                    Modifier.padding(top = 9.dp),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -283,7 +270,11 @@ internal fun ServerEditor(
     var networkOpen by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    if (networkOpen) NetworkSheet(onClose = { networkOpen = false })
+    val scroll = rememberScrollState()
+    if (networkOpen) {
+        NetworkSheet(onClose = { networkOpen = false })
+        return
+    }
     AlertDialog(
         onDismissRequest = { if (!busy) onClose() },
         title = {
@@ -295,7 +286,7 @@ internal fun ServerEditor(
         },
         text = {
             Column(
-                Modifier.verticalScroll(rememberScrollState()),
+                Modifier.verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(

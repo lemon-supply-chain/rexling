@@ -1,7 +1,7 @@
 package dev.lemon.rex
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -65,20 +66,28 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.HazeState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 internal enum class ChromeIcon {
@@ -578,6 +587,87 @@ internal fun ChromeButton(
     }
 }
 
+internal val HeaderIconSlotWidth = 59.dp
+
+internal enum class CompactHeaderMode(@androidx.annotation.StringRes val labelRes: Int) {
+    NEVER(R.string.compact_header_never),
+    ALWAYS(R.string.compact_header_always),
+    WITH_KEYBOARD(R.string.compact_header_with_keyboard),
+}
+
+@Composable
+private fun SessionHeaderRow(
+    modifier: Modifier,
+    cutout: IntRect?,
+    menu: @Composable () -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Layout(
+        contents =
+            listOf(
+                {
+                    Row(
+                        Modifier.fillMaxWidth().clipToBounds(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = content,
+                    )
+                },
+                { Box(Modifier.padding(end = 9.dp)) { menu() } },
+            ),
+        modifier = modifier.fillMaxWidth(),
+    ) { children, constraints ->
+        val width = constraints.maxWidth
+        val menuButton = children[1].single().measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val trailingMenuStart = width - menuButton.width
+        var menuStart = trailingMenuStart
+        var bodyStart = 0
+        var bodyEnd = trailingMenuStart
+        var top = 0
+        if (cutout != null) {
+            val gap = 4.dp.roundToPx()
+            val start =
+                (if (layoutDirection == LayoutDirection.Ltr) cutout.left
+                else width - cutout.right) - gap
+            val end =
+                (if (layoutDirection == LayoutDirection.Ltr) cutout.right
+                else width - cutout.left) + gap
+            val before = start.coerceIn(0, width)
+            val after = end.coerceIn(0, width)
+            if (menuStart < after) menuStart = before - menuButton.width
+            val leadingWidth = minOf(before, menuStart)
+            val trailingWidth = menuStart - after
+            if (maxOf(leadingWidth, trailingWidth) < 96.dp.roundToPx()) {
+                // A wide notch may leave neither side enough room for the heading and menu.
+                menuStart = trailingMenuStart
+                top = cutout.bottom
+            } else if (leadingWidth >= trailingWidth) {
+                bodyEnd = leadingWidth
+            } else {
+                bodyStart = after
+                bodyEnd = menuStart
+            }
+        }
+        val body =
+            children[0]
+                .single()
+                .measure(
+                    constraints.copy(
+                        minWidth = bodyEnd - bodyStart,
+                        maxWidth = bodyEnd - bodyStart,
+                        minHeight = 0,
+                    ),
+                )
+        val barHeight = maxOf(body.height, menuButton.height)
+        val height =
+            maxOf(top + barHeight, cutout?.bottom ?: 0)
+                .coerceIn(constraints.minHeight, constraints.maxHeight)
+        layout(width, height) {
+            body.placeRelative(bodyStart, top + (height - top - body.height) / 2)
+            menuButton.placeRelative(menuStart, top + (height - top - menuButton.height) / 2)
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SessionHeader(
@@ -587,7 +677,6 @@ internal fun SessionHeader(
     enabled: Boolean,
     programs: List<ProgramIdentity>,
     paneIndex: Int,
-    directory: String,
     onSessions: () -> Unit,
     onSelect: (String) -> Unit,
     onLast: () -> Unit,
@@ -598,9 +687,26 @@ internal fun SessionHeader(
     serverIcons: Map<String, ServerIcon> = emptyMap(),
     progress: TerminalProgress? = null,
     onCollapse: (() -> Unit)? = null,
+    collapseForIme: WindowInsets? = null,
+    onHeaderHeightSaved: (Int) -> Unit = {},
+    headerHaze: HazeState? = null,
+    onHeaderOverlap: ((Int) -> Unit)? = null,
+    iconSlotWidth: androidx.compose.ui.unit.Dp = HeaderIconSlotWidth,
+    topCutout: IntRect? = null,
+    alwaysCompact: Boolean = false,
+    directory: String = "",
+    modifier: Modifier = Modifier,
     menu: @Composable () -> Unit,
 ) {
     val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
+    val paneTitle = title.ifBlank { program.title }
+    val scheme = MaterialTheme.colorScheme
+    val connectionStatus =
+        stringResource(
+            if (connected) R.string.a11y_state_connected else R.string.a11y_state_disconnected,
+        )
+    val connectionTint = if (connected) scheme.primary else scheme.outline
+    val openSessionDrawerLabel = stringResource(R.string.a11y_open_session_drawer)
     val anyWorking = working || programs.indices.any(isPaneWorking)
     val programIconDescription = stringResource(R.string.a11y_session_program_icon)
     val programStateDescription =
@@ -610,27 +716,32 @@ internal fun SessionHeader(
     val sessionStripDescription = stringResource(R.string.a11y_session_strip)
     val marquee = rememberRainbowMarquee(anyWorking)
     val titleHeight = with(LocalDensity.current) { 16.sp.toDp() }
-    val directoryHeight = with(LocalDensity.current) { 12.sp.toDp() }
-    val sessionHeight = maxOf(17.dp, directoryHeight)
+    val sessionHeight = maxOf(17.dp, with(LocalDensity.current) { 14.sp.toDp() })
     val lineStyle =
         androidx.compose.ui.text.TextStyle(
             platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
             lineHeightStyle =
                 LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
         )
+    val headingStyle =
+        lineStyle.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            lineHeight = 16.sp,
+            letterSpacing = 0.sp,
+        )
+    val contextStyle =
+        lineStyle.copy(
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            letterSpacing = 0.sp,
+            color = scheme.onSurfaceVariant,
+        )
     val titleBaseline =
         rememberTextMeasurer()
             .measure(
                 "Ag",
-                style =
-                    androidx.compose.material3.LocalTextStyle.current
-                        .merge(lineStyle)
-                        .copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            lineHeight = 16.sp,
-                            letterSpacing = 0.sp,
-                        ),
+                style = androidx.compose.material3.LocalTextStyle.current.merge(headingStyle),
                 maxLines = 1,
             )
             .firstBaseline
@@ -701,251 +812,8 @@ internal fun SessionHeader(
                     sessions.getOrNull(index)?.let { latestSelect(it.id) }
             }
     }
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 50.dp).padding(horizontal = 9.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (!expanded) {
-            Box(
-                Modifier.height(45.dp)
-                    .clipToBounds()
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = programIconDescription
-                        stateDescription = programStateDescription
-                        if (enabled && looping)
-                            customActions =
-                                listOf(
-                                    CustomAccessibilityAction(nextSessionLabel) {
-                                        selectNeighbour(1)
-                                    },
-                                    CustomAccessibilityAction(previousSessionLabel) {
-                                        selectNeighbour(-1)
-                                    },
-                                )
-                    }
-                    .pointerInput(enabled, sessionIds, selectedId) {
-                        if (enabled && looping) {
-                            var distance = Offset.Zero
-                            detectDragGestures(
-                                onDragStart = {
-                                    distance = Offset.Zero
-                                    iconAnimation?.cancel()
-                                    iconDragY = iconSettle.value
-                                    iconDragging = true
-                                },
-                                onDragCancel = {
-                                    distance = Offset.Zero
-                                    settleIcon()
-                                },
-                                onDrag = { change, amount ->
-                                    change.consume()
-                                    distance += amount
-                                    iconDragY = distance.y.coerceIn(-iconTravel, iconTravel)
-                                },
-                                onDragEnd = {
-                                    settleIcon()
-                                    if (
-                                        abs(distance.y) >= iconSwipeDistance &&
-                                            abs(distance.y) > abs(distance.x) * 1.5f
-                                    )
-                                        selectNeighbour(if (distance.y < 0) 1 else -1)
-                                },
-                            )
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier.graphicsLayer {
-                        val y = if (iconDragging) iconDragY else iconSettle.value
-                        val progress = (abs(y) / iconTravel).coerceIn(0f, 1f)
-                        translationY = y
-                        scaleX = 1f - .06f * progress
-                        scaleY = scaleX
-                        alpha = 1f - .25f * progress
-                    },
-                ) {
-                    ProgramStack(
-                        programs,
-                        paneIndex,
-                        framed = true,
-                        fixedSlot = true,
-                        marquee = marquee,
-                        isPaneWorking = isPaneWorking,
-                        progress = progress,
-                    )
-                }
-            }
-            Spacer(Modifier.width(7.dp))
-        }
-        Column(
-            Modifier.weight(1f)
-                .then(
-                    if (onCollapse != null)
-                        Modifier.clickable(
-                            onClickLabel = stringResource(R.string.a11y_collapse_top_bar),
-                            onClick = onCollapse,
-                        )
-                    else Modifier,
-                ),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            if (!expanded) {
-                Text(
-                    title.ifBlank { program.title },
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    style = lineStyle,
-                    letterSpacing = 0.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier =
-                        Modifier.fillMaxWidth().height(titleHeight).layout { measurable, constraints
-                            ->
-                            // Fallback/emoji metrics must not move the ordinary title text.
-                            val text =
-                                measurable.measure(
-                                    constraints.copy(
-                                        minHeight = 0,
-                                        maxHeight = Constraints.Infinity,
-                                    ),
-                                )
-                            layout(
-                                text.width,
-                                constraints.maxHeight,
-                                mapOf(FirstBaseline to titleBaseline),
-                            ) {
-                                text.placeRelative(0, titleBaseline - text[FirstBaseline])
-                            }
-                        },
-                )
-                Text(
-                    directory,
-                    Modifier.fillMaxWidth().height(directoryHeight),
-                    fontFamily = MonoUi,
-                    fontSize = 9.sp,
-                    lineHeight = 12.sp,
-                    style = lineStyle,
-                    letterSpacing = 0.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            BoxWithConstraints(
-                Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight),
-            ) {
-                val pageWidth = if (expanded) 160.dp else maxWidth.coerceAtLeast(40.dp)
-                val pagePadding =
-                    if (expanded) ((maxWidth - pageWidth) / 2).coerceAtLeast(0.dp) else 0.dp
-                Column(
-                    Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    HorizontalPager(
-                        pager,
-                        Modifier.fillMaxWidth()
-                            .height(if (expanded) 32.dp else sessionHeight)
-                            .semantics { contentDescription = sessionStripDescription },
-                        userScrollEnabled = enabled && sessions.size > 1,
-                        pageSize = PageSize.Fixed(pageWidth),
-                        contentPadding = PaddingValues(horizontal = pagePadding),
-                        pageSpacing = 6.dp,
-                        key = { "$it:${sessions.getOrNull(logicalPage(it))?.id.orEmpty()}" },
-                    ) { page ->
-                        val item = sessions.getOrNull(logicalPage(page))
-                        val active = item?.id == selectedId
-                        val sessionActionLabel =
-                            if (active || item == null) stringResource(R.string.a11y_switch_session)
-                            else stringResource(R.string.a11y_session_label, item.label)
-                        Row(
-                            Modifier.requiredWidth(pageWidth)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(19.dp))
-                                .border(
-                                    1.dp,
-                                    if (expanded && active) MaterialTheme.colorScheme.primary
-                                    else Color.Transparent,
-                                    RoundedCornerShape(19.dp),
-                                )
-                                .padding(horizontal = if (expanded) 9.dp else 0.dp)
-                                .graphicsLayer {
-                                    alpha = if (active || sessions.isEmpty()) 1f else .38f
-                                }
-                                .combinedClickable(
-                                    onClick = {
-                                        if (active || item == null) onSessions()
-                                        else onSelect(item.id)
-                                    },
-                                    onLongClick = onLast,
-                                )
-                                .semantics { contentDescription = sessionActionLabel },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement =
-                                Arrangement.spacedBy(if (expanded) 6.dp else 4.dp),
-                        ) {
-                            Box(
-                                Modifier.size(if (expanded) 7.dp else 5.dp)
-                                    .background(
-                                        if (connected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(4.dp),
-                                    ),
-                            )
-                            serverIcons[item?.id]?.let {
-                                ServerGlyph(it, Modifier.size(if (expanded) 13.dp else 11.dp))
-                            }
-                            Text(
-                                item?.label
-                                    ?: stringResource(
-                                        if (connected) R.string.sessions else R.string.connect,
-                                    ),
-                                fontFamily = MonoUi,
-                                fontWeight = if (expanded) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = if (expanded) 12.sp else 9.sp,
-                                lineHeight = if (expanded) 16.sp else 12.sp,
-                                style =
-                                    androidx.compose.ui.text.TextStyle(
-                                        platformStyle =
-                                            androidx.compose.ui.text.PlatformTextStyle(
-                                                includeFontPadding = false,
-                                            ),
-                                    ),
-                                letterSpacing = 0.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color =
-                                    if (expanded) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier =
-                                    Modifier.widthIn(
-                                        max =
-                                            (pageWidth -
-                                                    (if (expanded) 50.dp else 24.dp) -
-                                                    (if (serverIcons[item?.id] != null) 15.dp
-                                                    else 0.dp))
-                                                .coerceAtLeast(10.dp),
-                                    ),
-                            )
-                            ChromeSymbol(
-                                ChromeIcon.CHEVRON,
-                                Modifier.size(if (expanded) 13.dp else 11.dp),
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    if (expanded && sessions.size > 1)
-                        PositionDots(
-                            logicalPage(pager.currentPage),
-                            sessions.size,
-                            Modifier.height(5.dp),
-                        )
-                }
-            }
-        }
-        if (!expanded) {
+    val headerMenu: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             if (onCollapse != null) {
                 ChromeButton(
                     ChromeIcon.CHEVRON,
@@ -955,6 +823,301 @@ internal fun SessionHeader(
                 )
             }
             menu()
+        }
+    }
+    val full: @Composable () -> Unit = {
+        SessionHeaderRow(
+            Modifier.heightIn(min = 44.dp),
+            topCutout,
+            { if (!expanded) headerMenu() },
+        ) {
+            if (!expanded) {
+                Box(
+                    Modifier.width(iconSlotWidth)
+                        .height(36.dp)
+                        .clipToBounds()
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = programIconDescription
+                            stateDescription = programStateDescription
+                            if (enabled && looping)
+                                customActions =
+                                    listOf(
+                                        CustomAccessibilityAction(nextSessionLabel) {
+                                            selectNeighbour(1)
+                                        },
+                                        CustomAccessibilityAction(previousSessionLabel) {
+                                            selectNeighbour(-1)
+                                        },
+                                    )
+                        }
+                        .pointerInput(enabled, sessionIds, selectedId) {
+                            if (enabled && looping) {
+                                var distance = Offset.Zero
+                                detectDragGestures(
+                                    onDragStart = {
+                                        distance = Offset.Zero
+                                        iconAnimation?.cancel()
+                                        iconDragY = iconSettle.value
+                                        iconDragging = true
+                                    },
+                                    onDragCancel = {
+                                        distance = Offset.Zero
+                                        settleIcon()
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        distance += amount
+                                        iconDragY = distance.y.coerceIn(-iconTravel, iconTravel)
+                                    },
+                                    onDragEnd = {
+                                        settleIcon()
+                                        if (
+                                            abs(distance.y) >= iconSwipeDistance &&
+                                                abs(distance.y) > abs(distance.x) * 1.5f
+                                        )
+                                            selectNeighbour(if (distance.y < 0) 1 else -1)
+                                    },
+                                )
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.offset(x = 2.dp).graphicsLayer {
+                            val y = if (iconDragging) iconDragY else iconSettle.value
+                            val progress = (abs(y) / iconTravel).coerceIn(0f, 1f)
+                            translationY = y
+                            scaleX = 1f - .06f * progress
+                            scaleY = scaleX
+                            alpha = 1f - .25f * progress
+                        },
+                    ) {
+                        ProgramStack(
+                            programs,
+                            paneIndex,
+                            framed = true,
+                            fixedSlot = true,
+                            marquee = marquee,
+                            isPaneWorking = isPaneWorking,
+                            progress = progress,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(9.dp))
+            }
+            Column(
+                Modifier.weight(1f)
+                    .padding(top = 4.dp, bottom = 4.dp, start = if (expanded) 9.dp else 0.dp)
+                    .then(
+                        if (expanded) Modifier
+                        else
+                            Modifier.combinedClickable(
+                                role = Role.Button,
+                                onClickLabel = openSessionDrawerLabel,
+                                onLongClick = onLast,
+                                onClick = onSessions,
+                            ),
+                    ),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                if (!expanded) {
+                    Text(
+                        paneTitle,
+                        style = headingStyle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier =
+                            Modifier.fillMaxWidth().height(titleHeight).layout {
+                                measurable,
+                                constraints ->
+                                // Fallback/emoji metrics must not move the ordinary title text.
+                                val text =
+                                    measurable.measure(
+                                        constraints.copy(
+                                            minHeight = 0,
+                                            maxHeight = Constraints.Infinity,
+                                        ),
+                                    )
+                                layout(
+                                    text.width,
+                                    constraints.maxHeight,
+                                    mapOf(FirstBaseline to titleBaseline),
+                                ) {
+                                    text.placeRelative(0, titleBaseline - text[FirstBaseline])
+                                }
+                            },
+                    )
+                }
+                BoxWithConstraints(
+                    Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight),
+                ) {
+                    val pageWidth = if (expanded) 160.dp else maxWidth.coerceAtLeast(40.dp)
+                    val pagePadding =
+                        if (expanded) ((maxWidth - pageWidth) / 2).coerceAtLeast(0.dp) else 0.dp
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        HorizontalPager(
+                            pager,
+                            Modifier.fillMaxWidth()
+                                .height(if (expanded) 32.dp else sessionHeight)
+                                .semantics { contentDescription = sessionStripDescription },
+                            userScrollEnabled = enabled && sessions.size > 1,
+                            pageSize = PageSize.Fixed(pageWidth),
+                            contentPadding = PaddingValues(horizontal = pagePadding),
+                            pageSpacing = 6.dp,
+                            key = { "$it:${sessions.getOrNull(logicalPage(it))?.id.orEmpty()}" },
+                        ) { page ->
+                            val item = sessions.getOrNull(logicalPage(page))
+                            val active = item?.id == selectedId
+                            val sessionActionLabel =
+                                if (active || item == null)
+                                    stringResource(R.string.a11y_switch_session)
+                                else stringResource(R.string.a11y_session_label, item.label)
+                            Row(
+                                Modifier.requiredWidth(pageWidth)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(19.dp))
+                                    .border(
+                                        1.dp,
+                                        if (expanded && active)
+                                            MaterialTheme.colorScheme.primary.copy(alpha = .5f)
+                                        else Color.Transparent,
+                                        RoundedCornerShape(19.dp),
+                                    )
+                                    .padding(horizontal = if (expanded) 9.dp else 0.dp)
+                                    .graphicsLayer {
+                                        alpha = if (active || sessions.isEmpty()) 1f else .38f
+                                    }
+                                    .then(
+                                        if (expanded || (!active && item != null))
+                                            Modifier.combinedClickable(
+                                                onClick = {
+                                                    if (active || item == null) onSessions()
+                                                    else onSelect(item.id)
+                                                },
+                                                onLongClick = onLast,
+                                            )
+                                        else Modifier,
+                                    )
+                                    .semantics { contentDescription = sessionActionLabel },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(if (expanded) 6.dp else 4.dp),
+                            ) {
+                                val serverIcon = serverIcons[item?.id] ?: ServerIcon.GLOBE
+                                ServerGlyph(
+                                    serverIcon,
+                                    Modifier.size(if (expanded) 14.dp else 12.dp).semantics {
+                                        contentDescription = serverIcon.label
+                                        if (active || item == null)
+                                            stateDescription = connectionStatus
+                                    },
+                                    color =
+                                        if (active || item == null) connectionTint
+                                        else scheme.onSurfaceVariant,
+                                )
+                                val style =
+                                    if (expanded)
+                                        contextStyle.copy(
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = scheme.onSurface,
+                                        )
+                                    else contextStyle
+                                HeaderContextLine(
+                                    item?.label
+                                        ?: stringResource(
+                                            if (connected) R.string.sessions else R.string.connect,
+                                        ),
+                                    directory = directory.takeIf { active && !expanded }.orEmpty(),
+                                    style = style,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                            }
+                        }
+                        if (expanded && sessions.size > 1)
+                            PositionDots(
+                                logicalPage(pager.currentPage),
+                                sessions.size,
+                                Modifier.height(5.dp),
+                            )
+                    }
+                }
+            }
+        }
+    }
+    val compact: @Composable () -> Unit = {
+        val frost =
+            headerHaze?.let {
+                Modifier.paneFrost(
+                    it,
+                    androidx.compose.ui.graphics.RectangleShape,
+                    edge = false,
+                    opacity = .66f,
+                    blur = 16.dp,
+                )
+            } ?: Modifier
+        SessionHeaderRow(frost.testTag("Compact session header"), topCutout, headerMenu) {
+            val session = sessions.getOrNull(selectedIndex)?.label.orEmpty()
+            val serverIcon = serverIcons[selectedId] ?: ServerIcon.GLOBE
+            Row(
+                Modifier.weight(1f)
+                    .heightIn(min = 40.dp)
+                    .padding(start = 9.dp)
+                    .combinedClickable(
+                        role = Role.Button,
+                        onClickLabel = openSessionDrawerLabel,
+                        onLongClick = onLast,
+                        onClick = onSessions,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ServerGlyph(
+                    serverIcon,
+                    Modifier.size(14.dp).semantics {
+                        contentDescription = serverIcon.label
+                        stateDescription = connectionStatus
+                    },
+                    color = connectionTint,
+                )
+                HeaderContextLine(
+                    session,
+                    directory,
+                    contextStyle,
+                    Modifier.weight(1f),
+                    title = paneTitle,
+                    titleStyle = headingStyle,
+                )
+            }
+        }
+    }
+    val divider = scheme.outlineVariant.copy(alpha = .65f)
+    Box(
+        modifier.fillMaxWidth().drawWithContent {
+            drawContent()
+            val stroke = .5.dp.toPx()
+            val y = size.height - stroke / 2
+            drawLine(divider, Offset(0f, y), Offset(size.width, y), strokeWidth = stroke)
+        },
+    ) {
+        when {
+            expanded -> full()
+            collapseForIme != null ->
+                KeyboardCollapsingHeader(
+                    collapseForIme,
+                    WindowInsets.navigationBars,
+                    onHeaderHeightSaved,
+                    onHeaderOverlap,
+                    if (alwaysCompact) null else full,
+                    compact,
+                )
+            alwaysCompact -> compact()
+            else -> full()
         }
     }
 }
@@ -1039,27 +1202,29 @@ internal fun CompactSessionHeader(
     }
 }
 
-/** Call only for visible busy programs; idle chrome owns no animation clock. */
+// Share one clock across tabs and Activity rows. Only active lifecycle collectors keep it running.
+private val workingPhase by lazy {
+    flow {
+            val start = SystemClock.uptimeMillis()
+            while (true) {
+                emit(((SystemClock.uptimeMillis() - start) % 1200L) / 1200f)
+                delay(50L)
+            }
+        }
+        .stateIn(
+            CoroutineScope(Dispatchers.Main.immediate),
+            SharingStarted.WhileSubscribed(replayExpirationMillis = 0L),
+            0f,
+        )
+}
+
+/** Call only for visible busy programs. Read the phase during drawing. */
 @Composable
 internal fun rememberWorkingPhase(working: Boolean): State<Float> {
     if (!working) return remember { mutableFloatStateOf(0f) }
     // A static mid-phase renders a solid bar when animations are disabled.
     if (!LocalMotionEnabled.current) return remember { mutableFloatStateOf(.5f) }
-    val transition =
-        androidx.compose.animation.core.rememberInfiniteTransition(label = "Program working")
-    return transition.animateFloat(
-        0f,
-        1f,
-        animationSpec =
-            androidx.compose.animation.core.infiniteRepeatable(
-                animation =
-                    androidx.compose.animation.core.tween(
-                        1200,
-                        easing = androidx.compose.animation.core.LinearEasing,
-                    ),
-            ),
-        label = "Working highlight",
-    )
+    return workingPhase.collectAsStateWithLifecycle()
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -1182,6 +1347,7 @@ internal fun TerminalTabs(
     // it.
     val barShape = RexTokens.shape.tabCell
     val barHeight = if (floating) FloatingTabBarHeight else 45.dp
+    val divider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)
     val barModifier =
         if (floating)
             Modifier.fillMaxWidth()
@@ -1195,7 +1361,20 @@ internal fun TerminalTabs(
                 .onGloballyPositioned { onFanBarBounds(it.boundsInRoot()) }
                 .testTag("Floating tab bar")
                 .padding(horizontal = 6.dp)
-        else Modifier.fillMaxWidth().height(barHeight).padding(start = 11.dp, end = 6.dp)
+        else
+            Modifier.fillMaxWidth()
+                .height(barHeight)
+                .drawWithContent {
+                    drawContent()
+                    val stroke = .5.dp.toPx()
+                    drawLine(
+                        divider,
+                        Offset(0f, stroke / 2),
+                        Offset(size.width, stroke / 2),
+                        strokeWidth = stroke,
+                    )
+                }
+                .padding(start = 11.dp, end = 6.dp)
     var revealed by remember(reorderKey) { mutableStateOf(false) }
     LaunchedEffect(reorderKey, contentReady) { if (contentReady) revealed = true }
     if (!contentReady && !revealed) {
@@ -1362,13 +1541,11 @@ internal fun TerminalTabs(
                     val progress = paneProgress(w)
                     val indicatorColor = terminalProgressColor(progress)
                     val busy = paneWorking(w) || progress?.busy == true
-                    val workPhase =
-                        rememberWorkingPhase(
-                            animateWorking &&
-                                active &&
-                                if (progress != null) progress.busy && progress.percent == null
-                                else busy,
-                        )
+                    val breathe =
+                        animateWorking &&
+                            if (progress != null) progress.busy && progress.percent == null
+                            else active && busy
+                    val workPhase = rememberWorkingPhase(breathe)
                     val programs = panePrograms(w)
                     val pane = selectedPane(w)
                     val program = programs.getOrNull(pane) ?: ProgramIdentity.Loading
@@ -1399,8 +1576,8 @@ internal fun TerminalTabs(
                         if (floating && active) {
                             DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
                         }
-                        val barTrack =
-                            tintOver(indicatorColor, MaterialTheme.colorScheme.surface, .18f)
+                        val markerHeight = 3.dp
+                        val markerBottom = 2.dp
                         Column(
                             Modifier.height(45.dp)
                                 .width(width)
@@ -1413,40 +1590,31 @@ internal fun TerminalTabs(
                                 )
                                 .drawWithContent {
                                     drawContent()
-                                    if (active) {
-                                        val origin = Offset(0f, size.height - 2.dp.toPx())
-                                        val bar = Size(size.width, 2.dp.toPx())
-                                        if (progress != null) {
-                                            drawWorkingBar(barTrack, origin, bar)
-                                            val fill =
-                                                progress.percent?.let {
-                                                    bar.copy(width = bar.width * it / 100f)
-                                                } ?: bar
-                                            drawWorkingBar(
-                                                indicatorColor,
-                                                origin,
-                                                fill,
-                                                phase =
-                                                    if (
-                                                        progress.busy &&
-                                                            progress.percent == null &&
-                                                            animateWorking
-                                                    )
-                                                        workPhase.value
-                                                    else null,
+                                    if (active || progress != null) {
+                                        val inset = 5.dp.toPx()
+                                        val bar =
+                                            Size(
+                                                (size.width - 2 * inset).coerceAtLeast(0f),
+                                                markerHeight.toPx(),
                                             )
-                                        } else
-                                            drawWorkingBar(
-                                                indicatorColor,
-                                                origin,
-                                                bar,
-                                                phase =
-                                                    if (busy && animateWorking) workPhase.value
-                                                    else null,
+                                        val origin =
+                                            Offset(
+                                                inset,
+                                                size.height - bar.height - markerBottom.toPx(),
                                             )
+                                        val brightness =
+                                            if (breathe) workingBarBrightness(workPhase.value)
+                                            else 1f
+                                        drawTabMarker(
+                                            indicatorColor,
+                                            origin,
+                                            bar,
+                                            progress?.percent,
+                                            brightness,
+                                        )
                                     }
                                 }
-                                .clip(RoundedCornerShape(16.dp))
+                                .clipToBounds()
                                 .background(
                                     if (drag.id == w.id && drag.moved)
                                         MaterialTheme.colorScheme.surfaceVariant
@@ -1507,8 +1675,7 @@ internal fun TerminalTabs(
                                 Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement =
-                                    if (showTitle) Arrangement.spacedBy(2.dp)
-                                    else Arrangement.Center,
+                                    Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
                             ) {
                                 Box(Modifier.semantics { testTag = "Tab program icon ${w.id}" }) {
                                     ProgramStack(
@@ -1546,7 +1713,7 @@ internal fun TerminalTabs(
                                 if (showTitle)
                                     Text(
                                         title,
-                                        Modifier.weight(1f),
+                                        Modifier.weight(1f, fill = false),
                                         fontSize = 12.sp,
                                         lineHeight = 18.sp,
                                         style =
@@ -1566,7 +1733,7 @@ internal fun TerminalTabs(
                                         letterSpacing = 0.sp,
                                     )
                             }
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(markerHeight + markerBottom))
                         }
                         androidx.compose.material3.DropdownMenu(
                             menuId == w.id,
@@ -1764,7 +1931,7 @@ internal fun KeyboardBar(
         }
     }
     LaunchedEffect(expanded, toolbar) { if (!expanded) keyScroll.scrollTo(keyScroll.maxValue) }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         Box(
             Modifier.fillMaxWidth()
                 .height(1.dp)
@@ -1777,7 +1944,7 @@ internal fun KeyboardBar(
                 ),
         )
         Row(
-            Modifier.fillMaxWidth().height(45.dp).padding(vertical = 4.dp),
+            Modifier.fillMaxWidth().height(45.dp).padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1951,7 +2118,10 @@ internal fun KeyboardBar(
                     ),
                 )
             for (row in extra) Row(
-                Modifier.fillMaxWidth().height(43.dp).padding(bottom = 6.dp),
+                Modifier.fillMaxWidth()
+                    .height(43.dp)
+                    .padding(horizontal = 8.dp)
+                    .padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 for ((label, key) in row) DockKey(

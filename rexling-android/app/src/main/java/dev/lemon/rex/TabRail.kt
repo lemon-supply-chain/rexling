@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -35,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.chrisbanes.haze.HazeState
@@ -49,6 +51,12 @@ internal enum class TabRailStyle(@androidx.annotation.StringRes val labelRes: In
     ICONS(R.string.tab_rail_style_icons),
     TITLES(R.string.tab_rail_style_titles),
 }
+
+internal fun tabRailWidth(style: TabRailStyle) =
+    when (style) {
+        TabRailStyle.ICONS -> 52.dp
+        TabRailStyle.TITLES -> 152.dp
+    }
 
 /**
  * Where the tab bar sits, and how a side rail draws its tabs. Kept separately for folded and
@@ -84,12 +92,12 @@ internal data class TabBarLayout(
  */
 internal enum class TabWidthClass(
     @androidx.annotation.StringRes val titleRes: Int,
-    @androidx.annotation.StringRes val detailRes: Int,
+    @androidx.annotation.StringRes val rangeRes: Int,
     val key: String,
 ) {
-    NARROW(R.string.tab_width_narrow, R.string.tab_width_narrow_detail, "tab_layout_narrow"),
-    MEDIUM(R.string.tab_width_medium, R.string.tab_width_medium_detail, "tab_layout_medium"),
-    WIDE(R.string.tab_width_wide, R.string.tab_width_wide_detail, "tab_layout_wide");
+    NARROW(R.string.tab_width_narrow, R.string.tab_width_narrow_range, "tab_layout_narrow"),
+    MEDIUM(R.string.tab_width_medium, R.string.tab_width_medium_range, "tab_layout_medium"),
+    WIDE(R.string.tab_width_wide, R.string.tab_width_wide_range, "tab_layout_wide");
 
     companion object {
         fun of(widthDp: Int): TabWidthClass =
@@ -136,8 +144,6 @@ internal fun TerminalTabRail(
     animateWorking: Boolean = true,
     onStyle: (TabRailStyle) -> Unit = {},
     extendUnderNav: Boolean = false,
-    island: Boolean = false,
-    islandBottom: androidx.compose.ui.unit.Dp = 8.dp,
     floating: Boolean = false,
     hazeState: HazeState? = null,
     handle: (@Composable () -> Unit)? = null,
@@ -153,12 +159,9 @@ internal fun TerminalTabRail(
     // Swipe across the rail toward the terminal to show titles, back toward the screen edge to hide
     // them.
     // Resizes are debounced, so the animated width sends the pane only its final size.
-    // Beside the multi-pane layout the rail is a floating card like the panes: rounded, inset, and
-    // ending level with them; slightly narrower so the terminal keeps about the same width.
     val width by
         androidx.compose.animation.core.animateDpAsState(
-            if (floating || island) (if (titles) 144.dp else 48.dp)
-            else if (titles) 152.dp else 52.dp,
+            if (floating) (if (titles) 144.dp else 48.dp) else tabRailWidth(style),
             androidx.compose.animation.core.tween(180),
             label = "Tab rail width",
         )
@@ -172,6 +175,7 @@ internal fun TerminalTabRail(
     val exclusion = with(androidx.compose.ui.platform.LocalDensity.current) { 200.dp.toPx() }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val scheme = MaterialTheme.colorScheme
+    val divider = scheme.outlineVariant.copy(alpha = .65f)
     val list = rememberLazyListState()
     var menuId by remember(reorderKey) { mutableStateOf<String?>(null) }
     val ids = windows.map { it.id }
@@ -186,7 +190,6 @@ internal fun TerminalTabRail(
     LaunchedEffect(selectedId, reorderKey, index) {
         if (index >= 0) list.animateScrollToItem(index)
     }
-    val islandShape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
     // A floating rail is a rounded card that hugs its tabs, so it has no fixed corner size.
     val pillShape = RexTokens.shape.tabCell
     val styleToggleDescription =
@@ -194,23 +197,28 @@ internal fun TerminalTabRail(
     val tabsDescription = stringResource(R.string.a11y_tabs)
     BoxWithConstraints(
         Modifier.then(if (floating) Modifier else Modifier.fillMaxHeight())
-            .then(
-                if (island)
-                    Modifier.padding(
-                        start = if (side == TabBarPosition.LEFT) 8.dp else 0.dp,
-                        end = if (side == TabBarPosition.RIGHT) 8.dp else 0.dp,
-                        top = 8.dp,
-                        bottom = islandBottom,
-                    )
-                else Modifier,
-            )
             .width(width)
             // A floating rail is an overlay that hugs its tabs, so it never claims layout space.
             .then(if (floating) Modifier.wrapContentHeight() else Modifier)
-            .then(if (floating || island) Modifier else Modifier.background(scheme.surface))
+            .then(
+                if (floating) Modifier
+                else
+                    Modifier.background(scheme.surface).drawWithContent {
+                        drawContent()
+                        val stroke = .5.dp.toPx()
+                        val x =
+                            if (side == TabBarPosition.LEFT) size.width - stroke / 2 else stroke / 2
+                        drawLine(
+                            divider,
+                            Offset(x, 0f),
+                            Offset(x, size.height),
+                            strokeWidth = stroke,
+                        )
+                    },
+            )
             // Reaches the screen edge under the gesture handle; its buttons stay above it.
             .then(
-                if (extendUnderNav && !floating && !island)
+                if (extendUnderNav && !floating)
                     Modifier.windowInsetsPadding(
                         WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
                     )
@@ -236,20 +244,14 @@ internal fun TerminalTabRail(
             Modifier.fillMaxWidth()
                 .height(pillHeight)
                 .then(
-                    when {
-                        floating ->
-                            Modifier.shadow(3.dp, pillShape, clip = false)
-                                .then(
-                                    if (hazeState == null)
-                                        Modifier.clip(pillShape).background(scheme.surface)
-                                    else Modifier.paneFrost(hazeState, pillShape),
-                                )
-                        island ->
-                            Modifier.clip(islandShape)
-                                .background(scheme.surface)
-                                .border(1.5.dp, scheme.outline.copy(alpha = .25f), islandShape)
-                        else -> Modifier
-                    },
+                    if (floating)
+                        Modifier.shadow(3.dp, pillShape, clip = false)
+                            .then(
+                                if (hazeState == null)
+                                    Modifier.clip(pillShape).background(scheme.surface)
+                                else Modifier.paneFrost(hazeState, pillShape),
+                            )
+                    else Modifier,
                 )
                 .then(
                     if (floating)
@@ -306,8 +308,7 @@ internal fun TerminalTabRail(
                     contentDescription = tabsDescription
                 },
                 state = list,
-                contentPadding =
-                    PaddingValues(horizontal = if (titles) 4.dp else 2.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
             ) {
                 itemsIndexed(windows, key = { _, w -> w.id }) { i, w ->
@@ -336,6 +337,11 @@ internal fun TerminalTabRail(
                     val progress = paneProgress(w)
                     val busy = paneWorking(w) || progress?.busy == true
                     val indicator = terminalProgressColor(progress)
+                    val breathe =
+                        animateWorking &&
+                            if (progress != null) progress.busy && progress.percent == null
+                            else active && busy
+                    val workPhase = rememberWorkingPhase(breathe)
                     val tabDescription =
                         stringResource(
                             if (busy && progress == null) R.string.a11y_tab_working
@@ -352,13 +358,8 @@ internal fun TerminalTabRail(
                         if (floating && active) {
                             DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
                         }
-                        val workPhase =
-                            rememberWorkingPhase(
-                                animateWorking &&
-                                    active &&
-                                    if (progress != null) progress.busy && progress.percent == null
-                                    else busy,
-                            )
+                        val layoutDirection =
+                            androidx.compose.ui.platform.LocalLayoutDirection.current
                         Row(
                             Modifier.fillMaxWidth()
                                 .height(48.dp)
@@ -374,42 +375,27 @@ internal fun TerminalTabRail(
                                 )
                                 .drawWithContent {
                                     drawContent()
-                                    // The bottom indicator bar is only drawn on the active tab.
-                                    if (active) {
-                                        val origin = Offset(0f, size.height - 2.dp.toPx())
-                                        val bar = Size(size.width, 2.dp.toPx())
-                                        if (progress != null) {
-                                            drawWorkingBar(
-                                                indicator.copy(alpha = .18f),
-                                                origin,
-                                                bar,
-                                            )
-                                            val fill =
-                                                progress.percent?.let {
-                                                    bar.copy(width = bar.width * it / 100f)
-                                                } ?: bar
-                                            drawWorkingBar(
-                                                indicator,
-                                                origin,
-                                                fill,
-                                                phase =
-                                                    if (
-                                                        progress.busy &&
-                                                            progress.percent == null &&
-                                                            animateWorking
-                                                    )
-                                                        workPhase.value
-                                                    else null,
-                                            )
-                                        } else
-                                            drawWorkingBar(
-                                                indicator,
-                                                origin,
-                                                bar,
-                                                phase =
-                                                    if (busy && animateWorking) workPhase.value
-                                                    else null,
-                                            )
+                                    if (active || busy || progress != null) {
+                                        val bar = Size(3.dp.toPx(), 22.dp.toPx())
+                                        val inset = 5.dp.toPx()
+                                        val x =
+                                            if (layoutDirection == LayoutDirection.Ltr) inset
+                                            else size.width - inset - bar.width
+                                        val origin = Offset(x, (size.height - bar.height) / 2)
+                                        val brightness =
+                                            if (breathe) workingBarBrightness(workPhase.value)
+                                            else 1f
+                                        val opacity =
+                                            if (active || progress != null) brightness
+                                            else .45f * brightness
+                                        drawTabMarker(
+                                            indicator,
+                                            origin,
+                                            bar,
+                                            progress?.percent,
+                                            opacity,
+                                            vertical = true,
+                                        )
                                     }
                                 }
                                 .semantics(mergeDescendants = true) {
@@ -458,28 +444,24 @@ internal fun TerminalTabRail(
                                         }
                                     },
                                 )
-                                .padding(horizontal = if (titles) 6.dp else 0.dp),
+                                .padding(
+                                    start = if (titles) 14.dp else 5.dp,
+                                    end = if (titles) 10.dp else 0.dp,
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement =
                                 if (titles) Arrangement.spacedBy(4.dp) else Arrangement.Center,
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 ProgramStack(programs, pane, fixedSlot = true)
-                                if (unread > 0 || busy)
+                                if (unread > 0)
                                     Box(
                                         Modifier.align(Alignment.TopEnd)
                                             .offset(x = 2.dp, y = (-2).dp)
                                             .size(8.dp)
                                             .border(1.5.dp, scheme.background, CircleShape)
-                                            .background(
-                                                if (unread > 0) scheme.primary else indicator,
-                                                CircleShape,
-                                            )
-                                            .semantics {
-                                                testTag =
-                                                    if (unread > 0) "Tab unread dot ${w.id}"
-                                                    else "Tab working dot ${w.id}"
-                                            },
+                                            .background(scheme.primary, CircleShape)
+                                            .semantics { testTag = "Tab unread dot ${w.id}" },
                                     )
                             }
                             if (titles)
@@ -536,6 +518,11 @@ internal fun TerminalTabRail(
                 Modifier.fillMaxWidth().onSizeChanged { chromePx = it.height },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                HorizontalDivider(
+                    Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                    thickness = .5.dp,
+                    color = divider,
+                )
                 // Points the way the rail will go: toward the terminal to show titles, toward the
                 // edge to hide them.
                 val towardTerminal = if (side == TabBarPosition.LEFT) -90f else 90f

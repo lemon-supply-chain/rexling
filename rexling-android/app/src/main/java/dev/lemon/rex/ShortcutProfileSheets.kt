@@ -35,110 +35,99 @@ internal fun ShortcutProfilesSheet(
     hazeState: dev.chrisbanes.haze.HazeState? = null,
 ) {
     val frost = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 0.dp,
-        dragHandle = null,
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-    ) {
-        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+    DrawerSheet(onClose, dismissOnBack = true) { dismiss ->
+        Column(
+            frost
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+        ) {
+            DrawerHandle(dismiss)
             Column(
-                frost
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+                Modifier.fillMaxWidth()
+                    .heightIn(max = 680.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                DrawerHandle()
-                Column(
-                    Modifier.fillMaxWidth()
-                        .heightIn(max = 680.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp)
-                        .padding(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    SettingsHeader(
-                        stringResource(R.string.shortcuts),
-                        stringResource(R.string.close_shortcuts),
-                        onClose,
-                        subtitle = stringResource(R.string.shortcuts_subtitle),
-                    )
-                    SettingsSection(stringResource(R.string.shortcut_profiles)) {
-                        profiles.forEachIndexed { index, profile ->
-                            if (index > 0) SettingsDivider()
-                            ShortcutProfileRow(
-                                profile,
-                                { onEdit(profile.id) },
-                                { onEnabled(profile.id, it) },
-                            )
-                        }
-                        if (profiles.isNotEmpty()) SettingsDivider()
-                        SettingsRow(
-                            stringResource(R.string.new_profile),
-                            stringResource(R.string.new_profile_detail),
-                            SettingsGlyph.COMMAND,
-                            onNew,
+                SettingsHeader(
+                    stringResource(R.string.shortcuts),
+                    stringResource(R.string.close_shortcuts),
+                    dismiss,
+                    subtitle = stringResource(R.string.shortcuts_subtitle),
+                )
+                SettingsSection(stringResource(R.string.shortcut_profiles)) {
+                    profiles.forEachIndexed { index, profile ->
+                        if (index > 0) SettingsDivider()
+                        ShortcutProfileRow(
+                            profile,
+                            { onEdit(profile.id) },
+                            { onEnabled(profile.id, it) },
                         )
                     }
-                    SettingsSection(stringResource(R.string.shortcut_menu)) {
-                        SettingsChoiceRow(
-                            stringResource(R.string.menu_layout),
-                            NeovimShortcutLayout.entries,
-                            layout,
-                            {
-                                stringResource(
-                                    if (it == NeovimShortcutLayout.GRID) R.string.layout_grid
-                                    else R.string.layout_circular,
-                                )
-                            },
-                            onLayout,
-                        )
-                        if (layout == NeovimShortcutLayout.CIRCULAR) {
-                            SettingsDivider()
-                            SettingsChoiceRow(
-                                stringResource(R.string.opening_effect),
-                                NeovimShortcutEffect.entries,
-                                effect,
-                                {
-                                    stringResource(
-                                        when (it) {
-                                            NeovimShortcutEffect.FAN_OUT -> R.string.effect_fan_out
-                                            NeovimShortcutEffect.SPIN -> R.string.effect_spin
-                                            NeovimShortcutEffect.EXPAND -> R.string.effect_expand
-                                            NeovimShortcutEffect.NONE -> R.string.effect_none
-                                        },
-                                    )
-                                },
-                                onEffect,
-                                subtitle =
-                                    stringResource(
-                                        when (effect) {
-                                            NeovimShortcutEffect.FAN_OUT ->
-                                                R.string.effect_fan_out_detail
-                                            NeovimShortcutEffect.SPIN -> R.string.effect_spin_detail
-                                            NeovimShortcutEffect.EXPAND ->
-                                                R.string.effect_expand_detail
-                                            NeovimShortcutEffect.NONE -> R.string.effect_none_detail
-                                        },
-                                    ),
-                            )
-                            SettingsDivider()
-                            SettingsToggleRow(
-                                stringResource(R.string.selection_haptics),
-                                hapticsEnabled,
-                                onHaptics,
-                                subtitle = stringResource(R.string.selection_haptics_detail),
-                            )
-                        }
-                    }
-                    Text(
-                        stringResource(R.string.shortcuts_hint),
-                        style = SettingsType.detail,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (profiles.isNotEmpty()) SettingsDivider()
+                    SettingsRow(
+                        stringResource(R.string.new_profile),
+                        stringResource(R.string.new_profile_detail),
+                        SettingsGlyph.COMMAND,
+                        onNew,
                     )
                 }
+                SettingsSection(stringResource(R.string.shortcut_menu)) {
+                    SettingsChoiceRow(
+                        stringResource(R.string.menu_layout),
+                        NeovimShortcutLayout.entries,
+                        layout,
+                        {
+                            stringResource(
+                                if (it == NeovimShortcutLayout.GRID) R.string.layout_grid
+                                else R.string.layout_circular,
+                            )
+                        },
+                        onLayout,
+                    )
+                    if (layout == NeovimShortcutLayout.CIRCULAR) {
+                        SettingsDivider()
+                        SettingsChoiceRow(
+                            stringResource(R.string.opening_effect),
+                            NeovimShortcutEffect.entries,
+                            effect,
+                            {
+                                stringResource(
+                                    when (it) {
+                                        NeovimShortcutEffect.FAN_OUT -> R.string.effect_fan_out
+                                        NeovimShortcutEffect.SPIN -> R.string.effect_spin
+                                        NeovimShortcutEffect.EXPAND -> R.string.effect_expand
+                                        NeovimShortcutEffect.NONE -> R.string.effect_none
+                                    },
+                                )
+                            },
+                            onEffect,
+                            subtitle =
+                                stringResource(
+                                    when (effect) {
+                                        NeovimShortcutEffect.FAN_OUT ->
+                                            R.string.effect_fan_out_detail
+                                        NeovimShortcutEffect.SPIN -> R.string.effect_spin_detail
+                                        NeovimShortcutEffect.EXPAND -> R.string.effect_expand_detail
+                                        NeovimShortcutEffect.NONE -> R.string.effect_none_detail
+                                    },
+                                ),
+                        )
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            stringResource(R.string.selection_haptics),
+                            hapticsEnabled,
+                            onHaptics,
+                            subtitle = stringResource(R.string.selection_haptics_detail),
+                        )
+                    }
+                }
+                Text(
+                    stringResource(R.string.shortcuts_hint),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -231,144 +220,133 @@ internal fun ShortcutProfileSheet(
     val defaultTitle = stringResource(R.string.new_profile)
     val title = profile?.name ?: defaultTitle
     val frost = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 0.dp,
-        dragHandle = null,
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-    ) {
-        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+    DrawerSheet(onClose, dismissOnBack = true) { dismiss ->
+        Column(
+            frost
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+        ) {
+            DrawerHandle(dismiss)
             Column(
-                frost
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+                Modifier.fillMaxWidth()
+                    .heightIn(max = 680.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                DrawerHandle()
-                Column(
-                    Modifier.fillMaxWidth()
-                        .heightIn(max = 680.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp)
-                        .padding(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    SettingsHeader(
-                        title,
-                        stringResource(R.string.close_title_format, title),
-                        onClose,
-                    )
-                    SettingsTextField(
-                        stringResource(R.string.name),
-                        name,
+                SettingsHeader(
+                    title,
+                    stringResource(R.string.close_title_format, title),
+                    dismiss,
+                )
+                SettingsTextField(
+                    stringResource(R.string.name),
+                    name,
+                    {
+                        name = it
+                        error = null
+                    },
+                )
+                SettingsTextField(
+                    stringResource(R.string.programs),
+                    match,
+                    {
+                        match = it
+                        error = null
+                    },
+                    mono = true,
+                    supporting = stringResource(R.string.programs_hint),
+                )
+                SettingsTextField(
+                    stringResource(R.string.keys_sent_first),
+                    prefix,
+                    {
+                        prefix = it
+                        error = null
+                    },
+                    mono = true,
+                    supporting = stringResource(R.string.keys_sent_first_hint),
+                )
+                SettingsSection(stringResource(R.string.enter_section)) {
+                    SettingsChoiceRow(
+                        stringResource(R.string.press_enter_after),
+                        ShortcutEnter.entries,
+                        enter,
                         {
-                            name = it
-                            error = null
-                        },
-                    )
-                    SettingsTextField(
-                        stringResource(R.string.programs),
-                        match,
-                        {
-                            match = it
-                            error = null
-                        },
-                        mono = true,
-                        supporting = stringResource(R.string.programs_hint),
-                    )
-                    SettingsTextField(
-                        stringResource(R.string.keys_sent_first),
-                        prefix,
-                        {
-                            prefix = it
-                            error = null
-                        },
-                        mono = true,
-                        supporting = stringResource(R.string.keys_sent_first_hint),
-                    )
-                    SettingsSection(stringResource(R.string.enter_section)) {
-                        SettingsChoiceRow(
-                            stringResource(R.string.press_enter_after),
-                            ShortcutEnter.entries,
-                            enter,
-                            {
-                                stringResource(
-                                    when (it) {
-                                        ShortcutEnter.NEVER -> R.string.enter_never
-                                        ShortcutEnter.TEXT -> R.string.enter_text
-                                        ShortcutEnter.EX_COMMANDS -> R.string.enter_ex_commands
-                                    },
-                                )
-                            },
-                            { enter = it },
-                            subtitle =
-                                stringResource(
-                                    when (enter) {
-                                        ShortcutEnter.NEVER -> R.string.enter_never_detail
-                                        ShortcutEnter.TEXT -> R.string.enter_text_detail
-                                        ShortcutEnter.EX_COMMANDS ->
-                                            R.string.enter_ex_commands_detail
-                                    },
-                                ),
-                        )
-                    }
-                    SettingsTextField(
-                        stringResource(R.string.shortcuts),
-                        draft,
-                        {
-                            draft = it
-                            error = null
-                        },
-                        mono = true,
-                        singleLine = false,
-                        minLines = 6,
-                        maxLines = 12,
-                        isError = error != null,
-                    )
-                    error?.let {
-                        Text(
-                            it,
-                            style = SettingsType.detail,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    Text(
-                        stringResource(R.string.shortcut_syntax_hint),
-                        style = SettingsType.detail,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (onDelete != null)
-                            TextButton(onClick = { deleting = true }) {
-                                Text(
-                                    stringResource(R.string.delete),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                        if (defaults != null)
-                            TextButton(
-                                onClick = {
-                                    draft = NeovimShortcuts.editorText(defaults)
-                                    error = null
+                            stringResource(
+                                when (it) {
+                                    ShortcutEnter.NEVER -> R.string.enter_never
+                                    ShortcutEnter.TEXT -> R.string.enter_text
+                                    ShortcutEnter.EX_COMMANDS -> R.string.enter_ex_commands
                                 },
-                            ) {
-                                Text(stringResource(R.string.reset_shortcuts))
-                            }
-                        Spacer(Modifier.weight(1f))
-                        Button(
+                            )
+                        },
+                        { enter = it },
+                        subtitle =
+                            stringResource(
+                                when (enter) {
+                                    ShortcutEnter.NEVER -> R.string.enter_never_detail
+                                    ShortcutEnter.TEXT -> R.string.enter_text_detail
+                                    ShortcutEnter.EX_COMMANDS -> R.string.enter_ex_commands_detail
+                                },
+                            ),
+                    )
+                }
+                SettingsTextField(
+                    stringResource(R.string.shortcuts),
+                    draft,
+                    {
+                        draft = it
+                        error = null
+                    },
+                    mono = true,
+                    singleLine = false,
+                    minLines = 6,
+                    maxLines = 12,
+                    isError = error != null,
+                )
+                error?.let {
+                    Text(
+                        it,
+                        style = SettingsType.detail,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Text(
+                    stringResource(R.string.shortcut_syntax_hint),
+                    style = SettingsType.detail,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (onDelete != null)
+                        TextButton(onClick = { deleting = true }) {
+                            Text(
+                                stringResource(R.string.delete),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    if (defaults != null)
+                        TextButton(
                             onClick = {
-                                error = onSave(name, match, prefix, enter, draft)
-                                if (error == null) onClose()
+                                draft = NeovimShortcuts.editorText(defaults)
+                                error = null
                             },
                         ) {
-                            Text(stringResource(R.string.save))
+                            Text(stringResource(R.string.reset_shortcuts))
                         }
+                    Spacer(Modifier.weight(1f))
+                    Button(
+                        onClick = {
+                            error = onSave(name, match, prefix, enter, draft)
+                            if (error == null) onClose()
+                        },
+                    ) {
+                        Text(stringResource(R.string.save))
                     }
                 }
             }

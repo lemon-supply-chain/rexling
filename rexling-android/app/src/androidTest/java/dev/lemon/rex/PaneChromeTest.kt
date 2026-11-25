@@ -364,7 +364,7 @@ class PaneChromeTest {
     }
 
     @Test
-    fun slimmerSideTabsKeepTheIconStackAndFooterActionsVisible() {
+    fun flushSideTabsKeepTheIconStackAndFooterActionsVisible() {
         val windows =
             listOf(
                 WindowItem(
@@ -379,6 +379,7 @@ class PaneChromeTest {
                 ProgramIdentity.resolve(listOf("fish")),
             )
         val actions = mutableListOf<String>()
+        val unread = mutableIntStateOf(0)
         // Hoisted so the fixture can switch the action bar between the side rail and the bottom
         // bar.
         val sideRail = mutableStateOf(true)
@@ -399,9 +400,10 @@ class PaneChromeTest {
                         { 0 },
                         TabBarPosition.LEFT,
                         style,
-                        tabAttention = { 1 },
+                        paneWorking = { true },
+                        tabAttention = { unread.intValue },
                         onStyle = { style = it },
-                        island = true,
+                        animateWorking = false,
                     ) {
                         TerminalActions(
                             true,
@@ -418,6 +420,10 @@ class PaneChromeTest {
                 }
             }
         }
+        // Only one active-indicator treatment belongs on a tab; when unread badge isn't set,
+        // working state must not draw an extra working dot.
+        ui.onNodeWithTag("Tab working dot tab", useUnmergedTree = true).assertDoesNotExist()
+        ui.runOnIdle { unread.intValue = 1 }
         fun check(
             width: androidx.compose.ui.unit.Dp,
             mode: String,
@@ -425,14 +431,35 @@ class PaneChromeTest {
             sideRail: Boolean = true,
             capture: Boolean = true,
         ) {
-            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
-                .assertWidthIsEqualTo(width)
-            ui.onNodeWithContentDescription(
-                    appString(R.string.a11y_tab, "PDF preview", "Codex"),
-                    substring = true,
-                )
-                .assertIsDisplayed()
-                .assertIsSelected()
+            val rail =
+                ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+                    .assertWidthIsEqualTo(width)
+            val fixture = ui.onNodeWithTag("Side tabs fixture")
+            assertEquals(
+                fixture.fetchSemanticsNode().boundsInRoot.left,
+                rail.fetchSemanticsNode().boundsInRoot.left,
+                1f,
+            )
+            val tab =
+                ui.onNodeWithContentDescription(
+                        appString(R.string.a11y_tab_working, "PDF preview", "Codex"),
+                        substring = true,
+                    )
+                    .assertIsDisplayed()
+                    .assertIsSelected()
+            val pixels = tab.captureToImage().toPixelMap()
+            val markerX = (pixels.height * 6.5f / 48f).toInt()
+            val rowCenter = pixels.height / 2
+            assertNotEquals(
+                "The selected tab should have an inset marker",
+                pixels[1, rowCenter],
+                pixels[markerX, rowCenter],
+            )
+            assertEquals(
+                "The outside edge should be clear of the marker",
+                pixels[1, pixels.height - 3],
+                pixels[1, rowCenter],
+            )
             ui.onNodeWithTag("Tab unread dot tab", useUnmergedTree = true).assertIsDisplayed()
             // The side rail leads with activity; the bottom bar leads with the keyboard.
             val descriptions =
@@ -460,7 +487,7 @@ class PaneChromeTest {
                 assertTrue(bounds[0].left < bounds[1].left && bounds[1].left < bounds[2].left)
             }
             if (!capture) return
-            val bitmap = ui.onNodeWithTag("Side tabs fixture").captureToImage().asAndroidBitmap()
+            val bitmap = fixture.captureToImage().asAndroidBitmap()
             File(
                     InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
                     "side-tabs-$mode.png",
@@ -468,12 +495,12 @@ class PaneChromeTest {
                 .outputStream()
                 .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        check(144.dp, "titles", vertical = false)
+        check(152.dp, "titles", vertical = false)
         ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).performClick()
-        check(48.dp, "icons", vertical = true)
+        check(52.dp, "icons", vertical = true)
         ui.runOnIdle { sideRail.value = false }
         // Ordering only: the two screenshots above already cover the visuals.
-        check(48.dp, "icons-bottom", vertical = true, sideRail = false, capture = false)
+        check(52.dp, "icons-bottom", vertical = true, sideRail = false, capture = false)
         ui.runOnIdle {
             assertEquals(
                 List(2) { listOf("activity", "switcher", "keyboard") }.flatten() +

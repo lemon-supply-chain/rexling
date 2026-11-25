@@ -80,7 +80,7 @@ internal fun KeyboardToolbarSheet(
         stringResource(R.string.close_keyboard_toolbar),
         onClose,
         hazeState,
-        swipeToDismiss = false,
+        fixed = true,
     ) {
         Box(
             Modifier.fillMaxWidth()

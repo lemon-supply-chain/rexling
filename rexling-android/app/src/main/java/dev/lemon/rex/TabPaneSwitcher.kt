@@ -116,15 +116,7 @@ internal fun TabPaneSwitcher(
     }
     val drawerSurface = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
     if (dock == null)
-        ModalBottomSheet(
-            onDismissRequest = onClose,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 0.dp,
-            dragHandle = null,
-            contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Top) },
-        ) {
+        DrawerSheet(onClose) { dismiss ->
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 Column(
                     drawerSurface
@@ -134,7 +126,7 @@ internal fun TabPaneSwitcher(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
                         ),
                 ) {
-                    DrawerHandle()
+                    DrawerHandle(dismiss)
                     Column(Modifier.fillMaxWidth().weight(1f).padding(bottom = 4.dp)) {
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 16.dp),

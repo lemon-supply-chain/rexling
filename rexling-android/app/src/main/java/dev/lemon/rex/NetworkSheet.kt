@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -75,11 +76,13 @@ internal fun NetworkSheet(
             }
         }
     }
+    val surface = if (hazeState == null) MaterialTheme.colorScheme.surface else Color.Transparent
     SettingsDrawer(
         stringResource(R.string.network),
         stringResource(R.string.close_network_settings),
         onClose,
         hazeState,
+        surfaceColor = surface,
     ) {
         Column(
             Modifier.fillMaxWidth()

@@ -53,12 +53,12 @@ class CompactTopBarTest {
                         enabled = true,
                         programs = listOf(ProgramIdentity(ProgramKind.NEOVIM, "Neovim")),
                         paneIndex = 0,
-                        directory = "~/dev/app/rexling",
                         onSessions = {},
                         onSelect = {},
                         onLast = {},
                         title = "nvim",
                         onCollapse = { collapseCalls++ },
+                        directory = "~/dev/app/rexling",
                         menu = {},
                     )
                 }

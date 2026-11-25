@@ -190,6 +190,7 @@ class TerminalView(context: Context) : View(context) {
             if (field != value) {
                 field = value
                 reportCursorViewport()
+                invalidate()
             }
         }
 
@@ -341,6 +342,7 @@ class TerminalView(context: Context) : View(context) {
         val cells: List<TerminalCell>,
         val recording: TerminalRowRecording,
         val links: List<TerminalLink>,
+        val paddingCursorColumn: Int?,
     ) {
         val contentHash by lazy(LazyThreadSafetyMode.NONE) { rowContentHash(cells) }
 
@@ -525,6 +527,26 @@ class TerminalView(context: Context) : View(context) {
         // Content that only moved keeps its recording: reuse rows by content
         // when the whole screen shifted, so only edge and uncovered rows need recording.
         reuseShiftedRows(frame, visibleRows)
+        val anchorRow = frame.cursorAnchorY ?: -1
+        val paddingCursor =
+            if (
+                allowHiddenCursorInput &&
+                    frame.cursorX == null &&
+                    frame.cursorY == null &&
+                    frame.scroll.below == 0L &&
+                    anchorRow in 0 until visibleRows
+            ) {
+                frame.lines[anchorRow].firstOrNull { cell ->
+                    cell.x == frame.cursorAnchorX &&
+                        cell.x < visibleColumns &&
+                        cell.width > 0 &&
+                        cell.attributes and 8 != 0 &&
+                        (cell.x == 0 ||
+                            cell.x + cell.width >= visibleColumns ||
+                            anchorRow == 0 ||
+                            anchorRow == visibleRows - 1)
+                }
+            } else null
         val slide = slideFor(frame)
         val saveClip = canvas.save()
         if (isEditor) canvas.clipRect(0f, 0f, width.toFloat(), height.toFloat())
@@ -551,6 +573,7 @@ class TerminalView(context: Context) : View(context) {
                 }
             for (y in 0 until visibleRows) {
                 val cells = frame.lines[y]
+                val cursor = paddingCursor.takeIf { y == anchorRow }
                 var row = recorded[y]
                 val links = rowLinks[y]
                 val origin = if (isEditor && y == 0) 0f else insetTop + y * cellHeight
@@ -561,12 +584,13 @@ class TerminalView(context: Context) : View(context) {
                     row == null ||
                         !row.recording.valid ||
                         !sameCells(row.cells, cells) ||
-                        row.links != links
+                        row.links != links ||
+                        row.paddingCursorColumn != cursor?.x
                 ) {
                     val recording =
                         row?.recording ?: TerminalRowRecording.create(canvas.isHardwareAccelerated)
                     recording.record(width, bottom.toInt().coerceAtLeast(1)) { target ->
-                        drawRow(target, cells, visibleColumns, top, bottom)
+                        drawRow(target, cells, visibleColumns, top, bottom, paddingCursor = cursor)
                         target.save()
                         target.clipRect(
                             insetHorizontal,
@@ -586,7 +610,7 @@ class TerminalView(context: Context) : View(context) {
                         )
                         target.restore()
                     }
-                    row = RecordedRow(cells, recording, links)
+                    row = RecordedRow(cells, recording, links, cursor?.x)
                     recorded[y] = row
                     recordedRowCount++
                 }
@@ -616,7 +640,15 @@ class TerminalView(context: Context) : View(context) {
                         if (isEditor && y == visibleRows - 1) height - origin else top + cellHeight
                     val save = canvas.save()
                     canvas.translate(0f, origin)
-                    drawRow(canvas, frame.lines[y], visibleColumns, top, bottom, pass)
+                    drawRow(
+                        canvas,
+                        frame.lines[y],
+                        visibleColumns,
+                        top,
+                        bottom,
+                        pass,
+                        paddingCursor.takeIf { y == anchorRow },
+                    )
                     if (pass == 2) {
                         canvas.save()
                         canvas.clipRect(
@@ -862,29 +894,42 @@ class TerminalView(context: Context) : View(context) {
         top: Float,
         bottom: Float,
         pass: Int = 0,
+        paddingCursor: TerminalCell? = null,
     ) {
         var start = 0
         var end = 0
         var color = 0
         fun flush() {
-            if (pass == 2 || end <= start || start >= columns || color == palette.background) return
-            backgroundPaint.color = color
-            if (extendPadding) {
-                canvas.drawRect(
-                    if (start == 0) 0f else insetHorizontal + start * cellWidth,
-                    0f,
-                    if (end >= columns) width.toFloat() else insetHorizontal + end * cellWidth,
-                    bottom,
-                    backgroundPaint,
-                )
-            } else {
+            if (pass == 2 || end <= start || start >= columns) return
+            val left = if (extendPadding && start == 0) 0f else insetHorizontal + start * cellWidth
+            val right =
+                if (extendPadding && end >= columns) width.toFloat()
+                else insetHorizontal + minOf(end, columns) * cellWidth
+            if (
+                paddingCursor != null &&
+                    start == paddingCursor.x &&
+                    end == start + paddingCursor.width
+            ) {
+                // An agent can draw its caret with reverse video while keeping the hardware
+                // cursor hidden. Extend the original cell background into the padding.
+                if (extendPadding) {
+                    val base = palette.background(paddingCursor)
+                    if (base != palette.background) {
+                        backgroundPaint.color = base
+                        canvas.drawRect(left, 0f, right, bottom, backgroundPaint)
+                    }
+                }
+                backgroundPaint.color = color
                 canvas.drawRect(
                     insetHorizontal + start * cellWidth,
-                    0f,
-                    insetHorizontal + minOf(end, columns) * cellWidth,
-                    bottom,
+                    top,
+                    minOf(insetHorizontal + end * cellWidth, width - insetHorizontal),
+                    minOf(top + cellHeight, bottom),
                     backgroundPaint,
                 )
+            } else if (color != palette.background) {
+                backgroundPaint.color = color
+                canvas.drawRect(left, 0f, right, bottom, backgroundPaint)
             }
         }
         for (cell in cells) {

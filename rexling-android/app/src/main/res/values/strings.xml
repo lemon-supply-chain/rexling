@@ -763,4 +763,20 @@
     <string name="a11y_control_shortcut">Control shortcut %1$s</string>
     <string name="a11y_shortcut_entry">%1$s shortcut %2$s</string>
     <string name="neovim_name_without_equals">Give this shortcut a name without \' = \' to preserve its keys.</string>
+    <string name="compact_header_mode">Compact top bar</string>
+    <string name="compact_header_never">Never</string>
+    <string name="compact_header_always">Always</string>
+    <string name="compact_header_with_keyboard">With keyboard</string>
+    <string name="immersive_mode">Immersive mode</string>
+    <string name="immersive_mode_detail">Hide the Android status bar. Swipe down from the top to show it briefly.</string>
+    <string name="tab_width_narrow_range">Under 440 dp</string>
+    <string name="tab_width_medium_range">440–759 dp</string>
+    <string name="tab_width_wide_range">760 dp and up</string>
+    <string name="tab_width_current_window_format">%1$s · Current window (%2$d dp)</string>
+    <string name="tab_position">Tab position</string>
+    <string name="sidebar_style">Sidebar style</string>
+    <string name="a11y_open_session_drawer">Open session drawer</string>
+    <string name="a11y_drawer_handle">Drawer handle</string>
+    <string name="a11y_state_connected">Connected</string>
+    <string name="a11y_state_disconnected">Disconnected</string>
 </resources>

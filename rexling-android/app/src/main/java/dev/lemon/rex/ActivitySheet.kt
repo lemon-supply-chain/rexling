@@ -26,8 +26,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,22 +59,14 @@ internal fun ActivitySheet(
     val scheme = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
     val drawerSurface = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 0.dp,
-        dragHandle = null,
-        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Top) },
-    ) {
+    DrawerSheet(onClose) { dismiss ->
         val activityTitle = stringResource(R.string.activity)
         Column(
             drawerSurface
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
         ) {
-            DrawerHandle()
+            DrawerHandle(dismiss)
             Column(
                 Modifier.fillMaxWidth().height(panelHeight).padding(bottom = 4.dp).semantics {
                     paneTitle = activityTitle
@@ -116,7 +106,7 @@ internal fun ActivitySheet(
                     ChromeButton(
                         ChromeIcon.CLOSE,
                         stringResource(R.string.close_activity),
-                        onClick = onClose,
+                        onClick = dismiss,
                     )
                 }
                 Row(
@@ -421,14 +411,12 @@ internal fun ActivityStateBar(
         }
     Canvas(modifier) {
         val radius = CornerRadius(size.width / 2)
-        val brightness =
-            if (working || needsYou) (.725 - .275 * cos(phase.value * 2 * PI)).toFloat() else 1f
-        drawWorkingBar(
+        val brightness = if (working || needsYou) workingBarBrightness(phase.value) else 1f
+        drawRoundRect(
             color.copy(alpha = color.alpha * brightness),
             Offset.Zero,
             size, // alpha-ok status pulse
-            vertical = true,
-            radius = radius,
+            radius,
         )
     }
 }

@@ -308,6 +308,15 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putString("keep_screen_awake", value.name) }
     }
 
+    internal var immersiveStatusBar by
+        mutableStateOf(preferences.getBoolean("immersive_status_bar", false))
+        private set
+
+    internal fun changeImmersiveStatusBar(value: Boolean) {
+        immersiveStatusBar = value
+        preferences.edit { putBoolean("immersive_status_bar", value) }
+    }
+
     internal var toolbarKeys by
         mutableStateOf(ToolbarLayout.decode(preferences.getString("keyboard_toolbar", null)))
         private set
@@ -408,6 +417,22 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     internal fun changeToolbarWithKeyboardOnly(value: Boolean) {
         toolbarWithKeyboardOnly = value
         preferences.edit { putBoolean("keyboard_toolbar_auto_hide", value) }
+    }
+
+    internal var compactHeaderMode by
+        mutableStateOf(
+            preferences.getString("compact_header_mode", null)?.let { saved ->
+                CompactHeaderMode.entries.firstOrNull { it.name == saved }
+            }
+                ?: if (preferences.getBoolean("compact_header_with_keyboard", false))
+                    CompactHeaderMode.WITH_KEYBOARD
+                else CompactHeaderMode.NEVER,
+        )
+        private set
+
+    internal fun changeCompactHeaderMode(value: CompactHeaderMode) {
+        compactHeaderMode = value
+        preferences.edit { putString("compact_header_mode", value.name) }
     }
 
     internal var arrowJoystickEnabled by

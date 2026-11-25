@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -195,6 +196,139 @@ class SettingsScreensTest {
         ui.waitUntil(5_000) { closed > 0 }
         ui.waitForIdle()
         assertEquals(1, closed)
+    }
+
+    @Test
+    fun editingOneTabProfileDoesNotChangeTheCurrentProfile() {
+        val layouts =
+            mutableStateMapOf(
+                TabWidthClass.MEDIUM to TabBarLayout(TabBarPosition.LEFT),
+                TabWidthClass.WIDE to TabBarLayout(),
+            )
+        ui.setContent {
+            MaterialTheme {
+                PreferencesSheet(
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    tabLayouts = layouts,
+                    tabWidth = TabWidthClass.MEDIUM to 555,
+                    onTabLayout = { width, layout -> layouts[width] = layout },
+                )
+            }
+        }
+        ui.onNodeWithText(appString(R.string.tab_width_medium)).performScrollTo().assertIsSelected()
+        ui.onNodeWithText(appString(R.string.tab_position_left))
+            .performScrollTo()
+            .assertIsSelected()
+        ui.onNodeWithText(appString(R.string.tab_width_wide))
+            .performScrollTo()
+            .performClick()
+            .assertIsSelected()
+        ui.onNodeWithText(appString(R.string.tab_position_bottom)).assertIsSelected()
+        ui.onNodeWithText(appString(R.string.sidebar_style)).assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.tab_position_right)).performClick()
+        ui.onNodeWithText(appString(R.string.tab_rail_style_titles))
+            .performScrollTo()
+            .performClick()
+            .assertIsSelected()
+        ui.onNodeWithText(appString(R.string.tab_width_medium)).performScrollTo().performClick()
+        ui.onNodeWithText(appString(R.string.tab_position_left)).assertIsSelected()
+        ui.runOnIdle {
+            assertEquals(TabBarLayout(TabBarPosition.LEFT), layouts[TabWidthClass.MEDIUM])
+            assertEquals(
+                TabBarLayout(TabBarPosition.RIGHT, TabRailStyle.TITLES),
+                layouts[TabWidthClass.WIDE],
+            )
+        }
+    }
+
+    @Test
+    fun compactTopBarOptionsSwitchBetweenAllThreeModes() {
+        var mode by mutableStateOf(CompactHeaderMode.NEVER)
+        ui.setContent {
+            MaterialTheme {
+                PreferencesSheet(
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    compactHeaderMode = mode,
+                    onCompactHeaderMode = { mode = it },
+                )
+            }
+        }
+        ui.onNodeWithText(appString(R.string.compact_header_never))
+            .performScrollTo()
+            .assertIsSelected()
+        listOf(
+                CompactHeaderMode.ALWAYS,
+                CompactHeaderMode.WITH_KEYBOARD,
+                CompactHeaderMode.NEVER,
+            )
+            .forEach { next ->
+                ui.onNodeWithText(appString(next.labelRes))
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsSelected()
+                ui.runOnIdle { assertEquals(next, mode) }
+            }
+    }
+
+    @Test
+    fun scrollingTheDrawerContentCannotDismissIt() {
+        var open by mutableStateOf(true)
+        ui.setContent {
+            MaterialTheme { if (open) PreferencesSheet({}, {}, {}, {}, onClose = { open = false }) }
+        }
+        val content = ui.onNode(hasScrollAction(), useUnmergedTree = true)
+        ui.onNodeWithText(appString(R.string.about_rexling)).performScrollTo()
+        repeat(4) { content.performTouchInput { swipeDown() } }
+        ui.onNodeWithText(appString(R.string.appearance)).assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.close_preferences)).assertIsDisplayed()
+        val heading = ui.onNodeWithText(appString(R.string.preferences))
+        val handle = ui.onNodeWithContentDescription(appString(R.string.a11y_drawer_handle))
+        val restingTop = heading.fetchSemanticsNode().boundsInRoot.top
+        val shortPull = with(ui.density) { 28.dp.toPx() }
+        handle.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, shortPull))
+        }
+        val movedTop = heading.fetchSemanticsNode().boundsInRoot.top
+        assertTrue(
+            "The entire drawer should move before the finger is released",
+            movedTop > restingTop + shortPull / 2,
+        )
+        handle.performTouchInput { up() }
+        ui.waitForIdle()
+        assertEquals(
+            "A short pull should return the drawer to rest",
+            restingTop,
+            heading.fetchSemanticsNode().boundsInRoot.top,
+            1f,
+        )
+
+        val pull = with(ui.density) { 88.dp.toPx() }
+        handle.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, pull))
+            cancel()
+        }
+        ui.waitForIdle()
+        assertEquals(
+            "Cancelling a pull should restore the drawer",
+            restingTop,
+            heading.fetchSemanticsNode().boundsInRoot.top,
+            1f,
+        )
+        handle.performTouchInput { swipe(center, center + Offset(0f, pull)) }
+        ui.waitUntil(5000) { !open }
+        ui.runOnIdle { open = true }
+        ui.onNodeWithContentDescription(appString(R.string.close_preferences)).performClick()
+        ui.waitUntil(5000) { !open }
     }
 
     private fun capture(name: String, dark: Boolean) {

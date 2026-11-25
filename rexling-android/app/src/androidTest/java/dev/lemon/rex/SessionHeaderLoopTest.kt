@@ -49,7 +49,6 @@ class SessionHeaderLoopTest {
                             ProgramIdentity(ProgramKind.NEOVIM, "Neovim"),
                         ),
                         0,
-                        "~/Dev/rexlink",
                         {},
                         {
                             selections.add(it)
@@ -58,6 +57,7 @@ class SessionHeaderLoopTest {
                         },
                         {},
                         title = "Investigate Rex protocol",
+                        directory = "~/Dev/rexlink",
                         menu = {},
                     )
                 }
@@ -112,13 +112,13 @@ class SessionHeaderLoopTest {
                     true,
                     emptyList(),
                     0,
-                    "",
                     {},
                     {
                         selections.add(it)
                         current.value = it
                     },
                     {},
+                    directory = "",
                     menu = {},
                 )
             }
@@ -174,7 +174,10 @@ class SessionHeaderLoopTest {
                 useUnmergedTree = true,
             )
         val before = graphic.fetchSemanticsNode().boundsInRoot
-        val title = ui.onNodeWithText("Investigate Rex protocol").fetchSemanticsNode().boundsInRoot
+        val title =
+            ui.onNodeWithText("Investigate Rex protocol", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
         val anchor = icon.fetchSemanticsNode().boundsInRoot
         ui.mainClock.autoAdvance = false
         icon.performTouchInput {
@@ -187,7 +190,9 @@ class SessionHeaderLoopTest {
         assertEquals(anchor, icon.fetchSemanticsNode().boundsInRoot)
         assertEquals(
             title,
-            ui.onNodeWithText("Investigate Rex protocol").fetchSemanticsNode().boundsInRoot,
+            ui.onNodeWithText("Investigate Rex protocol", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot,
         )
         icon.performTouchInput { cancel() }
         ui.mainClock.advanceTimeBy(1000)

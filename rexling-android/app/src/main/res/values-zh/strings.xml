@@ -759,4 +759,20 @@
     <string name="a11y_control_shortcut">Ctrl 快捷键 %1$s</string>
     <string name="a11y_shortcut_entry">%1$s 快捷键 %2$s</string>
     <string name="neovim_name_without_equals">名称中不要包含 \' = \'，否则按键序列会被改写。</string>
+    <string name="compact_header_mode">紧凑顶栏</string>
+    <string name="compact_header_never">从不</string>
+    <string name="compact_header_always">始终</string>
+    <string name="compact_header_with_keyboard">键盘弹出时</string>
+    <string name="immersive_mode">沉浸模式</string>
+    <string name="immersive_mode_detail">隐藏 Android 状态栏。从顶部下滑可暂时显示。</string>
+    <string name="tab_width_narrow_range">440 dp 以下</string>
+    <string name="tab_width_medium_range">440–759 dp</string>
+    <string name="tab_width_wide_range">760 dp 及以上</string>
+    <string name="tab_width_current_window_format">%1$s · 当前窗口（%2$d dp）</string>
+    <string name="tab_position">标签栏位置</string>
+    <string name="sidebar_style">侧边栏样式</string>
+    <string name="a11y_open_session_drawer">打开会话抽屉</string>
+    <string name="a11y_drawer_handle">抽屉手柄</string>
+    <string name="a11y_state_connected">已连接</string>
+    <string name="a11y_state_disconnected">未连接</string>
 </resources>

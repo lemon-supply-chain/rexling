@@ -325,46 +325,44 @@ class ActivitySheetTest {
     }
 
     @Test
-    fun workingBarHighlightRendersAlongEitherAxis() {
+    fun tabMarkersFillFromTheStartAndBottom() {
         ui.setContent {
             RexTheme(true, ThemeCatalog.defaults[0]) {
                 val color = MaterialTheme.colorScheme.primary
                 androidx.compose.foundation.layout.Row {
                     androidx.compose.foundation.Canvas(
-                        androidx.compose.ui.Modifier.testTag("tab-flash").size(39.dp, 3.dp),
+                        androidx.compose.ui.Modifier.testTag("horizontal marker").size(39.dp, 3.dp),
                     ) {
-                        drawWorkingBar(
+                        drawTabMarker(
                             color,
                             androidx.compose.ui.geometry.Offset.Zero,
                             size,
-                            phase = .3f,
+                            percent = 35,
+                            brightness = 1f,
                         )
                     }
                     androidx.compose.foundation.Canvas(
-                        androidx.compose.ui.Modifier.testTag("activity-flash").size(3.dp, 39.dp),
+                        androidx.compose.ui.Modifier.testTag("vertical marker").size(3.dp, 39.dp),
                     ) {
-                        drawWorkingBar(
+                        drawTabMarker(
                             color,
                             androidx.compose.ui.geometry.Offset.Zero,
                             size,
-                            phase = .3f,
+                            percent = 35,
+                            brightness = 1f,
                             vertical = true,
                         )
                     }
                 }
             }
         }
-        val tab = ui.onNodeWithTag("tab-flash").captureToImage().asAndroidBitmap()
-        val activity = ui.onNodeWithTag("activity-flash").captureToImage().asAndroidBitmap()
-        // Horizontal/vertical GPU shader interpolation can round by one channel unit.
-        for (position in 4 until tab.width - 4) {
-            val a = tab.getPixel(position, tab.height / 2)
-            val b = activity.getPixel(activity.width / 2, position)
-            for (shift in listOf(0, 8, 16, 24)) assertTrue(
-                "Same highlight at position $position, channel $shift",
-                kotlin.math.abs(((a ushr shift) and 255) - ((b ushr shift) and 255)) <= 2,
-            )
-        }
+        val horizontal = ui.onNodeWithTag("horizontal marker").captureToImage().asAndroidBitmap()
+        val vertical = ui.onNodeWithTag("vertical marker").captureToImage().asAndroidBitmap()
+        val filled = horizontal.getPixel(horizontal.width / 5, horizontal.height / 2)
+        val track = horizontal.getPixel(horizontal.width * 3 / 5, horizontal.height / 2)
+        assertNotEquals(filled, track)
+        assertEquals(filled, vertical.getPixel(vertical.width / 2, vertical.height * 4 / 5))
+        assertEquals(track, vertical.getPixel(vertical.width / 2, vertical.height * 2 / 5))
     }
 
     @Test

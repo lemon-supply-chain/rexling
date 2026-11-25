@@ -119,7 +119,7 @@ internal fun NeovimShortcutForm(
             onCancel()
         },
         hazeState,
-        swipeToDismiss = false,
+        fixed = true,
     ) {
         Column(
             Modifier.fillMaxWidth()
