@@ -3401,7 +3401,7 @@ fn preview_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> Previe
     })
 }
 // Executable identifiers and a display directory cross JNI; never command arguments or user IDs.
-fn program_candidates(process: &Value, status: &Value) -> Value {
+fn program_candidates(process: &Value, status: &Value, terminal: &Value) -> Value {
     let foreground = &process["foreground"];
     let mut names: Vec<String> = Vec::new();
     let mut add = |value: &Value| {
@@ -3422,6 +3422,24 @@ fn program_candidates(process: &Value, status: &Value) -> Value {
                 add(&record["app"]);
             }
         }
+    } else if foreground.is_null()
+        && terminal["owner"].is_null()
+        && terminal["title"]
+            .as_str()
+            .is_some_and(|title| title.starts_with("π - "))
+        && status["records"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|record| {
+                record["owner"].is_null()
+                    && record["id"].as_str().is_none_or(str::is_empty)
+                    && record["app"] == "pi"
+            })
+    {
+        // Some Rex hosts report only the login wrapper. Pi's own title corroborates
+        // its ownerless status without taking precedence over an identified process.
+        add(&json!("pi"));
     }
     let source = if foreground.is_object() {
         foreground
@@ -3576,7 +3594,7 @@ fn program_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> Progra
                     }
                     titles.insert(id.clone(),json!(program_title(&process,&status,&terminal)));
                     directories.insert(id.clone(), json!(program_directory(&process)));
-                    programs.insert(id, program_candidates(&process, &status));
+                    programs.insert(id, program_candidates(&process, &status, &terminal));
                 }
             }
             let _ = control.close().await;
@@ -3759,7 +3777,7 @@ fn pane_catalog_task(endpoint: Endpoint) -> SummaryTask {
                 .await;
                 match result {
                     Ok(Ok((process, title))) => {
-                        item["programs"] = program_candidates(&process, &Value::Null);
+                        item["programs"] = program_candidates(&process, &Value::Null, &Value::Null);
                         item["directory"] = json!(program_directory(&process));
                         item["title"] = json!(program_title(&process, &Value::Null, &title));
                     }
@@ -4240,17 +4258,44 @@ mod tests {
             {"effective_app":"claude-code","owner":{"pid":12,"name":"node"}}
         ]});
         assert_eq!(
-            program_candidates(&process, &status),
+            program_candidates(&process, &status, &Value::Null),
             json!(["claude-code", "/tools/agent.js", "node"])
         );
         assert_eq!(
             program_candidates(
                 &json!({"foreground":null,"child":{"argv0":"-fish","name":"fish"}}),
-                &status
+                &status,
+                &Value::Null
             ),
             json!(["-fish", "fish"])
         );
-        assert_eq!(program_candidates(&json!({}), &status), json!([]));
+        assert_eq!(
+            program_candidates(&json!({}), &status, &Value::Null),
+            json!([])
+        );
+    }
+    #[test]
+    fn pi_status_and_title_identify_the_pane_when_foreground_metadata_is_missing() {
+        let process = json!({"child":{"name":"login","path":"/usr/bin/login"}});
+        let title = json!({"title":"π - rexling"});
+        let status = json!({"records":[{"app":"pi","effective_app":"pi","state":"idle"}]});
+        let login = json!(["/usr/bin/login", "login"]);
+        assert_eq!(
+            program_candidates(&process, &status, &title),
+            json!(["pi", "/usr/bin/login", "login"])
+        );
+        assert_eq!(program_candidates(&process, &Value::Null, &title), login);
+        assert_eq!(
+            program_candidates(&process, &status, &json!({"title":"fish"})),
+            login
+        );
+        let stale = json!({"records":[{"app":"pi","owner":{"pid":12,"name":"node"}}]});
+        assert_eq!(program_candidates(&process, &stale, &title), login);
+        let foreground = json!({"foreground":{"pid":13,"name":"nvim"}});
+        assert_eq!(
+            program_candidates(&foreground, &status, &title),
+            json!(["nvim"])
+        );
     }
     #[test]
     fn program_titles_prefer_live_terminal_titles_and_reject_stale_owners() {

@@ -16,6 +16,7 @@ class ProgramProfileTest {
                     "node",
                     "/home/lemon/.npm-global/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
                 ),
+                listOf("node", "/opt/pi-coding-agent/pi"),
                 listOf("node", "/Users/x/.pi/agent/dist/cli.js"),
             )) {
             val profile = ProgramProfile.resolve(ProgramIdentity.resolve(candidates))
@@ -24,6 +25,20 @@ class ProgramProfileTest {
             assertTrue(profile.cursorTapKeyboard)
             assertEquals(ImeAnchor.CONTENT, profile.imeAnchor)
         }
+        val helperState =
+            AppState.parse(
+                """{"programs":{"pi-status":["pi","node"],"pi-executable":["/opt/pi-coding-agent/pi"],"helper":["pi-helper"]},"titles":{"shell":"pi"}}""",
+            )
+        assertTrue(
+            ProgramProfile.resolve(helperState.programs.getValue("pi-status")).hiddenCursorInput,
+        )
+        assertTrue(
+            ProgramProfile.resolve(helperState.programs.getValue("pi-executable"))
+                .hiddenCursorInput,
+        )
+        assertFalse(
+            ProgramProfile.resolve(helperState.programs.getValue("helper")).hiddenCursorInput,
+        )
     }
 
     @Test

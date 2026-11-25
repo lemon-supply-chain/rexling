@@ -718,9 +718,11 @@ class TerminalImeViewportTest {
     }
 
     @Test
-    fun hiddenClaudeCursorPansAboveTheKeyboardWithoutResizingTheGrid() {
+    fun hiddenPiCursorPansAboveTheKeyboardWithoutResizingTheGrid() {
         val sizes = mutableListOf<Pair<Int, Int>>()
         lateinit var view: TerminalView
+        val profile =
+            ProgramProfile.resolve(ProgramIdentity.resolve(listOf("/opt/pi-coding-agent/pi")))
         var focus by mutableStateOf<TerminalKeyboardFocus?>(null)
         ui.setContent {
             MaterialTheme {
@@ -729,7 +731,7 @@ class TerminalImeViewportTest {
                         factory = {
                             TerminalView(it).also { v ->
                                 view = v
-                                v.allowHiddenCursorInput = true
+                                v.allowHiddenCursorInput = profile.hiddenCursorInput
                                 v.onKeyboardFocus = { focus = it }
                                 v.onDimensions = { cols, rows ->
                                     sizes += cols to rows
@@ -768,7 +770,7 @@ class TerminalImeViewportTest {
             assertNull(view.screen!!.cursorY)
             assertNotNull(view.keyboardFocus)
             assertTrue(
-                "Hidden Claude prompt must pan above the keyboard",
+                "Hidden Pi prompt must pan above the keyboard",
                 terminalImePan(view.keyboardFocus, view.height - 400, 400) > 0,
             )
         }

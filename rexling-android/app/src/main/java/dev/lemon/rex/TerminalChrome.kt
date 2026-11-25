@@ -140,6 +140,7 @@ internal enum class ChromeIcon {
     WAFFLE,
     ZOOM,
     UNZOOM,
+    CHEVRONS_DOWN,
 }
 
 @Composable
@@ -263,6 +264,12 @@ internal fun ChromeSymbol(
             ChromeIcon.CHEVRON -> {
                 line(7f, 10f, 12f, 15f)
                 line(12f, 15f, 17f, 10f)
+            }
+            ChromeIcon.CHEVRONS_DOWN -> {
+                line(7f, 6f, 12f, 11f)
+                line(12f, 11f, 17f, 6f)
+                line(7f, 13f, 12f, 18f)
+                line(12f, 18f, 17f, 13f)
             }
             ChromeIcon.SESSIONS -> {
                 box(4f, 8f, 13f, 12f)
@@ -546,6 +553,36 @@ internal fun ChromeSymbol(
                     line(9f, 21f, 12f, 23f)
                     line(12f, 23f, 15f, 21f)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ScrollToLatestButton(
+    hazeState: dev.chrisbanes.haze.HazeState,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val description = stringResource(R.string.a11y_scroll_to_latest)
+    Box(
+        modifier.size(48.dp).clickable(role = Role.Button, onClick = onClick).semantics {
+            contentDescription = description
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        TransferNoticeSurface(
+            Modifier.size(36.dp)
+                .shadow(4.dp, CircleShape, clip = false)
+                .background(scheme.surface, CircleShape)
+                .border(.5.dp, scheme.outlineVariant, CircleShape),
+            hazeState,
+            container = scheme.surface,
+            title = null,
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ChromeSymbol(ChromeIcon.CHEVRONS_DOWN, color = scheme.primary)
             }
         }
     }

@@ -35,6 +35,7 @@ class PaneChromeTest {
     private lateinit var terminal: TerminalView
     private val selected = mutableListOf<String>()
     private var opened = 0
+    private var scrolledToLatest = 0
 
     private fun carousel(
         initial: String = "a",
@@ -94,7 +95,7 @@ class PaneChromeTest {
                     {},
                     { _, _, _, _, _ -> },
                     {},
-                    {},
+                    { scrolledToLatest++ },
                     { _, _ -> },
                     {
                         selected = it
@@ -282,10 +283,16 @@ class PaneChromeTest {
         carousel(history = true)
         ui.runOnIdle { terminal.onPaneDrag?.invoke(-terminal.width * .4f, true) }
         ui.mainClock.advanceTimeByFrame()
-        val latest =
-            ui.onNodeWithText(appString(R.string.label_latest)).fetchSemanticsNode().boundsInRoot
+        val latestButton =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_scroll_to_latest))
+                .assertHasClickAction()
+                .assertWidthIsEqualTo(48.dp)
+                .assertHeightIsEqualTo(48.dp)
+        val latest = latestButton.fetchSemanticsNode().boundsInRoot
         val program = badge().fetchSemanticsNode().boundsInRoot
         assertTrue("$latest overlaps $program", latest.bottom <= program.top)
+        latestButton.performClick()
+        ui.runOnIdle { assertEquals(1, scrolledToLatest) }
     }
 
     @Test

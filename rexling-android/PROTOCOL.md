@@ -1279,7 +1279,7 @@ when the glyph must not be painted. RXT7 appends this optional coordinate pair t
 each full/delta frame after image placements. Android still accepts RXT1–RXT6,
 and validates RXT7 positions against the frame grid before committing a packet.
 
-For a live foreground Claude/Codex pane, TerminalView can use this hidden
+For a live foreground Claude Code, Codex, or Pi pane, TerminalView can use this hidden
 position as its input-row tap target and IME pan anchor. Mouse reporting still
 forwards the original click, with the existing target/ownership/grid guards.
 The input anchor never draws or blinks a cursor. Hidden positions are not used

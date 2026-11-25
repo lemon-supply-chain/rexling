@@ -18,7 +18,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -378,8 +377,8 @@ internal fun TerminalCarousel(
                                     }
                             }
                             if (center && (frame?.scroll?.below ?: 0) > 0) {
-                                Text(
-                                    stringResource(R.string.label_latest),
+                                ScrollToLatestButton(
+                                    haze,
                                     Modifier.align(Alignment.BottomEnd)
                                         .padding(
                                             end = 12.dp,
@@ -389,13 +388,8 @@ internal fun TerminalCarousel(
                                                 else 10.dp) +
                                                     bottomControlsInset +
                                                     bottomOverlayInset,
-                                        )
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(MaterialTheme.colorScheme.surface)
-                                        .clickable(role = Role.Button, onClick = onBottom)
-                                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.primary,
+                                        ),
+                                    onClick = onBottom,
                                 )
                             }
                         }

@@ -15,6 +15,7 @@ internal data object PiProfile : ProgramProfile {
         matchesCandidates(
             identity,
             names = setOf("pi"),
-            pathFragments = setOf("/@earendil-works/pi-coding-agent/", "/.pi/agent/"),
+            pathFragments =
+                setOf("/@earendil-works/pi-coding-agent/", "/pi-coding-agent/", "/.pi/agent/"),
         )
 }

@@ -332,7 +332,7 @@ class TerminalMouseTest {
     }
 
     @Test
-    fun hiddenClaudeCursorCanOpenKeyboardWithoutChangingMouseClicksOrOtherEditors() {
+    fun hiddenPiCursorCanOpenKeyboardWithoutChangingMouseClicksOrOtherEditors() {
         instrumentation.runOnMainSync {
             val metrics = TerminalFonts(instrumentation.targetContext).configure(Paint(), 10f)
             var cursorTaps = 0
@@ -351,7 +351,8 @@ class TerminalMouseTest {
             assertNull(view.keyboardFocus)
             tap(8, 0)
             assertEquals(0, cursorTaps)
-            view.allowHiddenCursorInput = true
+            view.allowHiddenCursorInput =
+                ProgramProfile.resolve(ProgramIdentity.resolve(listOf("pi"))).hiddenCursorInput
             assertNotNull(view.keyboardFocus)
             tap(7, 100)
             assertEquals(0, cursorTaps)

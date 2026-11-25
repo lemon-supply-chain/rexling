@@ -782,4 +782,5 @@
     <string name="a11y_show_pane_actions">Show pane actions</string>
     <string name="a11y_sessions_by_server">Sessions by server</string>
     <string name="no_sessions_available">No sessions available</string>
+    <string name="a11y_scroll_to_latest">Scroll to latest</string>
 </resources>
