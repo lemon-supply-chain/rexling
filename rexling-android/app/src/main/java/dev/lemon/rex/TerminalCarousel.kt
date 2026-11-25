@@ -81,6 +81,7 @@ internal fun TerminalCarousel(
     bottomOverlayInset: Dp = 0.dp,
     headerHeightSaved: () -> Int = { 0 },
     headerOverlap: () -> Int = { 0 },
+    floatingMotion: FloatingPaneMotion? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val switchLayout =
@@ -213,7 +214,14 @@ internal fun TerminalCarousel(
                     if (retiring) retained!!.frame else liveScreen.takeIf { block.id == liveBlock }
                 val pageOffset = offset * stride
                 key(block.id) {
-                    DisposableEffect(block.id) { onDispose { imeHandoff.remove(block.id) } }
+                    DisposableEffect(block.id, floatingMotion) {
+                        onDispose {
+                            imeHandoff.remove(block.id)
+                            floatingMotion?.forget(block.id)
+                        }
+                    }
+                    val trackFloating =
+                        center && paneLayout.any { it.id == block.id && it.floating }
                     var keyboardFocus by remember { mutableStateOf<TerminalKeyboardFocus?>(null) }
                     Box(
                         Modifier.width(cardWidth)
@@ -223,6 +231,11 @@ internal fun TerminalCarousel(
                                 translationX = kotlin.math.round(leftPx + position)
                                 alpha = if (retiring) 0f else 1f
                             }
+                            .then(
+                                if (trackFloating)
+                                    Modifier.floatingPaneViewport(block.id, floatingMotion)
+                                else Modifier,
+                            )
                             .clip(
                                 if (squareCorners) RoundedCornerShape(0.dp)
                                 else RoundedCornerShape(21.dp),
@@ -261,6 +274,8 @@ internal fun TerminalCarousel(
                                                 }
                                                 .clipToBounds(),
                                         update = { view ->
+                                            if (trackFloating)
+                                                floatingMotion?.trackView(block.id, view)
                                             view.keepAwakeMode =
                                                 if (center) keepAwake else KeepScreenAwake.SYSTEM
                                             imeHandoff.mount(block, view)
@@ -391,8 +406,9 @@ internal fun TerminalCarousel(
         if (blocks.size > 1) {
             Box(
                 Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = bottomOverlayInset)
                     .fillMaxWidth()
-                    .height(28.dp)
+                    .height(paneIndicatorStripHeight)
                     .clickable(role = Role.Button, onClick = onPanes)
                     .semantics {
                         contentDescription =

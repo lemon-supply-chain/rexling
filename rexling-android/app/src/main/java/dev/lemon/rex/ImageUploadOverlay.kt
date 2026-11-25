@@ -285,7 +285,7 @@ internal fun TransferNoticeSurface(
     hazeState: dev.chrisbanes.haze.HazeState?,
     container: Color = Color(0xffe5edff),
     ink: Color = Color(0xff202a3c),
-    title: String,
+    title: String?,
     content: @Composable () -> Unit,
 ) {
     val localHaze = remember { dev.chrisbanes.haze.HazeState() }
@@ -298,7 +298,7 @@ internal fun TransferNoticeSurface(
                 edge = false,
                 tint = container,
             )
-            .semantics { paneTitle = title },
+            .then(if (title != null) Modifier.semantics { paneTitle = title } else Modifier),
         shape = RoundedCornerShape(20.dp),
         color = Color.Transparent,
         contentColor = ink,

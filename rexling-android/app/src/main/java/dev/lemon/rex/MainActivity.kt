@@ -42,6 +42,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -513,6 +515,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     val floatingOverlay =
         if (allowFloatingOverlay && tiles != null) window?.visibleFloatingPlacements().orEmpty()
         else emptyList()
+    val floatingMotion = remember(client, displayedSession, window?.id) { FloatingPaneMotion() }
+    LaunchedEffect(floatingMotion, floatingMotion.restoring) {
+        val id = floatingMotion.restoring ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(3000)
+        if (floatingMotion.restoring == id) floatingMotion.restoring = null
+    }
     var dockFloatingPane by remember(displayedSession, window?.id) { mutableStateOf<String?>(null) }
     val controlled = state.controlled && ready && client.hasScreen
     val paneObscured =
@@ -603,10 +611,21 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     fun openPane(id: String) {
         client.selectBlock(id, null, keepTiled = tiles != null, restoreMinimized = true)
     }
+
+    fun restoreFloating(id: String) {
+        if (
+            window?.layout?.any { it.id == id && it.floating && (it.minimized || tiles == null) } ==
+                true
+        ) {
+            floatingMotion.restoring = id
+        }
+        openPane(id)
+    }
+
     fun minimizeFloating(id: String) {
         val tab = window ?: return
         val pane = tab.layout.firstOrNull { it.id == id && it.floating && !it.minimized } ?: return
-        client.minimizeFloating(displayedSession, tab.id, pane)
+        if (client.minimizeFloating(displayedSession, tab.id, pane)) floatingMotion.capture(id)
     }
     LaunchedEffect(model.minimizeFloatingPanes) {
         if (model.minimizeFloatingPanes && activeFloating != null && tiles == null)
@@ -1180,6 +1199,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                         .windowInsetsPadding(
                                             WindowInsets(bottom = tiledNavigationClearance),
                                         )
+                                        .onPlaced {
+                                            floatingMotion.workspaceOrigin = it.positionInWindow()
+                                        }
                                         .then(
                                             if (singlePane == null) Modifier
                                             else
@@ -1325,6 +1347,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                     .firstOrNull { it.id == id }
                                                     ?.let { closeTarget = closePaneTarget(it) }
                                             },
+                                            floatingMotion = floatingMotion,
                                         )
                                     } else {
                                         LiveTerminal(
@@ -1368,6 +1391,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             extendsUnderNavigation = extendUnderNav,
                                             navigationClearance = singlePaneNavigationClearance,
                                             bottomOverlayInset = bottomOverlayInset,
+                                            floatingMotion = floatingMotion,
                                         )
                                     }
                                     if (
@@ -1512,6 +1536,13 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             onExpandedChange = { shortcutBackdrop = it },
                                         )
                                     }
+                                    val minimizingId = floatingMotion.minimizing?.id
+                                    MinimizingFloatingPane(
+                                        floatingMotion,
+                                        window?.layout?.any {
+                                            it.id == minimizingId && it.minimized
+                                        } == true,
+                                    )
                                     if (floating.isNotEmpty()) {
                                         FloatingPaneDock(
                                             floating,
@@ -1519,13 +1550,18 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             state.programs,
                                             state.titles,
                                             ready,
-                                            ::openPane,
+                                            ::restoreFloating,
                                             { activeFloating?.let { minimizeFloating(it.id) } },
-                                            Modifier.align(Alignment.BottomEnd)
-                                                .padding(end = 6.dp, bottom = bottomOverlayInset),
+                                            Modifier.matchParentSize()
+                                                .padding(bottom = bottomOverlayInset),
                                             directories = state.directories,
                                             hazeState = terminalHaze,
                                             onExpandedChange = { floatingBackdrop = it },
+                                            onDockBounds = { floatingMotion.dockBounds = it },
+                                            position = model.floatingDockPosition,
+                                            onMove = model::moveFloatingDock,
+                                            unread = activityBadges.panes,
+                                            topOcclusion = currentHeaderOverlap,
                                         )
                                     }
                                     if (floatingTabs) {
@@ -2511,6 +2547,7 @@ private fun LiveTerminal(
     bottomOverlayInset: Dp = 0.dp,
     headerHeightSaved: () -> Int = { 0 },
     headerOverlap: () -> Int = { 0 },
+    floatingMotion: FloatingPaneMotion? = null,
 ) {
     val layout by client.displayLayout.collectAsState()
     val screen = client.screenForLayout(layout)
@@ -2555,6 +2592,7 @@ private fun LiveTerminal(
         bottomOverlayInset = bottomOverlayInset,
         headerHeightSaved = headerHeightSaved,
         headerOverlap = headerOverlap,
+        floatingMotion = floatingMotion,
     )
 }
 

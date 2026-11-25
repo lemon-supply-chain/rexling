@@ -394,6 +394,35 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putBoolean("minimize_floating_panes", value) }
     }
 
+    internal var floatingDockPosition by
+        mutableStateOf(
+            Offset(
+                preferences
+                    .getFloat("floating_dock_x", 1f)
+                    .takeIf { it.isFinite() }
+                    ?.coerceIn(
+                        0f,
+                        1f,
+                    ) ?: 1f,
+                preferences
+                    .getFloat("floating_dock_y", 1f)
+                    .takeIf { it.isFinite() }
+                    ?.coerceIn(
+                        0f,
+                        1f,
+                    ) ?: 1f,
+            ),
+        )
+        private set
+
+    internal fun moveFloatingDock(value: Offset) {
+        floatingDockPosition = value
+        preferences.edit {
+            putFloat("floating_dock_x", value.x)
+            putFloat("floating_dock_y", value.y)
+        }
+    }
+
     internal var controlItems by
         mutableStateOf(
             ControlShortcutConfig.restore(preferences.getString("control_shortcut_items", null)),
