@@ -196,6 +196,7 @@
     <string name="status_paused">Paused</string>
     <string name="status_failed">Connection failed</string>
     <string name="status_disconnected">Disconnected</string>
+    <string name="status_preview">Preview</string>
     <string name="server_icon_globe">Globe</string>
     <string name="server_icon_server">Server</string>
     <string name="server_icon_cloud">Cloud</string>

@@ -17,6 +17,20 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 @Composable
+internal fun phaseLabel(phase: String): String =
+    stringResource(
+        when (phase) {
+            "connected" -> R.string.status_connected
+            "connecting" -> R.string.status_connecting
+            "reconnecting" -> R.string.status_reconnecting
+            "paused" -> R.string.status_paused
+            "error" -> R.string.status_failed
+            "preview" -> R.string.status_preview
+            else -> R.string.status_disconnected
+        },
+    )
+
+@Composable
 internal fun connectionNoticeText(
     phase: String,
     network: Boolean?,

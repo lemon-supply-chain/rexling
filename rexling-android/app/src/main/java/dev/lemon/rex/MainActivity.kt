@@ -259,7 +259,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     displayedSession,
                     sessionLabel
                         ?: if (state.connected) stringResource(R.string.label_no_session)
-                        else state.phase,
+                        else phaseLabel(state.phase),
                 ),
             ),
         )
@@ -1486,7 +1486,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 if (state.connected)
                     if (controlled) stringResource(R.string.in_control)
                     else stringResource(R.string.viewing_terminal)
-                else state.phase,
+                else phaseLabel(state.phase),
             dimensions = client.screenDimensions,
             controlled = controlled,
             ownership =

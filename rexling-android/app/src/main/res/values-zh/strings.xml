@@ -196,6 +196,7 @@
     <string name="status_paused">已暂停</string>
     <string name="status_failed">连接失败</string>
     <string name="status_disconnected">已断开</string>
+    <string name="status_preview">预览</string>
     <string name="server_icon_globe">地球</string>
     <string name="server_icon_server">服务器</string>
     <string name="server_icon_cloud">云端</string>

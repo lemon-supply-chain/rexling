@@ -169,18 +169,9 @@ internal fun ServersSheet(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    when (status.phase) {
-                                        "connected" ->
-                                            if (selected)
-                                                stringResource(R.string.status_connected_viewing)
-                                            else stringResource(R.string.status_connected)
-                                        "connecting" -> stringResource(R.string.status_connecting)
-                                        "reconnecting" ->
-                                            stringResource(R.string.status_reconnecting)
-                                        "paused" -> stringResource(R.string.status_paused)
-                                        "error" -> stringResource(R.string.status_failed)
-                                        else -> stringResource(R.string.status_disconnected)
-                                    },
+                                    if (status.phase == "connected" && selected)
+                                        stringResource(R.string.status_connected_viewing)
+                                    else phaseLabel(status.phase),
                                     style = SettingsType.detail,
                                     color =
                                         if (status.connected) MaterialTheme.colorScheme.primary
