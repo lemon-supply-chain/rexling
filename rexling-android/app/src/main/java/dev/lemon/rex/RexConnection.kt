@@ -856,14 +856,33 @@ internal class RexConnection(
     }
 
     /** The current grid rides along with a pane switch, so the incoming stream opens at it. */
-    private fun gridArgs(vararg args: Pair<String, Any>): Array<Pair<String, Any>> {
+    private fun gridArgs(
+        grid: Pair<Int, Int>?,
+        vararg args: Pair<String, Any>,
+    ): Array<Pair<String, Any>> {
         val list = args.toMutableList()
-        if (lastSize.first > 0 && lastSize.second > 0) {
-            list += "columns" to lastSize.first
-            list += "rows" to lastSize.second
+        if (grid != null && grid.first > 0 && grid.second > 0) {
+            list += "columns" to grid.first
+            list += "rows" to grid.second
         }
         return list.toTypedArray()
     }
+
+    private fun switchGrid(
+        current: AppState,
+        targetBlock: String,
+        explicit: Pair<Int, Int>?,
+        keepTiled: Boolean,
+    ): Pair<Int, Int>? =
+        resolveSwitchGrid(
+            windows = current.windows,
+            targetBlock = targetBlock,
+            lastSize = lastSize,
+            explicit = explicit,
+            keepTiled = keepTiled,
+            hasMirrors = mirrorRequest.panes.isNotEmpty(),
+            multiPaneUnfolded = preferences.getBoolean("multi_pane_unfolded", false),
+        )
 
     /** A pane shown beside the focused one in the multi-pane layout, and the grid that fits it. */
     internal data class MirrorPane(val block: String, val columns: Int, val rows: Int)
@@ -1032,12 +1051,14 @@ internal class RexConnection(
         keyboardRequest = ""
         restoreWorkspace = false
         workspace.remember(current.selectedSession, current.windows, id)
+        val switchTargetGrid = switchGrid(current, id, grid, keepTiled)
         if (grid != null) lastSize = grid
         // Carry the grid with the switch, so the incoming pane is already sized for the
         // current layout instead of showing the size it had while the rail was docked.
         command(
             "block",
             *gridArgs(
+                switchTargetGrid,
                 "id" to id,
                 "navigationId" to navigationRequest.id,
                 "keepTiled" to keepTiled,
@@ -1064,9 +1085,19 @@ internal class RexConnection(
         workspace.request(session, block)
         navigationRequest =
             NavigationRequest(session = session, block = block, id = ++navigationSerial)
+        val switchTargetGrid =
+            if (session == current.selectedSession)
+                switchGrid(current, block, explicit = null, keepTiled = false)
+            else if (
+                mirrorRequest.panes.isEmpty() &&
+                    !preferences.getBoolean("multi_pane_unfolded", false)
+            )
+                lastSize.takeIf { it.first > 0 && it.second > 0 }
+            else null
         command(
             "session",
             *gridArgs(
+                switchTargetGrid,
                 "id" to session,
                 "block" to block,
                 "navigationId" to navigationRequest.id,
@@ -1711,4 +1742,28 @@ internal class RexConnection(
         if (handle != 0L) NativeBridge.destroy(handle)
         handle = 0
     }
+}
+
+/**
+ * Returns the grid to send alongside a pane switch, or null when the incoming pane has its own
+ * multi-pane geometry or the current [lastSize] belongs to a tiled sub-pane.
+ */
+internal fun resolveSwitchGrid(
+    windows: List<WindowItem>,
+    targetBlock: String,
+    lastSize: Pair<Int, Int>,
+    explicit: Pair<Int, Int>?,
+    keepTiled: Boolean,
+    hasMirrors: Boolean,
+    multiPaneUnfolded: Boolean,
+): Pair<Int, Int>? {
+    if (explicit != null) return explicit
+    if (keepTiled || hasMirrors) return null
+    if (multiPaneUnfolded) {
+        val targetWindow = windows.firstOrNull { window ->
+            window.blocks.any { it.id == targetBlock }
+        }
+        if (targetWindow != null && targetWindow.tiledPanes().size > 1) return null
+    }
+    return lastSize.takeIf { it.first > 0 && it.second > 0 }
 }

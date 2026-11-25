@@ -906,3 +906,86 @@ async fn slow_mirror_ticket_does_not_block_input_and_two_pane_focus_reuses_both_
         shutdown(&tx).await;
     });
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn opening_a_non_handoff_block_with_size_resizes_before_data_connect() {
+    let peer = Peer::with_floating(Duration::ZERO, false, false, true).await;
+    let (mut actor, _) = peer.actor(8, true).await;
+    actor.refresh_view().await.unwrap();
+    peer.methods.lock().unwrap().clear();
+
+    actor
+        .open_block("block:tiled".into(), Some((71, 27)))
+        .await
+        .unwrap();
+
+    let methods = peer.methods.lock().unwrap().clone();
+    let resize_pos = methods
+        .iter()
+        .position(|m| m == "com.superlogical.terminal.resize")
+        .expect("pre-resize RPC must run when opening a non-handoff block with a grid");
+    let connect_pos = methods
+        .iter()
+        .position(|m| m == "data.connect")
+        .expect("data.connect must follow pre-resize");
+    assert!(
+        resize_pos < connect_pos,
+        "pre-resize must precede data.connect: {methods:?}"
+    );
+}
+
+#[tokio::test]
+async fn mirror_handoff_with_size_skips_pre_resize_and_reuses_stream() {
+    let peer = Peer::with_options(Duration::ZERO, false, false, false, false, true).await;
+    let (mut actor, shared) = peer.actor(1, false).await;
+    actor.refresh_view().await.unwrap();
+    actor.dirty = true;
+    let (tx, rx) = mpsc::channel(128);
+    tokio::join!(actor.run(rx), async {
+        tx.send(json!({
+            "type": "mirror",
+            "session": "session:test",
+            "window": "window:test",
+            "panes": [{"block": "block:mirror", "columns": 40, "rows": 20}]
+        }))
+        .await
+        .unwrap();
+        peer.mirror_gate.add_permits(1);
+        until(|| {
+            shared
+                .lock()
+                .unwrap()
+                .pending_previews
+                .contains_key("block:mirror")
+        })
+        .await;
+
+        peer.methods.lock().unwrap().clear();
+        tx.send(json!({
+            "type": "block",
+            "id": "block:mirror",
+            "columns": 71,
+            "rows": 27
+        }))
+        .await
+        .unwrap();
+        until(|| {
+            let state = shared.lock().unwrap();
+            state.key.ends_with("block:mirror") && state.frame.is_some()
+        })
+        .await;
+
+        let methods = peer.methods.lock().unwrap().clone();
+        assert!(
+            !methods
+                .iter()
+                .any(|m| m == "com.superlogical.terminal.resize"),
+            "mirror handoff must skip pre-resize: {methods:?}"
+        );
+        assert!(
+            !methods.iter().any(|m| m == "data.connect"),
+            "mirror handoff must reuse the mirror stream: {methods:?}"
+        );
+        shutdown(&tx).await;
+    });
+}

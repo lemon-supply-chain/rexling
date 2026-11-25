@@ -3211,7 +3211,7 @@ impl Actor {
             self.notice = "Choose a terminal".into();
             return Ok(());
         }
-        if let Some((columns, rows)) = size {
+        if !handoff && let Some((columns, rows)) = size {
             // Size the pane before its stream opens. The server applies this at once when
             // the client owns the block or nobody does, and otherwise defers it until this
             // client takes over, so a switch never shows the previous layout's grid.

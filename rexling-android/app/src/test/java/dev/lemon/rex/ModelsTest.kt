@@ -333,4 +333,69 @@ class ModelsTest {
         near(.8f, stacked[2].y)
         near(.2f, stacked[2].height)
     }
+
+    @Test
+    fun resolveSwitchGridScopesPreResizeToCompatibleSinglePaneLayouts() {
+        val singleWindow = WindowItem("w1", "Single", listOf(BlockItem("b1", "zsh")))
+        val multiWindow =
+            WindowItem(
+                "w2",
+                "Multi",
+                listOf(BlockItem("b2", "codex"), BlockItem("b3", "nvim")),
+                layout =
+                    listOf(
+                        PanePlacement("b2", 0f, 0f, .5f, 1f),
+                        PanePlacement("b3", .5f, 0f, .5f, 1f),
+                    ),
+            )
+        val windows = listOf(singleWindow, multiWindow)
+        val viewport = 80 to 24
+
+        assertEquals(
+            viewport,
+            resolveSwitchGrid(
+                windows = windows,
+                targetBlock = "b1",
+                lastSize = viewport,
+                explicit = null,
+                keepTiled = false,
+                hasMirrors = false,
+                multiPaneUnfolded = false,
+            ),
+        )
+        assertNull(
+            resolveSwitchGrid(
+                windows = windows,
+                targetBlock = "b1",
+                lastSize = viewport,
+                explicit = null,
+                keepTiled = false,
+                hasMirrors = true,
+                multiPaneUnfolded = true,
+            ),
+        )
+        assertNull(
+            resolveSwitchGrid(
+                windows = windows,
+                targetBlock = "b2",
+                lastSize = viewport,
+                explicit = null,
+                keepTiled = false,
+                hasMirrors = false,
+                multiPaneUnfolded = true,
+            ),
+        )
+        assertEquals(
+            42 to 20,
+            resolveSwitchGrid(
+                windows = windows,
+                targetBlock = "b2",
+                lastSize = viewport,
+                explicit = 42 to 20,
+                keepTiled = true,
+                hasMirrors = true,
+                multiPaneUnfolded = true,
+            ),
+        )
+    }
 }
