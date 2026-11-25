@@ -315,8 +315,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     fun openSettings(route: SettingsRoute) {
         SettingsNav.open(settings, route)
     }
-    fun closeSettings() {
-        SettingsNav.close(settings)
+    fun closeSettings(index: Int, route: SettingsRoute) {
+        SettingsNav.close(settings, index, route)
     }
     val view = LocalView.current
     val activityWindow = remember(view) { (view.context as? android.app.Activity)?.window }
@@ -1904,149 +1904,173 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 hazeState = workspaceHaze,
             )
         NetworkPrompts()
-        // Only the top of the stack renders; closing it reveals the level it was opened from.
-        when (val route = settings.lastOrNull()) {
-            null -> Unit
-            SettingsRoute.Preferences ->
-                PreferencesSheet(
-                    { openSettings(SettingsRoute.Appearance) },
-                    { openSettings(SettingsRoute.FontSize) },
-                    { openSettings(SettingsRoute.BackgroundAlerts) },
-                    { openSettings(SettingsRoute.About) },
-                    onClose = { closeSettings() },
-                    shortcutGesture = model.shortcutGesture,
-                    onShortcutGesture = model::changeShortcutGesture,
-                    onNeovim = { openSettings(SettingsRoute.Shortcuts) },
-                    arrowJoystickEnabled = model.arrowJoystickEnabled,
-                    onArrowJoystick = model::changeArrowJoystick,
-                    enterSubmits = model.enterSubmits,
-                    onEnterSubmits = model::changeEnterSubmits,
-                    toolbarWithKeyboardOnly = model.toolbarWithKeyboardOnly,
-                    onToolbarWithKeyboardOnly = model::changeToolbarWithKeyboardOnly,
-                    toolbarSystemColors = model.toolbarSystemColors,
-                    onToolbarSystemColors = model::changeToolbarSystemColors,
-                    paneLayouts = model.paneLayouts,
-                    paneOrientation = paneOrientation,
-                    onPaneLayout = model::changePaneLayout,
-                    tabLayouts = model.tabLayouts,
-                    tabWidth = tabWidth,
-                    onTabLayout = model::changeTabLayout,
-                    floatingTabs = model.floatingTabs,
-                    onFloatingTabs = model::changeFloatingTabs,
-                    compactTopBar = model.compactTopBar,
-                    onCompactTopBar = model::changeCompactTopBar,
-                    compactHeaderMode = model.compactHeaderMode,
-                    onCompactHeaderMode = model::changeCompactHeaderMode,
-                    immersiveStatusBar = model.immersiveStatusBar,
-                    onImmersiveStatusBar = model::changeImmersiveStatusBar,
-                    codexTitleAttention = model.experimentalCodexAttention,
-                    onCodexTitleAttention = model::changeCodexAttention,
-                    frostedEffectsEnabled = model.frostedEffectsEnabled,
-                    onFrostedEffects = model::changeFrostedEffects,
-                    minimizeFloatingPanes = model.minimizeFloatingPanes,
-                    onMinimizeFloatingPanes = model::changeMinimizeFloatingPanes,
-                    onNetwork = { openSettings(SettingsRoute.Network) },
-                    keepScreenAwake = model.keepScreenAwake,
-                    onKeepScreenAwake = model::changeKeepScreenAwake,
-                    onToolbar = { openSettings(SettingsRoute.KeyboardToolbar) },
-                    onControlItems = { openSettings(SettingsRoute.ControlShortcuts) },
-                    onSshKeys = { openSettings(SettingsRoute.SshKeys) },
-                    keyboardSuggestionsEnabled = model.keyboardSuggestions,
-                    onKeyboardSuggestions = model::changeKeyboardSuggestions,
-                    language = model.language,
-                    onLanguage = { openSettings(SettingsRoute.Language) },
-                    terminalPadding = model.terminalPadding,
-                    onTerminalPadding = model::changeTerminalPadding,
-                    extendPadding = model.extendPadding,
-                    onExtendPadding = model::changeExtendPadding,
-                    predictiveEcho = model.predictiveEcho,
-                    onPredictiveEcho = model::changePredictiveEcho,
-                    hazeState = workspaceHaze,
-                )
-            SettingsRoute.Appearance ->
-                AppearanceSheet(
-                    model.appearance,
-                    model.themes,
-                    model.theme(false),
-                    model.theme(true),
-                    model::changeAppearance,
-                    model::chooseTheme,
-                    hazeState = workspaceHaze,
-                ) {
-                    closeSettings()
-                }
-            SettingsRoute.FontSize ->
-                FontSizeDialog(
-                    model.fontSizes,
-                    tabWidth.first,
-                    model::changeFontSize,
-                    hazeState = workspaceHaze,
-                ) {
-                    closeSettings()
-                }
-            SettingsRoute.Language ->
-                LanguageSheet(model.language, model::changeLanguage, hazeState = workspaceHaze) {
-                    closeSettings()
-                }
-            SettingsRoute.BackgroundAlerts ->
-                BackgroundAlertsDialog(model, hazeState = workspaceHaze) { closeSettings() }
-            SettingsRoute.About -> AboutSheet(hazeState = workspaceHaze) { closeSettings() }
-            SettingsRoute.KeyboardToolbar ->
-                KeyboardToolbarSheet(
-                    model.toolbarKeys,
-                    model::changeToolbar,
-                    onClose = { closeSettings() },
-                    hazeState = workspaceHaze,
-                )
-            SettingsRoute.ControlShortcuts ->
-                ControlShortcutsSheet(
-                    model.controlItems,
-                    model::saveControlShortcuts,
-                    onClose = { closeSettings() },
-                    hazeState = workspaceHaze,
-                )
-            SettingsRoute.SshKeys ->
-                SshKeysSheet(onClose = { closeSettings() }, hazeState = workspaceHaze)
-            SettingsRoute.Network ->
-                NetworkSheet(model.activeServer, state.connected, hazeState = workspaceHaze) {
-                    closeSettings()
-                }
-            SettingsRoute.Shortcuts ->
-                ShortcutProfilesSheet(
-                    model.shortcutProfiles,
-                    onEdit = { openSettings(SettingsRoute.ShortcutEditor(it)) },
-                    onNew = { openSettings(SettingsRoute.ShortcutEditor("")) },
-                    onEnabled = model::enableShortcutProfile,
-                    onClose = { closeSettings() },
-                    layout = model.neovimShortcutLayout,
-                    onLayout = model::changeNeovimShortcutLayout,
-                    effect = model.neovimShortcutEffect,
-                    onEffect = model::changeNeovimShortcutEffect,
-                    hapticsEnabled = model.neovimShortcutHaptics,
-                    onHaptics = model::changeNeovimShortcutHaptics,
-                    hazeState = workspaceHaze,
-                )
-            is SettingsRoute.ShortcutEditor -> {
-                val id = route.id
-                val profile = model.shortcutProfiles.firstOrNull { it.id == id }
-                // A new profile gets its id once, so a failed save keeps the same draft.
-                val saveId = remember(id) { profile?.id ?: ShortcutProfiles.newId() }
-                key(id) {
-                    ShortcutProfileSheet(
-                        profile,
-                        onSave = { name, match, prefix, enter, text ->
-                            model.saveShortcutProfile(saveId, name, match, prefix, enter, text)
-                        },
-                        onClose = { closeSettings() },
-                        onDelete = profile?.let { { model.deleteShortcutProfile(it.id) } },
-                        defaults =
-                            when (id) {
-                                ShortcutProfiles.NEOVIM -> NeovimShortcuts.defaults
-                                ShortcutProfiles.SHELL -> ShortcutProfiles.shellDefaults
-                                else -> null
-                            },
-                        hazeState = workspaceHaze,
-                    )
+        // Keep all stack routes mounted in order so parent drawers preserve scroll and local UI
+        // state while child drawers layer on top.
+        settings.forEachIndexed { index, route ->
+            key(index, route) {
+                val closeRoute = { closeSettings(index, route) }
+                CompositionLocalProvider(LocalDrawerLayered provides (index > 0)) {
+                    when (route) {
+                        SettingsRoute.Preferences ->
+                            PreferencesSheet(
+                                { openSettings(SettingsRoute.Appearance) },
+                                { openSettings(SettingsRoute.FontSize) },
+                                { openSettings(SettingsRoute.BackgroundAlerts) },
+                                { openSettings(SettingsRoute.About) },
+                                onClose = closeRoute,
+                                shortcutGesture = model.shortcutGesture,
+                                onShortcutGesture = model::changeShortcutGesture,
+                                onNeovim = { openSettings(SettingsRoute.Shortcuts) },
+                                arrowJoystickEnabled = model.arrowJoystickEnabled,
+                                onArrowJoystick = model::changeArrowJoystick,
+                                enterSubmits = model.enterSubmits,
+                                onEnterSubmits = model::changeEnterSubmits,
+                                toolbarWithKeyboardOnly = model.toolbarWithKeyboardOnly,
+                                onToolbarWithKeyboardOnly = model::changeToolbarWithKeyboardOnly,
+                                toolbarSystemColors = model.toolbarSystemColors,
+                                onToolbarSystemColors = model::changeToolbarSystemColors,
+                                paneLayouts = model.paneLayouts,
+                                paneOrientation = paneOrientation,
+                                onPaneLayout = model::changePaneLayout,
+                                tabLayouts = model.tabLayouts,
+                                tabWidth = tabWidth,
+                                onTabLayout = model::changeTabLayout,
+                                floatingTabs = model.floatingTabs,
+                                onFloatingTabs = model::changeFloatingTabs,
+                                compactTopBar = model.compactTopBar,
+                                onCompactTopBar = model::changeCompactTopBar,
+                                compactHeaderMode = model.compactHeaderMode,
+                                onCompactHeaderMode = model::changeCompactHeaderMode,
+                                immersiveStatusBar = model.immersiveStatusBar,
+                                onImmersiveStatusBar = model::changeImmersiveStatusBar,
+                                codexTitleAttention = model.experimentalCodexAttention,
+                                onCodexTitleAttention = model::changeCodexAttention,
+                                frostedEffectsEnabled = model.frostedEffectsEnabled,
+                                onFrostedEffects = model::changeFrostedEffects,
+                                minimizeFloatingPanes = model.minimizeFloatingPanes,
+                                onMinimizeFloatingPanes = model::changeMinimizeFloatingPanes,
+                                onNetwork = { openSettings(SettingsRoute.Network) },
+                                keepScreenAwake = model.keepScreenAwake,
+                                onKeepScreenAwake = model::changeKeepScreenAwake,
+                                onToolbar = { openSettings(SettingsRoute.KeyboardToolbar) },
+                                onControlItems = { openSettings(SettingsRoute.ControlShortcuts) },
+                                onSshKeys = { openSettings(SettingsRoute.SshKeys) },
+                                keyboardSuggestionsEnabled = model.keyboardSuggestions,
+                                onKeyboardSuggestions = model::changeKeyboardSuggestions,
+                                language = model.language,
+                                onLanguage = { openSettings(SettingsRoute.Language) },
+                                terminalPadding = model.terminalPadding,
+                                onTerminalPadding = model::changeTerminalPadding,
+                                extendPadding = model.extendPadding,
+                                onExtendPadding = model::changeExtendPadding,
+                                predictiveEcho = model.predictiveEcho,
+                                onPredictiveEcho = model::changePredictiveEcho,
+                                hazeState = workspaceHaze,
+                            )
+                        SettingsRoute.Appearance ->
+                            AppearanceSheet(
+                                model.appearance,
+                                model.themes,
+                                model.theme(false),
+                                model.theme(true),
+                                model::changeAppearance,
+                                model::chooseTheme,
+                                hazeState = workspaceHaze,
+                            ) {
+                                closeRoute()
+                            }
+                        SettingsRoute.FontSize ->
+                            FontSizeDialog(
+                                model.fontSizes,
+                                tabWidth.first,
+                                model::changeFontSize,
+                                hazeState = workspaceHaze,
+                            ) {
+                                closeRoute()
+                            }
+                        SettingsRoute.Language ->
+                            LanguageSheet(
+                                model.language,
+                                model::changeLanguage,
+                                hazeState = workspaceHaze,
+                            ) {
+                                closeRoute()
+                            }
+                        SettingsRoute.BackgroundAlerts ->
+                            BackgroundAlertsDialog(model, hazeState = workspaceHaze) {
+                                closeRoute()
+                            }
+                        SettingsRoute.About ->
+                            AboutSheet(hazeState = workspaceHaze) { closeRoute() }
+                        SettingsRoute.KeyboardToolbar ->
+                            KeyboardToolbarSheet(
+                                model.toolbarKeys,
+                                model::changeToolbar,
+                                onClose = closeRoute,
+                                hazeState = workspaceHaze,
+                            )
+                        SettingsRoute.ControlShortcuts ->
+                            ControlShortcutsSheet(
+                                model.controlItems,
+                                model::saveControlShortcuts,
+                                onClose = closeRoute,
+                                hazeState = workspaceHaze,
+                            )
+                        SettingsRoute.SshKeys ->
+                            SshKeysSheet(onClose = closeRoute, hazeState = workspaceHaze)
+                        SettingsRoute.Network ->
+                            NetworkSheet(
+                                model.activeServer,
+                                state.connected,
+                                hazeState = workspaceHaze,
+                            ) {
+                                closeRoute()
+                            }
+                        SettingsRoute.Shortcuts ->
+                            ShortcutProfilesSheet(
+                                model.shortcutProfiles,
+                                onEdit = { openSettings(SettingsRoute.ShortcutEditor(it)) },
+                                onNew = { openSettings(SettingsRoute.ShortcutEditor("")) },
+                                onEnabled = model::enableShortcutProfile,
+                                onClose = closeRoute,
+                                layout = model.neovimShortcutLayout,
+                                onLayout = model::changeNeovimShortcutLayout,
+                                effect = model.neovimShortcutEffect,
+                                onEffect = model::changeNeovimShortcutEffect,
+                                hapticsEnabled = model.neovimShortcutHaptics,
+                                onHaptics = model::changeNeovimShortcutHaptics,
+                                hazeState = workspaceHaze,
+                            )
+                        is SettingsRoute.ShortcutEditor -> {
+                            val id = route.id
+                            val profile = model.shortcutProfiles.firstOrNull { it.id == id }
+                            // A new profile gets its id once, so a failed save keeps the same
+                            // draft.
+                            val saveId = remember(id) { profile?.id ?: ShortcutProfiles.newId() }
+                            ShortcutProfileSheet(
+                                profile,
+                                onSave = { name, match, prefix, enter, text ->
+                                    model.saveShortcutProfile(
+                                        saveId,
+                                        name,
+                                        match,
+                                        prefix,
+                                        enter,
+                                        text,
+                                    )
+                                },
+                                onClose = closeRoute,
+                                onDelete = profile?.let { { model.deleteShortcutProfile(it.id) } },
+                                defaults =
+                                    when (id) {
+                                        ShortcutProfiles.NEOVIM -> NeovimShortcuts.defaults
+                                        ShortcutProfiles.SHELL -> ShortcutProfiles.shellDefaults
+                                        else -> null
+                                    },
+                                hazeState = workspaceHaze,
+                            )
+                        }
+                    }
                 }
             }
         }

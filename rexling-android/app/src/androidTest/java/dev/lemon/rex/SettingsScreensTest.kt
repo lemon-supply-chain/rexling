@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlin.math.abs
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -524,6 +525,58 @@ class SettingsScreensTest {
         ui.runOnIdle { open = true }
         ui.onNodeWithContentDescription(appString(R.string.close_preferences)).performClick()
         ui.waitUntil(5000) { !open }
+    }
+
+    @Test
+    fun closingSecondLevelDrawerKeepsPreferencesScrollPosition() {
+        var stackSize by mutableIntStateOf(1)
+        var secondLevelLayered by mutableStateOf(false)
+        ui.setContent {
+            val stack = remember { mutableStateListOf<SettingsRoute>(SettingsRoute.Preferences) }
+            LaunchedEffect(stack.size) { stackSize = stack.size }
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                stack.forEachIndexed { index, route ->
+                    key(index, route) {
+                        CompositionLocalProvider(LocalDrawerLayered provides (index > 0)) {
+                            when (route) {
+                                SettingsRoute.Preferences ->
+                                    PreferencesSheet(
+                                        {},
+                                        {},
+                                        {},
+                                        onAbout = { SettingsNav.open(stack, SettingsRoute.About) },
+                                        onClose = { SettingsNav.close(stack, index, route) },
+                                    )
+                                SettingsRoute.About -> {
+                                    secondLevelLayered = LocalDrawerLayered.current
+                                    AboutSheet { SettingsNav.close(stack, index, route) }
+                                }
+                                else -> Unit
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        val aboutRow = ui.onNodeWithText(appString(R.string.about_rexling))
+        aboutRow.performScrollTo().assertIsDisplayed()
+        val beforeTop = aboutRow.fetchSemanticsNode().boundsInRoot.top
+
+        aboutRow.performClick()
+        ui.waitUntil(5_000) { stackSize == 2 }
+        val closeAbout = ui.onNodeWithContentDescription(appString(R.string.close_about))
+        ui.awaitDisplayed(closeAbout)
+        assertTrue(secondLevelLayered)
+
+        closeAbout.performClick()
+        ui.waitUntil(5_000) { stackSize == 1 }
+        ui.waitForIdle()
+        aboutRow.assertIsDisplayed()
+        val afterTop = aboutRow.fetchSemanticsNode().boundsInRoot.top
+        assertTrue(
+            "PreferencesSheet scroll position should be preserved (before=$beforeTop, after=$afterTop)",
+            abs(afterTop - beforeTop) <= 2f,
+        )
     }
 
     private fun capture(name: String, dark: Boolean) {

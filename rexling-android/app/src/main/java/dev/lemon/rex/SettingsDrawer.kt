@@ -55,6 +55,8 @@ internal class DrawerPull(
 
 internal val LocalDrawerPull = staticCompositionLocalOf<DrawerPull?> { null }
 
+internal val LocalDrawerLayered = staticCompositionLocalOf { false }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DrawerSheet(
@@ -108,6 +110,7 @@ internal fun DrawerSheet(
             },
         )
     val scrim = BottomSheetDefaults.ScrimColor
+    val scrimScale = if (LocalDrawerLayered.current) .5f else 1f
     val immersive = LocalImmersiveStatusBar.current
     Dialog(
         onDismissRequest = { if (dismissOnBack) dismiss() else onClose() },
@@ -136,7 +139,7 @@ internal fun DrawerSheet(
                 .drawBehind {
                     val shown = (1f - dragOffset / drawerHeight.coerceAtLeast(1)).coerceIn(0f, 1f)
                     // alpha-ok sheet scrim fade
-                    drawRect(scrim.copy(alpha = scrim.alpha * progress.value * shown))
+                    drawRect(scrim.copy(alpha = scrim.alpha * scrimScale * progress.value * shown))
                 }
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                 .imePadding(),
