@@ -21,7 +21,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -81,8 +80,7 @@ internal fun ActivitySheet(
                     Text(
                         activityTitle,
                         Modifier.weight(1f),
-                        style = SettingsType.row,
-                        fontWeight = FontWeight.Bold,
+                        style = SettingsType.paneTitle,
                     )
                     TextButton(
                         onClick = onMarkAll,
@@ -95,7 +93,7 @@ internal fun ActivitySheet(
                                     }
                             },
                     ) {
-                        Text(stringResource(R.string.mark_seen), style = SettingsType.detail)
+                        Text(stringResource(R.string.mark_seen), style = SettingsType.paneDetail)
                     }
                     ChromeButton(
                         ChromeIcon.REFRESH,
@@ -140,7 +138,7 @@ internal fun ActivitySheet(
                         ) {
                             Text(
                                 filterLabel,
-                                style = SettingsType.section,
+                                style = SettingsType.paneTitle,
                                 color =
                                     if (active) scheme.onSecondaryContainer
                                     else scheme.onSurfaceVariant,
@@ -178,7 +176,7 @@ internal fun ActivitySheet(
                                     Text(
                                         if (source.connected) "${records.size}"
                                         else stringResource(R.string.offline),
-                                        style = SettingsType.detail,
+                                        style = SettingsType.paneDetail,
                                         color = scheme.onSurfaceVariant,
                                     )
                                 }
@@ -186,7 +184,7 @@ internal fun ActivitySheet(
                                     Text(
                                         source.error,
                                         Modifier.padding(bottom = 4.dp),
-                                        style = SettingsType.detail,
+                                        style = SettingsType.paneDetail,
                                         color = scheme.error,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
@@ -194,7 +192,7 @@ internal fun ActivitySheet(
                                 else if (source.partial)
                                     Text(
                                         stringResource(R.string.activity_partial),
-                                        style = SettingsType.detail,
+                                        style = SettingsType.paneDetail,
                                         color = scheme.onSurfaceVariant,
                                     )
                             }
@@ -267,7 +265,7 @@ internal fun ActivitySheet(
                                             ) {
                                                 Text(
                                                     stringResource(R.string.mark_seen),
-                                                    style = SettingsType.detail,
+                                                    style = SettingsType.paneDetail,
                                                 )
                                             }
                                     }
@@ -289,11 +287,11 @@ internal fun ActivitySheet(
                                     if (sources.any { it.loading })
                                         stringResource(R.string.activity_checking)
                                     else stringResource(R.string.no_activity_to_show),
-                                    style = SettingsType.row,
+                                    style = SettingsType.paneTitle,
                                 )
                                 Text(
                                     stringResource(R.string.no_activity),
-                                    style = SettingsType.detail,
+                                    style = SettingsType.paneDetail,
                                     color = scheme.onSurfaceVariant,
                                 )
                             }
@@ -327,7 +325,7 @@ private fun ActivityIdentity(record: ActivityRecord, seen: Boolean, modifier: Mo
             Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     record.label,
-                    style = SettingsType.row,
+                    style = SettingsType.paneTitle,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -341,7 +339,7 @@ private fun ActivityIdentity(record: ActivityRecord, seen: Boolean, modifier: Mo
                         .filter { it.isNotBlank() }
                         .distinct()
                         .joinToString(" · "),
-                    style = SettingsType.detail,
+                    style = SettingsType.paneDetail,
                     color = scheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

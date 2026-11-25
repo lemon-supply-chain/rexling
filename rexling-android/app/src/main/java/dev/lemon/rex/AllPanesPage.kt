@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -27,6 +28,7 @@ internal fun SwitcherSearchField(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val searchStyle = SettingsType.paneTitle.copy(fontWeight = FontWeight.Normal)
     BasicTextField(
         query,
         onQuery,
@@ -35,7 +37,7 @@ internal fun SwitcherSearchField(
             .clip(RoundedCornerShape(12.dp))
             .background(colors.surfaceVariant.copy(alpha = .45f))
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        textStyle = SettingsType.row.copy(color = colors.onSurface),
+        textStyle = searchStyle.copy(color = colors.onSurface),
         singleLine = true,
         cursorBrush = SolidColor(colors.primary),
         decorationBox = { field ->
@@ -48,7 +50,7 @@ internal fun SwitcherSearchField(
                     if (query.isEmpty())
                         Text(
                             placeholder,
-                            style = SettingsType.row,
+                            style = searchStyle,
                             color = colors.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -115,7 +117,7 @@ internal fun AllPanesPage(
                 if (missedPane) stringResource(R.string.pane_unavailable_refresh)
                 else stringResource(R.string.pane_details_unavailable_refresh),
                 Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                style = SettingsType.detail,
+                style = SettingsType.paneDetail,
                 color = colors.onSurfaceVariant,
             )
         LazyColumn(
@@ -130,7 +132,7 @@ internal fun AllPanesPage(
                         else if (search.isBlank()) stringResource(R.string.no_panes_available)
                         else stringResource(R.string.no_matching_panes),
                         Modifier.padding(vertical = 16.dp),
-                        style = SettingsType.row,
+                        style = SettingsType.paneTitle,
                         color = colors.onSurfaceVariant,
                     )
                 }
@@ -156,7 +158,7 @@ internal fun AllPanesPage(
                         Text(
                             session.label,
                             Modifier.padding(start = 4.dp, top = 4.dp),
-                            style = SettingsType.detail,
+                            style = SettingsType.paneDetail,
                             color = colors.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -199,7 +201,7 @@ private fun PaneCatalogRow(target: PaneCatalogTarget, current: Boolean, onOpen: 
         Column(Modifier.weight(1f)) {
             Text(
                 target.title,
-                style = SettingsType.row,
+                style = SettingsType.paneTitle,
                 color = if (current) colors.onPrimaryContainer else colors.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -207,7 +209,7 @@ private fun PaneCatalogRow(target: PaneCatalogTarget, current: Boolean, onOpen: 
             if (target.pane.directory.isNotBlank())
                 Text(
                     target.pane.directory,
-                    style = SettingsType.detail,
+                    style = SettingsType.paneDetail,
                     color = colors.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -216,7 +218,7 @@ private fun PaneCatalogRow(target: PaneCatalogTarget, current: Boolean, onOpen: 
         target.activity?.let { status ->
             Text(
                 stringResource(status.labelRes),
-                style = SettingsType.detail,
+                style = SettingsType.paneDetail,
                 color = colors.onSurfaceVariant,
             )
         }

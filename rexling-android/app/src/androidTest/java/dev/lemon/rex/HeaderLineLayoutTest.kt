@@ -141,56 +141,60 @@ class HeaderLineLayoutTest {
                 SessionItem("a", "ShipPDF"),
             )
         ui.setContent {
-            MaterialTheme {
-                val haze = remember { HazeState() }
-                Column(Modifier.width(340.dp).height(150.dp)) {
-                    SessionHeader(
-                        SessionCatalog.strip(emptyList(), target),
-                        target.key,
-                        true,
-                        true,
-                        emptyList(),
-                        0,
-                        onSessions = { drawerOpens++ },
-                        onSelect = {},
-                        onLast = {},
-                        title = title,
-                        collapseForIme =
-                            if (compact != CompactHeaderMode.NEVER) WindowInsets(bottom = keyboard)
-                            else null,
-                        alwaysCompact = compact == CompactHeaderMode.ALWAYS,
-                        serverIcons = mapOf(target.key to ServerIcon.CLOUD),
-                        headerHaze = haze,
-                        onHeaderOverlap = { overlap = it },
-                        modifier = Modifier.testTag("header").zIndex(1f),
-                        menu = {
-                            ChromeButton(
-                                ChromeIcon.MORE,
-                                appString(R.string.terminal_menu),
-                            ) {
-                                menuOpens++
+            val density = LocalDensity.current.density
+            CompositionLocalProvider(LocalDensity provides Density(density, 1f)) {
+                MaterialTheme {
+                    val haze = remember { HazeState() }
+                    Column(Modifier.width(340.dp).height(150.dp)) {
+                        SessionHeader(
+                            SessionCatalog.strip(emptyList(), target),
+                            target.key,
+                            true,
+                            true,
+                            emptyList(),
+                            0,
+                            onSessions = { drawerOpens++ },
+                            onSelect = {},
+                            onLast = {},
+                            title = title,
+                            collapseForIme =
+                                if (compact != CompactHeaderMode.NEVER)
+                                    WindowInsets(bottom = keyboard)
+                                else null,
+                            alwaysCompact = compact == CompactHeaderMode.ALWAYS,
+                            serverIcons = mapOf(target.key to ServerIcon.CLOUD),
+                            headerHaze = haze,
+                            onHeaderOverlap = { overlap = it },
+                            modifier = Modifier.testTag("header").zIndex(1f),
+                            menu = {
+                                ChromeButton(
+                                    ChromeIcon.MORE,
+                                    appString(R.string.terminal_menu),
+                                ) {
+                                    menuOpens++
+                                }
+                            },
+                        )
+                        Box(
+                            Modifier.weight(1f)
+                                .fillMaxWidth()
+                                .underWorkspaceHeader { overlap }
+                                .hazeSource(haze),
+                        ) {
+                            Canvas(Modifier.fillMaxSize()) {
+                                drawRect(Color.Red)
+                                drawRect(
+                                    Color.Blue,
+                                    topLeft = Offset(size.width / 2f, 0f),
+                                    size = Size(size.width / 2f, size.height),
+                                )
                             }
-                        },
-                    )
-                    Box(
-                        Modifier.weight(1f)
-                            .fillMaxWidth()
-                            .underWorkspaceHeader { overlap }
-                            .hazeSource(haze),
-                    ) {
-                        Canvas(Modifier.fillMaxSize()) {
-                            drawRect(Color.Red)
-                            drawRect(
-                                Color.Blue,
-                                topLeft = Offset(size.width / 2f, 0f),
-                                size = Size(size.width / 2f, size.height),
-                            )
                         }
                     }
                 }
             }
         }
-        val header = ui.onNodeWithTag("header")
+        val header = ui.onNodeWithTag("header").assertHeightIsEqualTo(44.dp)
         val fullHeight = bounds(header).height
         val strip =
             ui.onNodeWithContentDescription(
@@ -207,7 +211,7 @@ class HeaderLineLayoutTest {
         assertEquals(fullHeight, bounds(header).height)
         ui.runOnIdle { compact = CompactHeaderMode.WITH_KEYBOARD }
         strip.assertIsNotDisplayed()
-        assertTrue(bounds(header).height < fullHeight)
+        header.assertHeightIsEqualTo(36.dp)
         val inCompact = hasAnyAncestor(hasTestTag("Compact session header"))
         ui.onNode(hasContentDescription("Cloud") and inCompact, useUnmergedTree = true)
             .assertIsDisplayed()
@@ -237,6 +241,7 @@ class HeaderLineLayoutTest {
         assertEquals(fullHeight, bounds(header).height)
         ui.runOnIdle { compact = CompactHeaderMode.ALWAYS }
         strip.assertDoesNotExist()
+        header.assertHeightIsEqualTo(36.dp)
         val compactHeight = bounds(header).height
         assertTrue(compactHeight < fullHeight)
         ui.onNode(hasText(title) and hasText(session) and inCompact).performTouchInput { click() }

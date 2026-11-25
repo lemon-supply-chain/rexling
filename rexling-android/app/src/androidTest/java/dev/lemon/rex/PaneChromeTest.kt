@@ -17,6 +17,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -493,7 +495,6 @@ class PaneChromeTest {
             width: androidx.compose.ui.unit.Dp,
             mode: String,
             vertical: Boolean,
-            sideRail: Boolean = true,
             capture: Boolean = true,
         ) {
             val rail =
@@ -515,13 +516,50 @@ class PaneChromeTest {
             val newTab =
                 ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
                     .assertIsDisplayed()
+            val tabBounds = tab.fetchSemanticsNode().boundsInRoot
+            val addBounds = newTab.fetchSemanticsNode().boundsInRoot
+            val railBounds = rail.fetchSemanticsNode().boundsInRoot
+            assertTrue(addBounds.bottom <= tabBounds.top)
+            val lastTab =
+                ui.onNodeWithContentDescription(
+                    appString(R.string.a11y_tab, "Reported progress", "Codex"),
+                    substring = true,
+                )
             assertTrue(
-                newTab.fetchSemanticsNode().boundsInRoot.bottom <=
-                    tab.fetchSemanticsNode().boundsInRoot.top,
+                railBounds.bottom - lastTab.fetchSemanticsNode().boundsInRoot.bottom <=
+                    with(ui.density) { 4.dp.toPx() },
             )
+            if (mode == "titles") {
+                val collapse =
+                    ui.onNodeWithContentDescription(appString(R.string.show_icons_only))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                val keyboard =
+                    ui.onNodeWithContentDescription(appString(R.string.a11y_show_keyboard))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                val activity =
+                    ui.onNodeWithContentDescription(appString(R.string.activity))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                assertEquals(
+                    railBounds.left + with(ui.density) { 26.dp.toPx() },
+                    collapse.center.x,
+                    1f,
+                )
+                assertTrue(collapse.right <= keyboard.left)
+                assertEquals(collapse.center.y, keyboard.center.y, 1f)
+                assertEquals(keyboard.center.y, activity.center.y, 1f)
+                val circle =
+                    ui.onNodeWithTag("Activity button surface", useUnmergedTree = true)
+                        .assertWidthIsEqualTo(activityButtonDiameter)
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                assertEquals(with(ui.density) { 6.dp.toPx() }, railBounds.right - circle.right, 1f)
+            }
             newTab.performClick()
             val pixels = tab.captureToImage().toPixelMap()
-            val markerX = (pixels.height * 6.5f / 48f).toInt()
+            val markerX = with(ui.density) { 6.5.dp.toPx() }.toInt()
             val rowCenter = pixels.height / 2
             assertNotEquals(
                 "The selected tab should have an inset marker",
@@ -568,20 +606,12 @@ class PaneChromeTest {
                     dot.top < paintedTop &&
                     dot.bottom > paintedTop,
             )
-            // The side rail leads with activity; the bottom bar leads with the keyboard.
             val descriptions =
-                if (sideRail)
-                    listOf(
-                        appString(R.string.activity),
-                        appString(R.string.a11y_tabs_and_panes),
-                        appString(R.string.a11y_show_keyboard),
-                    )
-                else
-                    listOf(
-                        appString(R.string.a11y_show_keyboard),
-                        appString(R.string.a11y_tabs_and_panes),
-                        appString(R.string.activity),
-                    )
+                listOf(
+                    appString(R.string.a11y_show_keyboard),
+                    appString(R.string.a11y_tabs_and_panes),
+                    appString(R.string.activity),
+                )
             val bounds = descriptions.map { description ->
                 val button = ui.onNodeWithContentDescription(description)
                 ui.awaitDisplayed(button)
@@ -589,7 +619,8 @@ class PaneChromeTest {
                 button.fetchSemanticsNode().boundsInRoot
             }
             if (vertical) {
-                assertTrue(bounds[0].top < bounds[1].top && bounds[1].top < bounds[2].top)
+                // Switcher above activity above keyboard in icons mode.
+                assertTrue(bounds[1].bottom <= bounds[2].top && bounds[2].bottom <= bounds[0].top)
             } else {
                 assertTrue(bounds[0].left < bounds[1].left && bounds[1].left < bounds[2].left)
             }
@@ -602,16 +633,34 @@ class PaneChromeTest {
                 .outputStream()
                 .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        check(152.dp, "titles", vertical = false)
-        ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).performClick()
+        check(172.dp, "titles", vertical = false)
+        val collapse = ui.onNodeWithContentDescription(appString(R.string.show_icons_only))
+        val expandedToggle = collapse.fetchSemanticsNode().boundsInRoot
+        collapse.performClick()
         check(52.dp, "icons", vertical = true)
-        ui.runOnIdle { sideRail.value = false }
-        // Ordering only: the two screenshots above already cover the visuals.
-        check(52.dp, "icons-bottom", vertical = true, sideRail = false, capture = false)
+        val expand = ui.onNodeWithContentDescription(appString(R.string.show_tab_titles))
+        val collapsedToggle = expand.fetchSemanticsNode().boundsInRoot
+        assertEquals(expandedToggle, collapsedToggle)
+        val collapsedRail =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertEquals(collapsedRail.center.x, collapsedToggle.center.x, 1f)
+        val activity =
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val keyboard =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_show_keyboard))
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertTrue(activity.bottom <= keyboard.top && keyboard.bottom <= collapsedToggle.top)
+        assertEquals(keyboard.center.x, collapsedToggle.center.x, 1f)
+        expand.performClick()
+        assertEquals(expandedToggle, collapse.fetchSemanticsNode().boundsInRoot)
         ui.runOnIdle {
             assertEquals(
-                List(2) { listOf("new tab", "activity", "switcher", "keyboard") }.flatten() +
-                    listOf("new tab", "keyboard", "switcher", "activity"),
+                List(2) { listOf("new tab", "keyboard", "switcher", "activity") }.flatten(),
                 actions,
             )
         }
@@ -672,5 +721,149 @@ class PaneChromeTest {
         ui.onNodeWithContentDescription(tabPrefix(11), substring = true).assertIsDisplayed()
         newTab.assertIsDisplayed().performClick()
         ui.runOnIdle { assertEquals(1, created) }
+    }
+
+    @Test
+    fun wideSidebarSwitchesBetweenTabsAndSessionsWithoutResizingTheTerminal() {
+        val mac = ServerProfile.create("MacBook", "https://mac.example", "mac")
+        val remote = ServerProfile.create("Shipyard", "https://remote.example", "remote")
+        val localSession = SessionTarget(mac, SessionItem("shared-id", "Local work"))
+        val remoteSession = SessionTarget(remote, SessionItem("shared-id", "Remote work"))
+        var windowWidth by mutableIntStateOf(800)
+        var overlap by mutableIntStateOf(0)
+        var side by mutableStateOf(TabBarPosition.LEFT)
+        var current by mutableStateOf(localSession.key)
+        val selectedSessions = mutableListOf<String>()
+        ui.setContent {
+            MaterialTheme {
+                var style by remember { mutableStateOf(TabRailStyle.TITLES) }
+                val rail: @Composable () -> Unit = {
+                    TerminalTabRail(
+                        listOf(WindowItem("tab", "Shell workspace", emptyList())),
+                        "tab",
+                        true,
+                        {},
+                        { listOf(ProgramIdentity.resolve(listOf("fish"))) },
+                        { 0 },
+                        side,
+                        style,
+                        onStyle = { style = it },
+                        onNewTab = {},
+                        windowWidthDp = windowWidth,
+                        sessions =
+                            TabRailSessions(listOf(localSession, remoteSession), current) {
+                                selectedSessions += it
+                                current = it
+                            },
+                        headerOverlap = { overlap },
+                    ) {}
+                }
+                Row(Modifier.size(360.dp, 420.dp).underWorkspaceHeader { overlap }) {
+                    if (side == TabBarPosition.LEFT) rail()
+                    Box(Modifier.weight(1f).fillMaxSize().testTag("Terminal area"))
+                    if (side == TabBarPosition.RIGHT) rail()
+                }
+            }
+        }
+        val tabs = ui.onNodeWithText(appString(R.string.section_tabs))
+        val sessions = ui.onNodeWithText(appString(R.string.sessions))
+        val terminal = ui.onNodeWithTag("Terminal area")
+        val tabsList = ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+        val activeTab =
+            ui.onNodeWithContentDescription(
+                appString(R.string.a11y_tab, "Shell workspace", "Fish"),
+                substring = true,
+                ignoreCase = true,
+            )
+        val newTab = ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
+        fun bounds(node: SemanticsNodeInteraction) = node.fetchSemanticsNode().boundsInRoot
+        tabs.assertIsDisplayed().assertIsSelected()
+        fun assertSidebarText(node: SemanticsNodeInteraction, weight: FontWeight) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { get ->
+                assertTrue(get(layouts))
+            }
+            assertEquals(11.sp, layouts.single().layoutInput.style.fontSize)
+            assertEquals(weight, layouts.single().layoutInput.style.fontWeight)
+        }
+        assertSidebarText(
+            ui.onNodeWithText(appString(R.string.section_tabs), useUnmergedTree = true),
+            FontWeight.SemiBold,
+        )
+        assertSidebarText(
+            ui.onNodeWithText("Shell workspace", useUnmergedTree = true),
+            FontWeight.SemiBold,
+        )
+        tabsList.assertWidthIsEqualTo(200.dp)
+        assertTrue(bounds(activeTab).top - bounds(tabsList).top <= with(ui.density) { 4.dp.toPx() })
+        assertTrue(bounds(activeTab).bottom <= bounds(newTab).top)
+        val terminalBounds = terminal.fetchSemanticsNode().boundsInRoot
+        sessions.performClick().assertIsSelected()
+        assertEquals(terminalBounds, terminal.fetchSemanticsNode().boundsInRoot)
+        ui.onNodeWithText("MacBook").assertIsDisplayed()
+        ui.onNodeWithText("Shipyard").assertIsDisplayed()
+        ui.onNodeWithText("Local work").assertIsSelected()
+        assertSidebarText(
+            ui.onNodeWithText("Local work", useUnmergedTree = true),
+            FontWeight.SemiBold,
+        )
+        ui.onNodeWithText("Remote work").assertIsNotSelected().performClick()
+        tabs.assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.label_new_tab)).assertIsDisplayed()
+        ui.runOnIdle { assertEquals(listOf(remoteSession.key), selectedSessions) }
+        sessions.performClick()
+        ui.onNodeWithText("Remote work").assertIsSelected()
+        val tabTop = tabs.fetchSemanticsNode().boundsInRoot.top
+        ui.runOnIdle { overlap = 96 }
+        assertEquals(tabTop, tabs.fetchSemanticsNode().boundsInRoot.top, 1f)
+        ui.runOnIdle { overlap = 0 }
+
+        tabs.performClick()
+        val expandedTop = bounds(activeTab).top
+        ui.mainClock.autoAdvance = false
+        ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).performClick()
+        ui.mainClock.advanceTimeBy(96)
+        val movingTop = bounds(activeTab).top
+        ui.mainClock.advanceTimeBy(1000)
+        val collapsedTop = bounds(activeTab).top
+        ui.mainClock.autoAdvance = true
+        assertTrue(
+            "The tab should travel toward its collapsed position: $expandedTop, $movingTop, $collapsedTop",
+            movingTop > expandedTop && movingTop < collapsedTop,
+        )
+        sessions.assertDoesNotExist()
+        tabsList.assertWidthIsEqualTo(52.dp)
+        ui.onNodeWithContentDescription(appString(R.string.show_tab_titles)).performClick()
+        tabs.assertIsSelected()
+        ui.runOnIdle { windowWidth = 1000 }
+        tabsList.assertWidthIsEqualTo(240.dp)
+        for ((width, railWidth) in
+            listOf(759 to 189.75.dp, 720 to 180.dp, 440 to 172.dp, 439 to 172.dp)) {
+            ui.runOnIdle { windowWidth = width }
+            sessions.assertDoesNotExist()
+            tabsList.assertWidthIsEqualTo(railWidth)
+            assertTrue(bounds(newTab).bottom <= bounds(activeTab).top)
+            assertTrue(
+                bounds(tabsList).bottom - bounds(activeTab).bottom <=
+                    with(ui.density) { 4.dp.toPx() },
+            )
+        }
+        ui.runOnIdle {
+            side = TabBarPosition.RIGHT
+            windowWidth = 800
+        }
+        val collapse = ui.onNodeWithContentDescription(appString(R.string.show_icons_only))
+        val rightToggle = bounds(collapse)
+        assertEquals(
+            bounds(tabsList).right - with(ui.density) { 26.dp.toPx() },
+            rightToggle.center.x,
+            1f,
+        )
+        collapse.performClick()
+        val expand = ui.onNodeWithContentDescription(appString(R.string.show_tab_titles))
+        assertEquals(rightToggle, bounds(expand))
+        assertEquals(bounds(tabsList).center.x, bounds(expand).center.x, 1f)
+        expand.performClick()
+        assertEquals(rightToggle, bounds(collapse))
     }
 }

@@ -1071,6 +1071,14 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 },
                                 extendUnderNav = extendUnderNav,
                                 onNewTab = client::createTab,
+                                windowWidthDp = tabWidth.second,
+                                sessions =
+                                    TabRailSessions(
+                                        model.sessionTargets,
+                                        currentSessionKey,
+                                        model::selectSessionTarget,
+                                    ),
+                                headerOverlap = currentHeaderOverlap,
                                 floating = floatingTabs,
                                 hazeState = terminalHaze,
                                 handle = handle,
@@ -2348,7 +2356,7 @@ internal fun SessionsPage(
                 ) {
                     Text(
                         stringResource(R.string.all_panes),
-                        style = SettingsType.section,
+                        style = SettingsType.paneDetail,
                         maxLines = 1,
                     )
                 }
@@ -2366,7 +2374,7 @@ internal fun SessionsPage(
                         if (targets.isEmpty()) stringResource(R.string.no_sessions_yet)
                         else stringResource(R.string.no_matching_sessions),
                         Modifier.padding(vertical = 16.dp),
-                        style = SettingsType.row,
+                        style = SettingsType.paneTitle,
                         color = scheme.onSurfaceVariant,
                     )
                 }
@@ -2388,7 +2396,7 @@ internal fun SessionsPage(
                         )
                         Text(
                             group.sessions.size.toString(),
-                            style = SettingsType.detail,
+                            style = SettingsType.paneDetail,
                             color = scheme.onSurfaceVariant,
                         )
                     }
@@ -2416,7 +2424,7 @@ internal fun SessionsPage(
                 error,
                 Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 color = scheme.error,
-                style = SettingsType.detail,
+                style = SettingsType.paneDetail,
             )
     }
     renameTarget?.let { target ->

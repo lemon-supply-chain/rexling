@@ -194,21 +194,26 @@ class ActivitySheetTest {
                 "Session s",
                 "Linux",
             )
+        val title = ui.onNodeWithText("Review", useUnmergedTree = true)
+        val context =
+            ui.onNode(
+                hasText("Session s · Tab") and
+                    hasAnyAncestor(hasContentDescription(rowDescription)),
+                useUnmergedTree = true,
+            )
+        ui.onNodeWithText(appString(R.string.activity), useUnmergedTree = true)
+            .assertPaneTitleTypography()
+        ui.onNodeWithText(appString(R.string.filter_attention), useUnmergedTree = true)
+            .assertPaneTitleTypography()
+        title.assertPaneTitleTypography()
+        context.assertPaneDetailTypography()
         fun textBounds() =
-            ui.onNodeWithText("Review", useUnmergedTree = true)
+            title
                 .fetchSemanticsNode()
                 .boundsInRoot
-                .let { title ->
-                    val context =
-                        ui.onNode(
-                                hasText("Session s · Tab") and
-                                    hasAnyAncestor(hasContentDescription(rowDescription)),
-                                useUnmergedTree = true,
-                            )
-                            .fetchSemanticsNode()
-                            .boundsInRoot
-                    title.copy(bottom = context.bottom)
-                }
+                .copy(
+                    bottom = context.fetchSemanticsNode().boundsInRoot.bottom,
+                )
         val before = textBounds()
         val row = ui.onNodeWithContentDescription(rowDescription).fetchSemanticsNode().boundsInRoot
         assertEquals(

@@ -715,7 +715,7 @@ internal fun SessionHeader(
     val previousSessionLabel = stringResource(R.string.a11y_previous_session)
     val sessionStripDescription = stringResource(R.string.a11y_session_strip)
     val marquee = rememberRainbowMarquee(anyWorking)
-    val titleHeight = with(LocalDensity.current) { 16.sp.toDp() }
+    val titleHeight = with(LocalDensity.current) { SettingsType.paneTitle.lineHeight.toDp() }
     val sessionHeight = maxOf(17.dp, with(LocalDensity.current) { 14.sp.toDp() })
     val lineStyle =
         androidx.compose.ui.text.TextStyle(
@@ -724,12 +724,9 @@ internal fun SessionHeader(
                 LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
         )
     val headingStyle =
-        lineStyle.copy(
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
-            lineHeight = 16.sp,
-            letterSpacing = 0.sp,
-        )
+        lineStyle
+            .merge(SettingsType.paneTitle)
+            .copy(fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
     val contextStyle =
         lineStyle.copy(
             fontSize = 11.sp,
@@ -1066,7 +1063,7 @@ internal fun SessionHeader(
             val serverIcon = serverIcons[selectedId] ?: ServerIcon.GLOBE
             Row(
                 Modifier.weight(1f)
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 36.dp)
                     .padding(start = 9.dp)
                     .combinedClickable(
                         role = Role.Button,
@@ -1797,6 +1794,8 @@ internal fun TerminalTabs(
     }
 }
 
+internal val activityButtonDiameter = 41.dp
+
 @Composable
 internal fun TerminalActions(
     enabled: Boolean,
@@ -1807,12 +1806,13 @@ internal fun TerminalActions(
     keyboardLabel: String = "",
     onKeyboard: (() -> Unit)? = null,
     vertical: Boolean = false,
-    sideRail: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") sideRail: Boolean = false,
 ) {
     val activityDescription = stringResource(R.string.activity)
     val activityState =
         if (attentionCount > 0) stringResource(R.string.a11y_activity_new_items, attentionCount)
         else stringResource(R.string.a11y_activity_all_seen)
+    // The icon-only side rail stacks these actions.
     @Composable
     fun Group(content: @Composable () -> Unit) =
         if (vertical)
@@ -1823,11 +1823,24 @@ internal fun TerminalActions(
                 content()
             }
         else
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                content()
+            BoxWithConstraints {
+                val buttonCount = if (onKeyboard == null) 1 else 2
+                val spacing =
+                    if (constraints.hasBoundedWidth)
+                        with(LocalDensity.current) {
+                            val buttonWidth =
+                                36.dp.roundToPx() * buttonCount + activityButtonDiameter.roundToPx()
+                            ((constraints.maxWidth - buttonWidth) / buttonCount)
+                                .coerceIn(0, 4.dp.roundToPx())
+                                .toDp()
+                        }
+                    else 4.dp
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                ) {
+                    content()
+                }
             }
     val keyboardButton: @Composable () -> Unit = {
         if (onKeyboard != null)
@@ -1843,7 +1856,10 @@ internal fun TerminalActions(
         )
     }
     val activityButton: @Composable () -> Unit = {
-        Box(Modifier.size(41.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(activityButtonDiameter).testTag("Activity button surface"),
+            contentAlignment = Alignment.Center,
+        ) {
             Box(
                 Modifier.matchParentSize()
                     .clip(RoundedCornerShape(23.dp))
@@ -1886,15 +1902,11 @@ internal fun TerminalActions(
         }
     }
     Group {
-        if (sideRail) {
-            activityButton()
-            switcherButton()
-            keyboardButton()
-        } else {
-            keyboardButton()
-            switcherButton()
-            activityButton()
-        }
+        // Stands in for the key toolbar's keyboard button while the toolbar is hidden.
+        if (!vertical) keyboardButton()
+        switcherButton()
+        activityButton()
+        if (vertical) keyboardButton()
     }
 }
 

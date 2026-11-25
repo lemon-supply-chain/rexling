@@ -117,6 +117,20 @@ class SessionSwitcherTest {
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_session_strip)).assertDoesNotExist()
         ui.onNodeWithText("Rexling development").assertIsDisplayed()
+        for (label in
+            listOf(
+                appString(R.string.sessions),
+                appString(R.string.section_tabs),
+                appString(R.string.section_panes),
+                "Rexling development",
+            )) {
+            ui.onNodeWithText(label, useUnmergedTree = true).assertPaneTitleTypography()
+        }
+        ui.onNodeWithText(
+                appString(R.string.session_details_format, "this device", 2, 4),
+                useUnmergedTree = true,
+            )
+            .assertPaneDetailTypography()
         ui.onNodeWithText("Ubuntu server").assertIsDisplayed()
         capture("sessions-compact-dark.png")
         val before = ui.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
@@ -275,6 +289,8 @@ class SessionSwitcherTest {
         ui.onNodeWithText(appString(R.string.all_panes)).performClick()
         ui.onNodeWithText("Shulhi MBP").assertIsDisplayed()
         ui.onNodeWithText("Local task").assertIsDisplayed()
+        ui.onNodeWithText("Local task", useUnmergedTree = true).assertPaneTitleTypography()
+        ui.onNodeWithText("~/Dev/rexling", useUnmergedTree = true).assertPaneDetailTypography()
         ui.onNode(hasSetTextAction()).performTextReplacement("infra/builds")
         ui.onNodeWithText("Local task").assertDoesNotExist()
         ui.onNodeWithText("Ubuntu server").assertIsDisplayed()
