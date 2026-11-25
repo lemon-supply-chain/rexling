@@ -187,6 +187,16 @@ fn visible_terminal(window: &Value) -> Option<&str> {
         })
 }
 
+/// The grid a client carries with a pane switch, clamped to the terminal's limits.
+fn pane_size(value: &Value) -> Option<(u16, u16)> {
+    match (value["columns"].as_u64(), value["rows"].as_u64()) {
+        (Some(columns), Some(rows)) if columns > 0 && rows > 0 => {
+            Some((columns.clamp(1, 512) as u16, rows.clamp(1, 256) as u16))
+        }
+        _ => None,
+    }
+}
+
 fn visible_target(windows: &Value, block: String) -> String {
     let Some((window, _)) = minimized_pane(windows, &block) else {
         return block;
@@ -1508,7 +1518,7 @@ impl Actor {
                 if !self.selected_block.is_empty() {
                     self.release_selected().await?;
                 }
-                self.open_block_stream(String::new(), false).await?;
+                self.open_block_stream(String::new(), false, None).await?;
                 self.awaiting_pane_selection = true;
                 self.error =
                     "Floating panes are changing on another client. Choose a pane to continue."
@@ -1517,7 +1527,7 @@ impl Actor {
                 break;
             }
             let block = visible_target(&self.windows, self.selected_block.clone());
-            self.open_block_stream(block, true).await?;
+            self.open_block_stream(block, true, None).await?;
             switched_pane = true;
             if self.selected_block.is_empty() {
                 break;
@@ -2371,7 +2381,7 @@ impl Actor {
                     .call("session.list", json!({}))
                     .await?["sessions"]
                     .clone();
-                self.open_block(block).await?;
+                self.open_block(block, None).await?;
                 self.creating = false;
                 self.publish();
             }
@@ -2399,7 +2409,7 @@ impl Actor {
                 self.refresh_view().await?;
                 if value["type"] == "float_pane" && value["focus"] == true {
                     let block = value["id"].as_str().context("pane ID required")?.to_owned();
-                    self.open_block_with_layout(block, true).await?;
+                    self.open_block_with_layout(block, true, None).await?;
                 }
             }
             "move_tab" => {
@@ -2541,7 +2551,7 @@ impl Actor {
                     if value["restoreMinimized"] == true {
                         self.restore_minimized(block).await?;
                     }
-                    self.open_block(block.to_owned()).await?;
+                    self.open_block(block.to_owned(), pane_size(&value)).await?;
                 }
                 self.publish();
             }
@@ -2554,7 +2564,9 @@ impl Actor {
                 if value["restoreMinimized"] == true {
                     self.restore_minimized(&block).await?;
                 }
-                self.open_block_with_layout(block, value["keepTiled"] == true)
+                // The client's current grid rides along with the switch, so the incoming
+                // pane is already sized for this layout before its stream opens.
+                self.open_block_with_layout(block, value["keepTiled"] == true, pane_size(&value))
                     .await?;
             }
             "close_tab" | "close_pane" => {
@@ -2671,7 +2683,7 @@ impl Actor {
                         .and_then(|b| b["id"].as_str())
                         .map(str::to_owned);
                     if let Some(block) = fallback {
-                        self.open_block(block).await?;
+                        self.open_block(block, None).await?;
                     }
                 }
                 self.creating = false;
@@ -2719,7 +2731,7 @@ impl Actor {
                 if keep_tiled {
                     self.refresh_view().await?;
                 }
-                self.open_block_with_layout(block, keep_tiled).await?;
+                self.open_block_with_layout(block, keep_tiled, None).await?;
                 self.creating = false;
                 self.publish();
             }
@@ -3035,8 +3047,8 @@ impl Actor {
         }
         Ok(())
     }
-    async fn open_block(&mut self, block: String) -> Result<()> {
-        self.open_block_with_layout(block, false).await
+    async fn open_block(&mut self, block: String, size: Option<(u16, u16)>) -> Result<()> {
+        self.open_block_with_layout(block, false, size).await
     }
     async fn restore_minimized(&mut self, block: &str) -> Result<()> {
         if let Some((_, pane)) = minimized_pane(&self.windows, block) {
@@ -3063,14 +3075,20 @@ impl Actor {
         }
         Ok(())
     }
-    async fn open_block_with_layout(&mut self, block: String, keep_tiled: bool) -> Result<()> {
+    async fn open_block_with_layout(
+        &mut self,
+        block: String,
+        keep_tiled: bool,
+        size: Option<(u16, u16)>,
+    ) -> Result<()> {
         ensure!(!self.selected_session.is_empty(), "Choose a session first");
         let block = visible_target(&self.windows, block);
         if self.selected_block == block && self.data.is_some() && self.replica.is_some() {
             self.publish();
             return Ok(());
         }
-        self.open_block_stream(block.clone(), keep_tiled).await?;
+        self.open_block_stream(block.clone(), keep_tiled, size)
+            .await?;
         self.refresh_view().await?;
         if self.controlled && self.selected_block == block {
             // Returning to an owned pane skips take_selected, so restore its keyboard focus here.
@@ -3079,7 +3097,12 @@ impl Actor {
         Ok(())
     }
 
-    async fn open_block_stream(&mut self, block: String, keep_tiled: bool) -> Result<()> {
+    async fn open_block_stream(
+        &mut self,
+        block: String,
+        keep_tiled: bool,
+        size: Option<(u16, u16)>,
+    ) -> Result<()> {
         let minimized = minimized_pane(&self.windows, &self.selected_block).is_some();
         let window = pane_window(&self.windows, &self.selected_block);
         let same_tab = window.is_some_and(|w| {
@@ -3187,6 +3210,23 @@ impl Actor {
             self.replica = None;
             self.notice = "Choose a terminal".into();
             return Ok(());
+        }
+        if let Some((columns, rows)) = size {
+            // Size the pane before its stream opens. The server applies this at once when
+            // the client owns the block or nobody does, and otherwise defers it until this
+            // client takes over, so a switch never shows the previous layout's grid.
+            let session = self.selected_session.clone();
+            let block = self.selected_block.clone();
+            self.control
+                .as_mut()
+                .context("not connected")?
+                .terminal(
+                    &session,
+                    &block,
+                    "resize",
+                    json!({"columns": columns, "rows": rows}),
+                )
+                .await?;
         }
         if let Some(pane) = restored {
             self.replica = Some(pane.replica);
@@ -4493,6 +4533,73 @@ mod tests {
                 .block_on(desktop.call("session.destroy", json!({"session_id":session})))
                 .unwrap();
         }
+        runtime.block_on(desktop.close()).unwrap();
+        result.unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires an explicitly supplied owned Rex server"]
+    fn live_block_switches_size_the_incoming_pane_before_its_stream() {
+        let server = std::env::var("REX_TEST_SERVER").expect("set REX_TEST_SERVER");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let mut desktop = runtime
+            .block_on(Control::connect(
+                Endpoint::new(&server, Duration::from_secs(10)).unwrap(),
+                None,
+                Trace::default(),
+            ))
+            .unwrap();
+        let window = json!({"layout":{"block":{"flavor":"com.superlogical.terminal.shell"}}});
+        let created = runtime
+            .block_on(desktop.call(
+                "session.create",
+                json!({
+                    "label":format!("rexling-switch-size-test-{}", std::process::id()),
+                    "initial_windows":[window, window]
+                }),
+            ))
+            .unwrap();
+        let session = created["session_id"].as_str().unwrap();
+        let first = created["initial_windows"][0]["block_ids"][0]
+            .as_str()
+            .unwrap();
+        let second = created["initial_windows"][1]["block_ids"][0]
+            .as_str()
+            .unwrap();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            runtime.block_on(desktop.attach(session)).unwrap();
+            let app = Session::spawn().unwrap();
+            app.command(json!({"type":"connect","server":server}))
+                .unwrap();
+            wait(&app, |v| v["phase"] == "connected");
+            app.command(json!({
+                "type":"session","id":session,"block":first,"navigationId":1,
+                "columns":61,"rows":23
+            }))
+            .unwrap();
+            let opened = wait(&app, |v| {
+                v["selectedBlock"] == first && v["screen"].is_object()
+            });
+            assert_eq!(opened["screen"]["columns"], 61);
+            assert_eq!(opened["screen"]["rows"], 23);
+            app.command(json!({
+                "type":"block","id":second,"navigationId":2,"columns":71,"rows":27
+            }))
+            .unwrap();
+            let switched = wait(&app, |v| {
+                v["selectedBlock"] == second && v["screen"].is_object()
+            });
+            assert_eq!(switched["controlled"], false);
+            assert_eq!(switched["screen"]["columns"], 71);
+            assert_eq!(switched["screen"]["rows"], 27);
+        }));
+        runtime.block_on(desktop.attach(session)).unwrap();
+        runtime
+            .block_on(desktop.call("session.destroy", json!({"session_id":session})))
+            .unwrap();
         runtime.block_on(desktop.close()).unwrap();
         result.unwrap();
     }

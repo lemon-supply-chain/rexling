@@ -855,6 +855,16 @@ internal class RexConnection(
         return true
     }
 
+    /** The current grid rides along with a pane switch, so the incoming stream opens at it. */
+    private fun gridArgs(vararg args: Pair<String, Any>): Array<Pair<String, Any>> {
+        val list = args.toMutableList()
+        if (lastSize.first > 0 && lastSize.second > 0) {
+            list += "columns" to lastSize.first
+            list += "rows" to lastSize.second
+        }
+        return list.toTypedArray()
+    }
+
     /** A pane shown beside the focused one in the multi-pane layout, and the grid that fits it. */
     internal data class MirrorPane(val block: String, val columns: Int, val rows: Int)
 
@@ -1023,12 +1033,16 @@ internal class RexConnection(
         restoreWorkspace = false
         workspace.remember(current.selectedSession, current.windows, id)
         if (grid != null) lastSize = grid
+        // Carry the grid with the switch, so the incoming pane is already sized for the
+        // current layout instead of showing the size it had while the rail was docked.
         command(
             "block",
-            "id" to id,
-            "navigationId" to navigationRequest.id,
-            "keepTiled" to keepTiled,
-            "restoreMinimized" to restoreMinimized,
+            *gridArgs(
+                "id" to id,
+                "navigationId" to navigationRequest.id,
+                "keepTiled" to keepTiled,
+                "restoreMinimized" to restoreMinimized,
+            ),
         )
     }
 
@@ -1052,9 +1066,11 @@ internal class RexConnection(
             NavigationRequest(session = session, block = block, id = ++navigationSerial)
         command(
             "session",
-            "id" to session,
-            "block" to block,
-            "navigationId" to navigationRequest.id,
+            *gridArgs(
+                "id" to session,
+                "block" to block,
+                "navigationId" to navigationRequest.id,
+            ),
         )
     }
 

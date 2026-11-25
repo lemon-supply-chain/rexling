@@ -622,7 +622,7 @@ async fn minimized_floating_terminal_reopens_live_without_another_snapshot() {
     actor.controlled = false; // Viewing must never take ownership.
     actor.refresh_view().await.unwrap();
     let nonce = actor.data.as_ref().unwrap().nonce;
-    actor.open_block("block:tiled".into()).await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
     assert_eq!(
         actor.retained_floating.as_ref().unwrap().block,
         "block:test"
@@ -639,7 +639,7 @@ async fn minimized_floating_terminal_reopens_live_without_another_snapshot() {
         .iter()
         .filter(|m| m.as_str() == "data.connect")
         .count();
-    actor.open_block("block:test".into()).await.unwrap();
+    actor.open_block("block:test".into(), None).await.unwrap();
     assert_eq!(actor.data.as_ref().unwrap().nonce, nonce);
     assert!(
         actor
@@ -666,7 +666,7 @@ async fn minimized_floating_terminal_reopens_live_without_another_snapshot() {
     );
     // Recovery must never reuse a stream from the old connection.
     actor.controlled = false;
-    actor.open_block("block:tiled".into()).await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
     assert!(actor.retained_floating.is_some());
     actor.lose_connections();
     assert!(actor.retained_floating.is_none());
@@ -678,7 +678,7 @@ async fn opening_a_floating_overlay_keeps_the_tiled_stream_for_return_focus() {
     let (mut actor, _) = peer.actor(8, true).await;
     actor.controlled = false;
     actor.refresh_view().await.unwrap();
-    actor.open_block("block:tiled".into()).await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
     let count_data_opens = || {
         peer.methods
             .lock()
@@ -719,7 +719,7 @@ async fn retained_floating_stream_consumes_hidden_output_without_publishing_or_c
     let peer = Peer::with_floating(Duration::ZERO, false, false, true).await;
     let (mut actor, shared) = peer.actor(8, true).await;
     actor.refresh_view().await.unwrap();
-    actor.open_block("block:tiled".into()).await.unwrap();
+    actor.open_block("block:tiled".into(), None).await.unwrap();
     let before = peer
         .methods
         .lock()
