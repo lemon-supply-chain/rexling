@@ -115,6 +115,7 @@ internal fun TabPaneSwitcher(
         )
     }
     val drawerSurface = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
+    val closeSwitcherDescription = stringResource(R.string.a11y_close_tab_and_pane_switcher)
     if (dock == null)
         DrawerSheet(onClose) { dismiss ->
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -129,11 +130,12 @@ internal fun TabPaneSwitcher(
                     DrawerHandle(dismiss)
                     Column(Modifier.fillMaxWidth().weight(1f).padding(bottom = 4.dp)) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Row(
-                                Modifier.fillMaxWidth()
+                                Modifier.weight(1f)
                                     .height(48.dp)
                                     .background(
                                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f),
@@ -188,6 +190,15 @@ internal fun TabPaneSwitcher(
                                             )
                                         }
                                     }
+                            }
+                            IconButton(
+                                onClick = dismiss,
+                                modifier =
+                                    Modifier.semantics {
+                                        contentDescription = closeSwitcherDescription
+                                    },
+                            ) {
+                                ChromeSymbol(ChromeIcon.CLOSE, Modifier.size(18.dp))
                             }
                         }
                         if (error.isNotBlank())

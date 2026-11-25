@@ -109,6 +109,10 @@ class TabPaneSwitcherTest {
         row(appString(R.string.a11y_pane_title, "fish")).performTouchInput { click() }
         ui.onNodeWithText("Open pane").assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("tab:w2", "pane:a"), calls) }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_close_tab_and_pane_switcher))
+            .performClick()
+        ui.waitUntil(5_000) { ui.runOnUiThread { "dismiss" in calls } }
+        ui.runOnIdle { assertEquals(listOf("tab:w2", "pane:a", "dismiss"), calls) }
     }
 
     @Test
