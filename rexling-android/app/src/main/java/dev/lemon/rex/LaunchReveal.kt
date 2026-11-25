@@ -12,6 +12,7 @@ import android.view.View
 import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
+import androidx.core.animation.doOnCancel
 import androidx.core.animation.doOnEnd
 import kotlin.math.hypot
 
@@ -62,13 +63,26 @@ internal fun Activity.installLaunchReveal() {
         )
         icon.visibility = View.INVISIBLE
 
-        ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 560L
-            interpolator = LinearInterpolator()
-            addUpdateListener { paper.progress = it.animatedFraction }
-            doOnEnd { splash.remove() }
-            start()
-        }
+        var cancelled = false
+        val animator =
+            ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 560L
+                interpolator = LinearInterpolator()
+                addUpdateListener { paper.progress = it.animatedFraction }
+                doOnCancel { cancelled = true }
+                doOnEnd { if (!cancelled) splash.remove() }
+            }
+        paper.addOnAttachStateChangeListener(
+            object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) = Unit
+
+                override fun onViewDetachedFromWindow(v: View) {
+                    v.removeOnAttachStateChangeListener(this)
+                    animator.cancel()
+                }
+            },
+        )
+        animator.start()
     }
 }
 
