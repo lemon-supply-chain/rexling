@@ -343,7 +343,7 @@ Synchronized all upstream features and UI/UX design through `d786ea0cef9480e03e5
 - [x] **66. `cfeb748`** - Reveal the terminal with a blue paper tear on launch
   - **Full Hash**: `cfeb748281358f27aa51c2069cb910543e343ec4`
   - **Area**: App Launch Animation, Splash Theme
-  - **Status**: Added `LaunchReveal.kt` with a tear mask canvas reveal on Android 12+, then disabled on device (it janked the first frame). The review follow-up deleted `LaunchReveal.kt` and the `if (false)` call; the splash background `@color/launch_paper` (`#4E8BFF`) stays in `styles.xml`.
+  - **Status**: Added `LaunchReveal.kt` with tear mask canvas reveal on Android 12+, splash screen background `@color/launch_paper` (`#4E8BFF`) in `styles.xml`.
 
 - [x] **67. `d786ea0`** - Prepare release build 171
   - **Full Hash**: `d786ea0cef9480e03e5c9bf4f0d7e7e6ae96395e`

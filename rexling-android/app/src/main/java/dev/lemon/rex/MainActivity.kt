@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) installLaunchReveal()
         // The stored in-app appearance decides the window colour before Compose draws,
         // so a light appearance does not flash the dark theme's background.
         window.setBackgroundDrawable(
