@@ -1568,14 +1568,15 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                     }
                                                     .orEmpty()
                                             }
+                                        val barOrientation =
+                                            if (tabLayout.side) Orientation.Vertical
+                                            else Orientation.Horizontal
                                         TabStackFan(
                                             visible = fannedWindow != null && !paneObscured,
                                             items = fanItems,
                                             anchorBounds = fanAnchorBounds,
                                             barBounds = fanBarBounds,
-                                            preferredAxis =
-                                                if (tabLayout.side) Orientation.Vertical
-                                                else Orientation.Horizontal,
+                                            preferredAxis = barOrientation,
                                             onSelect = { blockId ->
                                                 fannedTabId = null
                                                 openPane(blockId)
@@ -1589,9 +1590,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                         model.moveFloatingTab(it)
                                                     },
                                                     Modifier.fillMaxSize(),
-                                                    // Only the left and right rails tuck themselves
-                                                    // away.
-                                                    hideAtEdges = tabLayout.side,
+                                                    hideAtEdges = true,
+                                                    barOrientation = barOrientation,
+                                                    topOcclusion = currentHeaderOverlap,
                                                     keepVisible =
                                                         (fannedWindow != null && !paneObscured) ||
                                                             floatingTabMenuOpen,

@@ -12,6 +12,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -29,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -40,6 +42,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -58,18 +61,53 @@ private const val FloatingTabBarIdleHideMillis = 4_000L
 /** The grip's touch target; it rides in the bar's own row or column. */
 internal val FloatingTabBarHandle = 40.dp
 
-private enum class FloatingEdge {
-    LEFT,
-    RIGHT,
+private enum class FloatingEdge(val vertical: Boolean, val rotation: Float) {
+    LEFT(vertical = false, rotation = -90f),
+    RIGHT(vertical = false, rotation = 90f),
+    TOP(vertical = true, rotation = 0f),
+    BOTTOM(vertical = true, rotation = 180f);
+
+    fun shape(radius: Dp) =
+        when (this) {
+            LEFT -> RoundedCornerShape(topEnd = radius, bottomEnd = radius)
+            RIGHT -> RoundedCornerShape(topStart = radius, bottomStart = radius)
+            TOP -> RoundedCornerShape(bottomStart = radius, bottomEnd = radius)
+            BOTTOM -> RoundedCornerShape(topStart = radius, topEnd = radius)
+        }
 }
+
+private fun nearestEdge(
+    pos: Float,
+    barSize: Int,
+    areaSize: Float,
+    fraction: Float,
+    margin: Float,
+    edgeZone: Float,
+    start: FloatingEdge,
+    end: FloatingEdge,
+): FloatingEdge? {
+    val distStart = pos - margin
+    val distEnd = (areaSize - margin) - (pos + barSize)
+    return when {
+        distStart <= edgeZone &&
+            (distStart < distEnd || (distStart == distEnd && fraction < .5f)) -> start
+        distEnd <= edgeZone -> end
+        else -> null
+    }
+}
+
+private fun centeredOffset(barPos: Float, barSize: Int, expandSize: Float, areaSize: Float) =
+    (barPos + barSize / 2f - expandSize / 2f)
+        .coerceIn(0f, (areaSize - expandSize).coerceAtLeast(0f))
+        .roundToInt()
 
 /**
  * A tab bar that floats over the workspace instead of taking layout space. The grip rides in the
  * bar itself: long-press it until it shows the move icon, then drag. Releasing parks the bar, and
  * the position persists, so moving it never resizes the terminal.
  *
- * A left or right floating bar parked at a side edge tucks itself away after [idleHideMillis]
- * without a touch, leaving a chevron that brings it back. The bottom bar never hides.
+ * When [hideAtEdges] is enabled, a bar parked along either edge perpendicular to [barOrientation]
+ * tucks itself away after [idleHideMillis] without a touch, leaving a chevron that brings it back.
  *
  * [position] is the bar's resting top-left as a fraction of the free space around it. The content
  * places the supplied grip in its row or column.
@@ -80,12 +118,26 @@ internal fun FloatingTabBar(
     onPosition: (Offset) -> Unit,
     modifier: Modifier = Modifier,
     hideAtEdges: Boolean = false,
+    barOrientation: Orientation = Orientation.Vertical,
     keepVisible: Boolean = false,
+    topOcclusion: () -> Int = { 0 },
     onDragStart: () -> Unit = {},
     idleHideMillis: Long = FloatingTabBarIdleHideMillis,
     content: @Composable (handle: @Composable () -> Unit) -> Unit,
 ) {
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        modifier.fillMaxSize().layout { measurable, constraints ->
+            val inset = topOcclusion().coerceIn(0, constraints.maxHeight)
+            val child =
+                measurable.measure(
+                    constraints.copy(
+                        minHeight = (constraints.minHeight - inset).coerceAtLeast(0),
+                        maxHeight = constraints.maxHeight - inset,
+                    ),
+                )
+            layout(child.width, child.height + inset) { child.place(0, inset) }
+        },
+    ) {
         val density = LocalDensity.current
         val scheme = MaterialTheme.colorScheme
         val motion = LocalMotionEnabled.current
@@ -129,12 +181,37 @@ internal fun FloatingTabBar(
             else ExitTransition.None
         val edge =
             when {
-                !hideAtEdges || size.width == 0 -> null
-                resting.x <= margin + edgeZone -> FloatingEdge.LEFT
-                resting.x + size.width >= areaWidth - margin - edgeZone -> FloatingEdge.RIGHT
-                else -> null
+                !hideAtEdges || size.width == 0 || size.height == 0 -> null
+                barOrientation == Orientation.Horizontal ->
+                    nearestEdge(
+                        resting.y,
+                        size.height,
+                        areaHeight,
+                        position.y,
+                        margin,
+                        edgeZone,
+                        FloatingEdge.TOP,
+                        FloatingEdge.BOTTOM,
+                    )
+                else ->
+                    nearestEdge(
+                        resting.x,
+                        size.width,
+                        areaWidth,
+                        position.x,
+                        margin,
+                        edgeZone,
+                        FloatingEdge.LEFT,
+                        FloatingEdge.RIGHT,
+                    )
             }
-        var lastEdge by remember { mutableStateOf(FloatingEdge.RIGHT) }
+        var lastEdge by
+            remember(barOrientation) {
+                mutableStateOf(
+                    if (barOrientation == Orientation.Horizontal) FloatingEdge.BOTTOM
+                    else FloatingEdge.RIGHT,
+                )
+            }
         SideEffect { if (edge != null) lastEdge = edge }
         val renderEdge = edge ?: lastEdge
         LaunchedEffect(edge, interaction, moving, touching, keepVisible) {
@@ -292,28 +369,38 @@ internal fun FloatingTabBar(
         }
         // The tucked-away handle is half a capsule embedded in the screen edge: only the inner
         // half is visible, level with the bar it belongs to.
-        val expandWidth = 26.dp
-        val expandHeight = 52.dp
+        val expandShort = 26.dp
+        val expandLong = 52.dp
+        val expandWidth = if (renderEdge.vertical) expandLong else expandShort
+        val expandHeight = if (renderEdge.vertical) expandShort else expandLong
         val expandWidthPx = with(density) { expandWidth.toPx() }
         val expandHeightPx = with(density) { expandHeight.toPx() }
-        val expandX = if (renderEdge == FloatingEdge.LEFT) 0f else areaWidth - expandWidthPx
-        val expandY =
-            (resting.y + size.height / 2f - expandHeightPx / 2f).coerceIn(
-                0f,
-                (areaHeight - expandHeightPx).coerceAtLeast(0f),
-            )
+        val expandOffset =
+            when (renderEdge) {
+                FloatingEdge.LEFT,
+                FloatingEdge.RIGHT ->
+                    IntOffset(
+                        if (renderEdge == FloatingEdge.LEFT) 0
+                        else (areaWidth - expandWidthPx).coerceAtLeast(0f).roundToInt(),
+                        centeredOffset(resting.y, size.height, expandHeightPx, areaHeight),
+                    )
+                FloatingEdge.TOP,
+                FloatingEdge.BOTTOM ->
+                    IntOffset(
+                        centeredOffset(resting.x, size.width, expandWidthPx, areaWidth),
+                        if (renderEdge == FloatingEdge.TOP) 0
+                        else (areaHeight - expandHeightPx).coerceAtLeast(0f).roundToInt(),
+                    )
+            }
         AnimatedVisibility(
             visible = hidden && edge != null,
             enter = reveal(.8f),
             exit = dismiss(.8f),
             // The offset must sit on the visibility node itself, or the button's hit area stays at
             // the corner while its content is drawn at the edge.
-            modifier = Modifier.offset { IntOffset(expandX.roundToInt(), expandY.roundToInt()) },
+            modifier = Modifier.offset { expandOffset },
         ) {
-            val shape =
-                if (renderEdge == FloatingEdge.LEFT)
-                    RoundedCornerShape(topEnd = expandWidth, bottomEnd = expandWidth)
-                else RoundedCornerShape(topStart = expandWidth, bottomStart = expandWidth)
+            val shape = renderEdge.shape(expandShort)
             Box(
                 Modifier.size(expandWidth, expandHeight)
                     .shadow(2.dp, shape, clip = false)
@@ -329,7 +416,7 @@ internal fun FloatingTabBar(
             ) {
                 ChromeSymbol(
                     ChromeIcon.CHEVRON,
-                    Modifier.size(16.dp).rotate(if (renderEdge == FloatingEdge.LEFT) -90f else 90f),
+                    Modifier.size(16.dp).rotate(renderEdge.rotation),
                     scheme.onSurfaceVariant,
                 )
             }
