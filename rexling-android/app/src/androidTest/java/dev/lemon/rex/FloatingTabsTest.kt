@@ -352,4 +352,73 @@ class FloatingTabsTest {
             runCatching { ui.onNodeWithTag("Floating tab expand").assertIsDisplayed() }.isSuccess
         }
     }
+
+    @Test
+    fun floatingExpandedSideRailPlacesKeyboardActionLast() {
+        val keyboardLabel = appString(R.string.a11y_show_keyboard)
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Box(
+                    Modifier.size(440.dp, 600.dp)
+                        .background(MaterialTheme.colorScheme.background)
+                        .testTag("Floating expanded rail fixture"),
+                ) {
+                    FloatingTabBar(Offset(0f, .5f), {}) { handle ->
+                        TerminalTabRail(
+                            windows(3),
+                            "0",
+                            true,
+                            {},
+                            { programs },
+                            { 0 },
+                            TabBarPosition.LEFT,
+                            TabRailStyle.TITLES,
+                            onNewTab = {},
+                            floating = true,
+                            handle = handle,
+                        ) {
+                            TerminalActions(
+                                true,
+                                true,
+                                {},
+                                {},
+                                keyboardLabel = keyboardLabel,
+                                onKeyboard = {},
+                                vertical = false,
+                                sideRail = true,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        val newTab =
+            ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val switcher =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs_and_panes))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val activity =
+            ui.onNodeWithContentDescription(appString(R.string.activity))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val keyboard =
+            ui.onNodeWithContentDescription(keyboardLabel)
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+
+        assertEquals(newTab.center.y, switcher.center.y, 1f)
+        assertEquals(switcher.center.y, activity.center.y, 1f)
+        assertEquals(activity.center.y, keyboard.center.y, 1f)
+        assertTrue(newTab.right <= switcher.left)
+        assertTrue(switcher.right <= activity.left)
+        assertTrue(activity.right <= keyboard.left)
+        save("Floating expanded rail fixture", "floating-side-rail-expanded.png")
+    }
 }

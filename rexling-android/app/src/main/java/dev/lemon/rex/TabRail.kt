@@ -694,7 +694,10 @@ internal fun TerminalTabRail(
                         onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
                     }
                     Box(Modifier.padding(top = 4.dp)) {
-                        CompositionLocalProvider(LocalSidebarNewTab provides footerNewTab) {
+                        CompositionLocalProvider(
+                            LocalSidebarNewTab provides footerNewTab,
+                            LocalKeyboardActionLast provides titles,
+                        ) {
                             actions()
                         }
                     }

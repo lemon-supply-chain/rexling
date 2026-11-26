@@ -591,6 +591,8 @@ internal data class SidebarNewTab(val enabled: Boolean, val onClick: () -> Unit)
 
 internal val LocalSidebarNewTab = compositionLocalOf<SidebarNewTab?> { null }
 
+internal val LocalKeyboardActionLast = compositionLocalOf { false }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChromeButton(
@@ -1875,12 +1877,13 @@ internal fun TerminalActions(
                 )
         }
     }
+    val keyboardLast = vertical || LocalKeyboardActionLast.current
     Group {
-        if (!vertical) renderedKeyboard?.invoke()
+        if (!keyboardLast) renderedKeyboard?.invoke()
         newTabButton?.invoke()
         switcherButton()
         activityButton()
-        if (vertical) renderedKeyboard?.invoke()
+        if (keyboardLast) renderedKeyboard?.invoke()
     }
 }
 
