@@ -86,9 +86,12 @@ class NeovimShortcutUiTest {
             "Wheel must sample the red backdrop: $ring",
             android.graphics.Color.red(ring) > android.graphics.Color.green(ring) + 35,
         )
-        // The neutral gap remains transparent rather than gaining a solid annulus.
+        // The neutral gap remains transparent rather than gaining a solid annulus or shadow bleed.
         val gap = pixel(.5f, .28f)
-        assertTrue(android.graphics.Color.red(gap) > 200)
+        assertTrue(
+            "Hub gap must stay clear of shadow: $gap",
+            android.graphics.Color.red(gap) >= 248,
+        )
         // Close, switch backdrop to green, and reopen so the disarmed popup samples the new
         // backdrop.
         ui.onNodeWithContentDescription(appString(R.string.a11y_close_shortcuts_named, "Neovim"))
@@ -106,7 +109,10 @@ class NeovimShortcutUiTest {
             android.graphics.Color.green(greenRing) > android.graphics.Color.red(greenRing) + 35,
         )
         val greenGap = pixel(.5f, .28f)
-        assertTrue(android.graphics.Color.green(greenGap) > 200)
+        assertTrue(
+            "Hub gap must stay clear of shadow: $greenGap",
+            android.graphics.Color.green(greenGap) >= 248,
+        )
         val shot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()!!
         File(
                 InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
@@ -1312,6 +1318,53 @@ class NeovimShortcutUiTest {
         ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
             .assertDoesNotExist()
         ui.runOnIdle { assertEquals(0, sent) }
+    }
+
+    @Test
+    fun lightThemeFanWheelKeepsBrightSectorsWithoutDarkInteriorShadow() {
+        val items =
+            listOf(
+                NeovimShortcut("One", ":echo 1"),
+                NeovimShortcut("Two", ":echo 2"),
+                NeovimShortcut("Three", ":echo 3"),
+            )
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Box(Modifier.fillMaxSize()) {
+                    NeovimShortcutButton(
+                        items,
+                        "one",
+                        true,
+                        { _, _ -> },
+                        {},
+                        layout = NeovimShortcutLayout.CIRCULAR,
+                        effect = NeovimShortcutEffect.FAN_OUT,
+                        position = Offset(.5f, .5f),
+                    )
+                }
+            }
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_shortcuts_format, "Neovim"))
+            .performClick()
+        ui.waitForIdle()
+        val menu =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_shortcut_menu_format, "Neovim"))
+                .assertIsDisplayed()
+                .captureToImage()
+                .asAndroidBitmap()
+        // Sample the top sector at the outer rim margin and mid-ring (avoiding the centered label).
+        for (yFrac in listOf(0.06f, 0.22f)) {
+            val pixel = menu.getPixel(menu.width / 2, (menu.height * yFrac).toInt())
+            assertTrue(
+                "Light wheel sector at y=$yFrac must stay bright without interior shadow bleed: " +
+                    Integer.toHexString(pixel),
+                android.graphics.Color.alpha(pixel) >= 220 &&
+                    android.graphics.Color.red(pixel) >= 235 &&
+                    android.graphics.Color.green(pixel) >= 235 &&
+                    android.graphics.Color.blue(pixel) >= 235,
+            )
+        }
+        menu.recycle()
     }
 
     private fun nativeWheelEvent(action: Int, x: Float, y: Float, down: Long) {

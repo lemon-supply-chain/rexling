@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.node.invalidateDraw
@@ -63,6 +64,11 @@ internal fun Modifier.paneFrost(
             )
         }
     return clip(shape)
+        .drawBehind {
+            if (haze.areas.none { it.contentLayer != null }) {
+                drawRect(resolvedTint.copy(alpha = RexTokens.frost.fallbackOpacity))
+            }
+        }
         .then(
             if (invalidator == null) Modifier.hazeEffect(haze, style = style)
             else Modifier.then(PopupFrostElement(haze, style, invalidator)),
