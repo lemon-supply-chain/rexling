@@ -1,6 +1,8 @@
 package dev.lemon.rex
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
@@ -8,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.positionInRoot
@@ -20,8 +23,11 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import java.io.File
+import kotlin.math.abs
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -367,5 +373,124 @@ class HeaderLineLayoutTest {
         val icon = ui.onNodeWithContentDescription("Cloud", useUnmergedTree = true)
         val order = listOf(icon, text(title), text(session), text(path)).map(::bounds)
         for ((left, right) in order.zipWithNext()) assertTrue(left.right <= right.left)
+    }
+
+    @Test
+    fun compactHeaderReplacesServerIconWithBreathingRainbowDotWhenWorking() {
+        var activeWorking by mutableStateOf(false)
+        var siblingWorking by mutableStateOf(false)
+        var dark by mutableStateOf(false)
+        val programs =
+            listOf(
+                ProgramIdentity(ProgramKind.CLAUDE, "Claude Code"),
+                ProgramIdentity(ProgramKind.NEOVIM, "Neovim"),
+            )
+        ui.setContent {
+            RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1], motionEnabled = true) {
+                Box(
+                    Modifier.width(360.dp)
+                        .background(MaterialTheme.colorScheme.background)
+                        .testTag("compact-working-header"),
+                ) {
+                    SessionHeader(
+                        listOf(SessionItem("a", "Shipyard · Work")),
+                        "a",
+                        true,
+                        true,
+                        programs,
+                        0,
+                        onSessions = {},
+                        onSelect = {},
+                        onLast = {},
+                        title = "Claude Code",
+                        working = activeWorking,
+                        isPaneWorking = { index ->
+                            if (index == 0) activeWorking else siblingWorking
+                        },
+                        alwaysCompact = true,
+                        directory = "~/Projects/rexling",
+                        serverIcons = mapOf("a" to ServerIcon.MACBOOK),
+                        menu = {
+                            ChromeButton(
+                                ChromeIcon.MORE,
+                                appString(R.string.terminal_menu),
+                            ) {}
+                        },
+                    )
+                }
+            }
+        }
+
+        val serverIcon =
+            ui.onNodeWithContentDescription(ServerIcon.MACBOOK.label, useUnmergedTree = true)
+        val indicator = ui.onNodeWithTag("Compact header working indicator", useUnmergedTree = true)
+        serverIcon.assertIsDisplayed()
+        indicator.assertDoesNotExist()
+        val serverIconBounds = bounds(serverIcon)
+        val titleBounds = bounds(text("Claude Code"))
+
+        fun assertDotReplacesServerIconSlot() {
+            serverIcon.assertDoesNotExist()
+            indicator.assertIsDisplayed()
+            val dotBounds = bounds(indicator)
+            assertEquals(serverIconBounds.left, dotBounds.left, 1f)
+            assertTrue(dotBounds.right <= titleBounds.left + 1f)
+            assertEquals(titleBounds.left, bounds(text("Claude Code")).left, 1f)
+        }
+
+        // Any running pane in the current window activates the compact indicator.
+        ui.runOnIdle { siblingWorking = true }
+        assertDotReplacesServerIconSlot()
+
+        ui.runOnIdle {
+            siblingWorking = false
+            activeWorking = true
+        }
+        assertDotReplacesServerIconSlot()
+
+        fun assertRainbowAndSave(mode: String) {
+            ui.waitForIdle()
+            val pixels = indicator.captureToImage().toPixelMap()
+            var hasRed = false
+            var hasGreen = false
+            var hasBlue = false
+            for (y in 0 until pixels.height) {
+                for (x in 0 until pixels.width) {
+                    val c = pixels[x, y]
+                    if (c.red > .65f && c.red - maxOf(c.green, c.blue) > .25f) hasRed = true
+                    if (c.green > .65f && c.green - maxOf(c.red, c.blue) > .25f) hasGreen = true
+                    if (c.blue > .65f && c.blue - maxOf(c.red, c.green) > .25f) hasBlue = true
+                }
+            }
+            assertTrue(
+                "$mode: compact indicator must draw red, green, and blue rainbow hues",
+                hasRed && hasGreen && hasBlue,
+            )
+            val bg = pixels[0, 0]
+            val center = pixels[pixels.width / 2, pixels.height / 2]
+            val centerDiff =
+                maxOf(
+                    abs(center.red - bg.red),
+                    abs(center.green - bg.green),
+                    abs(center.blue - bg.blue),
+                )
+            assertTrue(
+                "$mode: compact indicator center must be solidly filled ($center vs bg $bg)",
+                centerDiff > .25f && maxOf(center.red, center.green, center.blue) > .65f,
+            )
+            val bitmap =
+                ui.onNodeWithTag("compact-working-header").captureToImage().asAndroidBitmap()
+            File(
+                    InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
+                    "compact-header-working-$mode.png",
+                )
+                .outputStream()
+                .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+
+        assertRainbowAndSave("light")
+        ui.runOnIdle { dark = true }
+        assertRainbowAndSave("dark")
     }
 }

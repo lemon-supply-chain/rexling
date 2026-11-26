@@ -748,7 +748,7 @@ internal fun SessionHeader(
         )
     val connectionTint = if (connected) scheme.primary else scheme.outline
     val openSessionDrawerLabel = stringResource(R.string.a11y_open_session_drawer)
-    val anyWorking = working || programs.indices.any(isPaneWorking)
+    val anyWorking = working || programs.indices.any(isPaneWorking) || progress?.busy == true
     val programIconDescription = stringResource(R.string.a11y_session_program_icon)
     val programStateDescription =
         stringResource(if (anyWorking) R.string.a11y_state_working else R.string.a11y_state_idle)
@@ -1102,14 +1102,21 @@ internal fun SessionHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                ServerGlyph(
-                    serverIcon,
-                    Modifier.size(14.dp).semantics {
-                        contentDescription = serverIcon.label
-                        stateDescription = connectionStatus
-                    },
-                    color = connectionTint,
-                )
+                if (anyWorking) {
+                    CompactWorkingIndicator(
+                        marquee = marquee,
+                        description = programStateDescription,
+                    )
+                } else {
+                    ServerGlyph(
+                        serverIcon,
+                        Modifier.size(14.dp).semantics {
+                            contentDescription = serverIcon.label
+                            stateDescription = connectionStatus
+                        },
+                        color = connectionTint,
+                    )
+                }
                 HeaderContextLine(
                     session,
                     directory,
@@ -1144,6 +1151,23 @@ internal fun SessionHeader(
             alwaysCompact -> compact()
             else -> full()
         }
+    }
+}
+
+@Composable
+private fun CompactWorkingIndicator(
+    marquee: RainbowMarquee?,
+    description: String,
+    modifier: Modifier = Modifier,
+) {
+    val staticMarquee = remember { RainbowMarquee(mutableStateOf(0f), mutableStateOf(0f)) }
+    val activeMarquee = marquee ?: staticMarquee
+    Canvas(
+        modifier.size(14.dp).testTag("Compact header working indicator").semantics {
+            contentDescription = description
+        },
+    ) {
+        drawRainbowDot(activeMarquee)
     }
 }
 

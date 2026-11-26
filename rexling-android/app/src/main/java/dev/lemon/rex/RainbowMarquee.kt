@@ -205,6 +205,29 @@ internal fun DrawScope.drawRainbowMarquee(
     strokeRing(radius, ringWidth, glint, 1f)
 }
 
+/**
+ * Paints a compact breathing rainbow LED dot inside a square canvas without per-frame allocations.
+ */
+internal fun DrawScope.drawRainbowDot(marquee: RainbowMarquee) {
+    val minDim = min(size.width, size.height)
+    if (minDim <= 0f) return
+    val breath = (sin(marquee.hue * 2f * TWO_PI) + 1f) * .5f
+    val pulse = breath * breath
+    val coreRadius = minDim * (.25f + .05f * pulse)
+    val haloInner = (coreRadius * (1.20f + .10f * pulse)).coerceAtMost(minDim / 2f)
+    val haloOuter = (coreRadius * (1.42f + .16f * pulse)).coerceAtMost(minDim / 2f)
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val center = Offset(cx, cy)
+    val rainbow = marquee.prepareRainbow((1f - marquee.hue) * 360f, cx, cy)
+    // Two soft concentric passes create a breathing LED halo without saveLayer.
+    drawCircle(rainbow, radius = haloOuter, center = center, alpha = .08f + .16f * pulse)
+    drawCircle(rainbow, radius = haloInner, center = center, alpha = .14f + .20f * pulse)
+    drawCircle(rainbow, radius = coreRadius, center = center, alpha = .72f + .28f * pulse)
+    val coreLight = marquee.prepareTileLight(coreRadius * .72f, cx, cy)
+    drawCircle(coreLight, radius = coreRadius * .72f, center = center, alpha = .18f + .24f * pulse)
+}
+
 private fun DrawScope.strokeRing(radiusPx: Float, widthPx: Float, brush: Brush, alpha: Float) {
     val w = size.width - widthPx
     val h = size.height - widthPx
