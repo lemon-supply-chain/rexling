@@ -91,6 +91,10 @@ android {
             isShrinkResources = false
         }
     }
+    sourceSets {
+        getByName("optimized") { kotlin.directories.add("src/release/java") }
+        getByName("profile") { kotlin.directories.add("src/release/java") }
+    }
 }
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

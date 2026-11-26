@@ -142,7 +142,7 @@ internal class RexConnection(
     fun movePane(window: String, id: String, before: String?): Boolean {
         val current = state.value
         if (
-            handle == 0L ||
+            (handle == 0L && showcase == null) ||
                 !visible ||
                 !foreground ||
                 !current.connected ||
@@ -178,7 +178,7 @@ internal class RexConnection(
     ) {
         val current = state.value
         if (
-            handle == 0L ||
+            (handle == 0L && showcase == null) ||
                 !visible ||
                 !foreground ||
                 !current.connected ||
@@ -223,7 +223,7 @@ internal class RexConnection(
     fun moveTab(id: String, before: String?): Boolean {
         val current = state.value
         if (
-            handle == 0L ||
+            (handle == 0L && showcase == null) ||
                 !visible ||
                 !foreground ||
                 !current.connected ||
@@ -567,6 +567,8 @@ internal class RexConnection(
     }
 
     private var handle = 0L
+    private var showcase: ShowcaseSession? = null
+    private var lastPalette: TerminalPalette = TerminalPalette.Dark
     private var resizeJob: Job? = null
     private var lastSize = 0 to 0
 
@@ -642,6 +644,7 @@ internal class RexConnection(
                                 )
                                 android.os.Trace.endSection()
                                 withContext(Dispatchers.Main.immediate) {
+                                    if (showcase != null) return@withContext
                                     val next =
                                         when (decoded) {
                                             is TerminalUpdate.PaneFrames -> {
@@ -658,108 +661,11 @@ internal class RexConnection(
                                             }
                                             is TerminalUpdate.Full -> decoded.state
                                         }
-                                    navigationRequest = navigationRequest.acknowledge(next)
-                                    // Safety net: never wait forever for a navigation the state
-                                    // already satisfies.
-                                    val nowMs = android.os.SystemClock.elapsedRealtime()
-                                    if (navigationRequest.pending) {
-                                        if (navigationPendingSince == 0L)
-                                            navigationPendingSince = nowMs
-                                    } else navigationPendingSince = 0L
-                                    if (
-                                        navigationRequest.pending &&
-                                            nowMs - navigationPendingSince > 2500L &&
-                                            (navigationRequest.session == null ||
-                                                next.selectedSession ==
-                                                    navigationRequest.session) &&
-                                            (navigationRequest.block == null ||
-                                                (next.selectedBlock == navigationRequest.block &&
-                                                    next.screen != null))
-                                    ) {
-                                        navigationRequest = NavigationRequest()
-                                        navigationPendingSince = 0L
-                                    }
-                                    pendingTabOrder = pendingTabOrder?.keepFor(next)
-                                    pendingPaneOrder = pendingPaneOrder?.keepFor(next)
-                                    clipboardDelivery.deliver(
-                                        next,
-                                        visible && foreground && !navigationRequest.pending,
-                                    )
-                                    val old = state.value
-                                    if (old.selectedSession != next.selectedSession)
-                                        presentation.flush()
-                                    if (old.connectionEpoch != next.connectionEpoch) {
-                                        activation.resume()
-                                        cancelKeyRepeats()
-                                        resetModifiers()
-                                        navigationRequest = NavigationRequest()
-                                        restoreWorkspace = true
-                                    }
-                                    val endedSession =
-                                        next.staleSession.takeIf {
-                                            it.isNotBlank() && it != old.staleSession
-                                        }
-                                    if (endedSession != null) {
-                                        workspace.forgetSession(endedSession)
-                                        if (lastSessionId == endedSession) {
-                                            lastSessionId = ""
-                                            preferences.edit {
-                                                remove("last_session:${next.endpoint}")
-                                            }
-                                        }
-                                        if (
-                                            navigationRequest.session == endedSession ||
-                                                (navigationRequest.session == null &&
-                                                    next.selectedSession.isBlank())
-                                        ) {
-                                            navigationRequest = NavigationRequest()
-                                        }
-                                    }
-                                    android.os.Trace.beginSection("Rexlink.previewCache")
-                                    try {
-                                        paneFrames =
-                                            if (endedSession == null)
-                                                updatePaneFrames(paneFrames, old, next)
-                                            else emptyMap()
-                                    } finally {
-                                        android.os.Trace.endSection()
-                                    }
-                                    if (
-                                        !restoreWorkspace &&
-                                            next.selectedSession.isNotBlank() &&
-                                            next.selectedSession != state.value.selectedSession &&
-                                            (navigationRequest.session == null ||
-                                                navigationRequest.session == next.selectedSession)
-                                    ) {
-                                        val old = state.value.selectedSession
-                                        if (old.isNotBlank() && !navigationRequest.pending) {
-                                            lastSessionId = old
-                                            preferences.edit {
-                                                putString("last_session:${next.endpoint}", old)
-                                            }
-                                        }
-                                        workspace.selectSession(next.selectedSession)
-                                    }
-                                    if (
-                                        old.controlled != next.controlled ||
-                                            old.selectedBlock != next.selectedBlock ||
-                                            old.phase != next.phase
-                                    )
-                                        cancelKeyRepeats()
-                                    if (!next.controlled || old.selectedBlock != next.selectedBlock)
-                                        resetModifiers()
-                                    publishActivityState(next)
-                                    queueDisplay(next)
-                                    hasSemanticPrompts = next.screen?.hasSemanticPrompt == true
-                                    hasScreen = next.screen != null
-                                    screenDimensions = next.screen?.let { it.columns to it.rows }
-
-                                    openPreferredTerminal()
-                                    rememberCurrentTerminal()
-                                    claimActivePane()
+                                    applyStateUpdate(next)
                                 }
                             } catch (error: Throwable) {
                                 withContext(Dispatchers.Main.immediate) {
+                                    if (showcase != null) return@withContext
                                     navigationRequest = NavigationRequest()
                                     setState(
                                         state.value.copy(
@@ -837,13 +743,105 @@ internal class RexConnection(
             presentation.chrome(next).copy(revision = 0, screen = null, previewFrames = emptyMap())
     }
 
+    private fun applyStateUpdate(next: AppState) {
+        navigationRequest = navigationRequest.acknowledge(next)
+        // Safety net: never wait forever for a navigation the state already satisfies.
+        val nowMs = android.os.SystemClock.elapsedRealtime()
+        if (navigationRequest.pending) {
+            if (navigationPendingSince == 0L) navigationPendingSince = nowMs
+        } else navigationPendingSince = 0L
+        if (
+            navigationRequest.pending &&
+                nowMs - navigationPendingSince > 2500L &&
+                (navigationRequest.session == null ||
+                    next.selectedSession == navigationRequest.session) &&
+                (navigationRequest.block == null ||
+                    (next.selectedBlock == navigationRequest.block && next.screen != null))
+        ) {
+            navigationRequest = NavigationRequest()
+            navigationPendingSince = 0L
+        }
+        pendingTabOrder = pendingTabOrder?.keepFor(next)
+        pendingPaneOrder = pendingPaneOrder?.keepFor(next)
+        clipboardDelivery.deliver(next, visible && foreground && !navigationRequest.pending)
+        val old = state.value
+        if (old.selectedSession != next.selectedSession) presentation.flush()
+        if (old.connectionEpoch != next.connectionEpoch) {
+            activation.resume()
+            cancelKeyRepeats()
+            resetModifiers()
+            navigationRequest = NavigationRequest()
+            restoreWorkspace = true
+        }
+        val endedSession = next.staleSession.takeIf { it.isNotBlank() && it != old.staleSession }
+        if (endedSession != null) {
+            workspace.forgetSession(endedSession)
+            if (lastSessionId == endedSession) {
+                lastSessionId = ""
+                preferences.edit { remove("last_session:${next.endpoint}") }
+            }
+            if (
+                navigationRequest.session == endedSession ||
+                    (navigationRequest.session == null && next.selectedSession.isBlank())
+            ) {
+                navigationRequest = NavigationRequest()
+            }
+        }
+        android.os.Trace.beginSection("Rexlink.previewCache")
+        try {
+            paneFrames =
+                if (endedSession == null) updatePaneFrames(paneFrames, old, next) else emptyMap()
+        } finally {
+            android.os.Trace.endSection()
+        }
+        if (
+            !restoreWorkspace &&
+                next.selectedSession.isNotBlank() &&
+                next.selectedSession != state.value.selectedSession &&
+                (navigationRequest.session == null ||
+                    navigationRequest.session == next.selectedSession)
+        ) {
+            val old = state.value.selectedSession
+            if (old.isNotBlank() && !navigationRequest.pending) {
+                lastSessionId = old
+                preferences.edit { putString("last_session:${next.endpoint}", old) }
+            }
+            workspace.selectSession(next.selectedSession)
+        }
+        if (
+            old.controlled != next.controlled ||
+                old.selectedBlock != next.selectedBlock ||
+                old.phase != next.phase
+        )
+            cancelKeyRepeats()
+        if (!next.controlled || old.selectedBlock != next.selectedBlock) resetModifiers()
+        publishActivityState(next)
+        queueDisplay(next)
+        hasSemanticPrompts = next.screen?.hasSemanticPrompt == true
+        hasScreen = next.screen != null
+        screenDimensions = next.screen?.let { it.columns to it.rows }
+
+        openPreferredTerminal()
+        rememberCurrentTerminal()
+        claimActivePane()
+    }
+
     private fun command(type: String, vararg args: Pair<String, Any>): Boolean {
-        if (handle == 0L) return false
+        if (showcase == null && handle == 0L) return false
         // A grid change must reach the PTY before anything typed at that grid, so a
         // deferred size is flushed instead of letting the key jump the queue.
         if (type == "input" || type == "paste") flushSize()
         val request = JSONObject().put("type", type)
         args.forEach { (key, value) -> request.put(key, value) }
+        showcase?.let { session ->
+            if (!session.command(type, request)) {
+                navigationRequest = NavigationRequest()
+                pendingTabOrder = null
+                pendingPaneOrder = null
+                return false
+            }
+            return true
+        }
         val error = NativeBridge.command(handle, request.toString())
         if (error.isNotEmpty()) {
             navigationRequest = NavigationRequest()
@@ -975,7 +973,34 @@ internal class RexConnection(
         paneFrames = emptyMap()
         lastSessionId = preferences.getString("last_session:$value", "").orEmpty()
         preferences.edit { putString("endpoint", value) }
+        showcase?.close()
+        showcase = null
         command("connect", "server" to value)
+    }
+
+    fun startShowcase() {
+        val session =
+            DebugShowcase.createSession(
+                scope,
+                lastPalette,
+                onState = ::applyStateUpdate,
+                onPaneFrames = { frames -> paneFrames = updatePaneFrames(paneFrames, frames) },
+            ) ?: return
+        restoreWorkspace = true
+        pendingTabOrder = null
+        pendingPaneOrder = null
+        cancelDisplay()
+        cancelKeyRepeats()
+        dropResize()
+        activation.navigate()
+        resetModifiers()
+        navigationRequest = NavigationRequest()
+        keyboardRequest = ""
+        paneFrames = emptyMap()
+        if (handle != 0L) NativeBridge.command(handle, """{"type":"disconnect"}""")
+        showcase?.close()
+        showcase = session
+        session.start(active = foreground)
     }
 
     fun disconnect() {
@@ -985,10 +1010,20 @@ internal class RexConnection(
         cancelKeyRepeats()
         resetModifiers()
         navigationRequest = NavigationRequest()
+        showcase?.let { session ->
+            session.command("disconnect", JSONObject().put("type", "disconnect"))
+            session.close()
+            showcase = null
+            return
+        }
         command("disconnect")
     }
 
-    fun preview() = command("preview")
+    fun preview() {
+        showcase?.close()
+        showcase = null
+        command("preview")
+    }
 
     fun selectSession(id: String) {
         presentation.flush()
@@ -1197,6 +1232,7 @@ internal class RexConnection(
     }
 
     fun updateTerminalTheme(palette: TerminalPalette) {
+        lastPalette = palette
         fun hex(color: Int) = "#%06x".format(java.util.Locale.ROOT, color and 0xffffff)
         command(
             "theme",
@@ -1738,6 +1774,8 @@ internal class RexConnection(
         presentation.flush()
         cancelDisplay()
         closed = true
+        showcase?.close()
+        showcase = null
         pollJob?.cancel()
         dropResize()
         if (handle != 0L) NativeBridge.destroy(handle)

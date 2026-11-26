@@ -22,7 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun EmptyServerContent(onAdd: () -> Unit) {
+internal fun EmptyServerContent(onAdd: () -> Unit, onPreview: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxWidth().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -37,10 +37,24 @@ internal fun EmptyServerContent(onAdd: () -> Unit) {
             style = SettingsType.body,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Button(onClick = onAdd) {
-            ChromeSymbol(ChromeIcon.ADD, Modifier.size(18.dp), color = LocalContentColor.current)
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.add_server_title))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(onClick = onAdd) {
+                ChromeSymbol(
+                    ChromeIcon.ADD,
+                    Modifier.size(18.dp),
+                    color = LocalContentColor.current,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.add_server_title))
+            }
+            if (onPreview != null) {
+                OutlinedButton(onClick = onPreview) {
+                    Text(stringResource(R.string.status_preview))
+                }
+            }
         }
     }
 }

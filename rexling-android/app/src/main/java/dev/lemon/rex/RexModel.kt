@@ -94,7 +94,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
                     ActivityFocusPolicy.unread(client.state.value.activity, client::isActivitySeen)
                 else 0
             }
-        activitySources = servers.mapNotNull { server ->
+        activitySources = activeProfiles.mapNotNull { server ->
             connections[server.id]?.state?.value?.let { state ->
                 if (state.phase in listOf("disconnected", "preview")) null
                 else
@@ -134,7 +134,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
 
     internal fun openActivity(target: ActivityTarget) {
         val profile =
-            servers.firstOrNull {
+            activeProfiles.firstOrNull {
                 it.id == target.server.id && it.endpoint == target.server.endpoint
             } ?: return
         val source =
@@ -820,11 +820,20 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
                 }
             }
         }
+    internal var showcaseActive by mutableStateOf(false)
+        private set
+
+    private val activeProfiles: List<ServerProfile>
+        get() {
+            val showcase = if (showcaseActive) DebugShowcase.profile() else null
+            return if (showcase != null) servers + showcase else servers
+        }
+
     internal var activeClient by mutableStateOf(connection(activeServer))
         private set
 
     val activeServer: ServerProfile
-        get() = servers.firstOrNull { it.id == activeServerId } ?: ServerProfile.Empty
+        get() = activeProfiles.firstOrNull { it.id == activeServerId } ?: ServerProfile.Empty
 
     internal val activeConnectionRequested: Boolean
         get() = activeServerId in desired
@@ -907,12 +916,13 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         }
 
     private fun updateSessionTargets() {
-        val next = SessionCatalog.collect(servers, connections.mapValues { it.value.state.value })
+        val next =
+            SessionCatalog.collect(activeProfiles, connections.mapValues { it.value.state.value })
         if (next != sessionTargets) sessionTargets = next
     }
 
     private fun updatePaneCatalog() {
-        paneCatalogSources = servers.mapNotNull { server ->
+        paneCatalogSources = activeProfiles.mapNotNull { server ->
             val state = connections[server.id]?.chromeState?.value ?: return@mapNotNull null
             if (state.connected) PaneCatalog.collect(server, state) else null
         }
@@ -1037,16 +1047,78 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     private fun persist() {
         updateSessionTargets()
         if (paneCatalogVisible) updatePaneCatalog()
+        val persistedActive =
+            activeServerId.takeUnless(DebugShowcase::isProfile)
+                ?: servers.firstOrNull()?.id.orEmpty()
         preferences.edit {
             putString("servers", SavedServers.encode(servers))
-            putString("active_server", activeServerId)
+            putString("active_server", persistedActive)
             putStringSet("connected_servers", desired)
         }
         if (foreground && BackgroundAlerts.foreground.value)
             BackgroundAlerts.reconcile(getApplication())
     }
 
+    fun startShowcase() {
+        val profile = DebugShowcase.profile() ?: return
+        showcaseActive = true
+        val client = connection(profile)
+        if (activeServerId != profile.id) {
+            rememberLastSession()
+            serverSwitchSerial++
+            activeClient.releaseControl()
+            activeClient.visible = false
+            client.visible = true
+            activeServerId = profile.id
+            activeClient = client
+        }
+        client.startShowcase()
+        updateSessionTargets()
+        if (paneCatalogVisible) updatePaneCatalog()
+        updateActivity()
+    }
+
+    fun stopShowcase(switchFallback: Boolean = true) {
+        if (!showcaseActive) return
+        showcaseActive = false
+        val id = DebugShowcase.profile()?.id
+        if (id != null) {
+            observers.remove(id)?.cancel()
+            connections.remove(id)?.let {
+                it.releaseControl()
+                it.disconnect()
+                it.close()
+            }
+            serverStatuses = serverStatuses - id
+        }
+        if (switchFallback && id != null && activeServerId == id) {
+            serverSwitchSerial++
+            activeServerId = servers.firstOrNull()?.id.orEmpty()
+            activeClient = connection(activeServer)
+            activeClient.visible = true
+        }
+        updateSessionTargets()
+        if (paneCatalogVisible) updatePaneCatalog()
+        updateActivity()
+    }
+
     fun connectServer(id: String, select: Boolean = true) {
+        if (DebugShowcase.isProfile(id)) {
+            if (!showcaseActive) return
+            val profile = DebugShowcase.profile() ?: return
+            val client = connection(profile)
+            if (select && activeServerId != id) {
+                rememberLastSession()
+                serverSwitchSerial++
+                activeClient.releaseControl()
+                activeClient.visible = false
+                client.visible = true
+                activeServerId = id
+                activeClient = client
+            }
+            return
+        }
+        if (select && showcaseActive) stopShowcase(switchFallback = false)
         val profile = servers.firstOrNull { it.id == id } ?: return
         val client = connection(profile)
         if (select && activeServerId != id) {
@@ -1139,6 +1211,10 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         ?.message
 
     fun disconnectServer(id: String) {
+        if (DebugShowcase.isProfile(id)) {
+            stopShowcase()
+            return
+        }
         desired = desired - id
         persist()
         connections[id]?.let {

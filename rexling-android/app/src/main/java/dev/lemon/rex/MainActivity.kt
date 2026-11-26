@@ -774,7 +774,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
     val chosenBlock = blocks.firstOrNull { it.id == chosen }
     val paneTitle =
-        if (model.servers.isEmpty()) stringResource(R.string.app_name)
+        if (model.servers.isEmpty() && !model.showcaseActive) stringResource(R.string.app_name)
         else
             (state.programs[chosen] ?: ProgramIdentity.Loading).paneTitle(
                 chosenBlock?.label.orEmpty(),
@@ -868,10 +868,11 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 ) {
                     Column(Modifier.fillMaxSize()) {
                         if (
-                            model.servers.isEmpty() ||
-                                (!connectionRequested &&
-                                    state.phase == "disconnected" &&
-                                    !client.hasScreen)
+                            !model.showcaseActive &&
+                                (model.servers.isEmpty() ||
+                                    (!connectionRequested &&
+                                        state.phase == "disconnected" &&
+                                        !client.hasScreen))
                         ) {
                             Surface(
                                 Modifier.padding(12.dp),
@@ -879,7 +880,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 color = MaterialTheme.colorScheme.surface,
                             ) {
                                 if (model.servers.isEmpty())
-                                    EmptyServerContent(onAdd = { addServer = true })
+                                    EmptyServerContent(
+                                        onAdd = { addServer = true },
+                                        onPreview =
+                                            if (DebugShowcase.available) model::startShowcase
+                                            else null,
+                                    )
                                 else
                                     Column(
                                         Modifier.padding(15.dp),
@@ -1691,7 +1697,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 subtitle =
                     listOfNotNull(
                             sessionLabel,
-                            model.activeServer.label.takeIf { model.servers.isNotEmpty() },
+                            model.activeServer.label.takeIf {
+                                model.servers.isNotEmpty() || model.showcaseActive
+                            },
                         )
                         .joinToString(" · "),
                 status =
@@ -1760,7 +1768,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         },
                     ),
                 actions =
-                    listOf(
+                    listOfNotNull(
                         TerminalDrawerAction(
                             stringResource(R.string.new_session),
                             ChromeIcon.ADD,
@@ -1790,6 +1798,14 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         ) {
                             client.refresh()
                         },
+                        if (model.showcaseActive)
+                            TerminalDrawerAction(
+                                stringResource(R.string.disconnect),
+                                ChromeIcon.UNPLUG,
+                            ) {
+                                model.stopShowcase()
+                            }
+                        else null,
                     ),
                 onPreferences = { openSettings(SettingsRoute.Preferences) },
                 onClosePane =
