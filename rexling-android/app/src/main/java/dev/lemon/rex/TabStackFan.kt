@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,10 +32,13 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -60,6 +64,15 @@ private const val TAB_STACK_SIDE_LAYERS = 3
 
 /** Maximum double-tap recognition window so single-tap stack expansion stays snappy. */
 private const val FAN_DOUBLE_TAP_WINDOW_MS = 180L
+
+private val FanSelectedBorderWidth = 2.5.dp
+
+/**
+ * Mac-style neutral selection ring: cool medium gray in light themes, soft white in dark themes.
+ */
+internal fun fanSelectionBorderColor(scheme: ColorScheme): Color =
+    if (scheme.surface.luminance() < .5f) tintOver(Color.White, scheme.surface, .90f)
+    else tintOver(scheme.onSurfaceVariant, scheme.surface, .82f)
 
 internal data class TabFanItem(
     val id: String,
@@ -450,7 +463,6 @@ internal fun TabStackFan(
     modifier: Modifier = Modifier,
     barBounds: Rect = anchorBounds,
     preferredAxis: Orientation? = null,
-    marquee: RainbowMarquee? = null,
     bar: @Composable () -> Unit,
 ) {
     val active = visible && items.size > 1 && !anchorBounds.isEmpty
@@ -568,14 +580,10 @@ internal fun TabStackFan(
             val t = progress.value.coerceIn(0f, 1f)
             val anchorCenterX = localAnchor.center.x
             val anchorCenterY = localAnchor.center.y
-            val settledMarquee = remember {
-                RainbowMarquee(
-                    mutableStateOf(0f),
-                    mutableStateOf(0f),
-                )
-            }
             val scheme = MaterialTheme.colorScheme
-            val cardShape = RoundedCornerShape(9.dp)
+            val assets = LocalContext.current.assets
+            val pendingCardShape = RoundedCornerShape(7.dp)
+            val selectedBorderColor = fanSelectionBorderColor(scheme)
             val spatialSpec = if (motion) RexTokens.motion.fastSpatial<Float>() else snap()
             val effectSpec = if (motion) RexTokens.motion.fastEffects<Float>() else snap()
             val hasLeading = layout.windowStart > 0
@@ -766,29 +774,40 @@ internal fun TabStackFan(
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
+                            val shadowShape =
+                                if (item.program.pending) pendingCardShape
+                                else ProgramTileShadowShape
                             val tileModifier =
                                 Modifier.size(cardWidth, cardHeight)
                                     .shadow(
                                         if (isPrimary) 4.dp else 2.dp,
-                                        cardShape,
+                                        shadowShape,
                                         clip = false,
                                     )
                                     .then(
-                                        if (item.selected && isPrimary)
-                                            Modifier.border(1.5.dp, scheme.roles.action, cardShape)
-                                        else Modifier,
+                                        if (item.selected && isPrimary) {
+                                            if (item.program.pending) {
+                                                Modifier.border(
+                                                    FanSelectedBorderWidth,
+                                                    selectedBorderColor,
+                                                    pendingCardShape,
+                                                )
+                                            } else {
+                                                Modifier.programTileBorder(
+                                                    assets = assets,
+                                                    color = selectedBorderColor,
+                                                    width = FanSelectedBorderWidth,
+                                                    fallbackCornerRadius = 7.dp,
+                                                )
+                                            }
+                                        } else Modifier,
                                     )
                             PaneProgramTile(
                                 program = item.program,
                                 modifier = tileModifier,
                                 large = true,
                                 rotation = 0f,
-                                marquee =
-                                    when {
-                                        !item.working && item.progress?.busy != true -> null
-                                        !isPrimary -> settledMarquee
-                                        else -> marquee
-                                    },
+                                marquee = null,
                                 progress = if (isPrimary) item.progress else null,
                             )
                         }

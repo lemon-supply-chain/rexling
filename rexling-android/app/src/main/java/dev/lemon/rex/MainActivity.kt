@@ -1568,14 +1568,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                     }
                                                     .orEmpty()
                                             }
-                                        val fanMarquee =
-                                            rememberRainbowMarquee(
-                                                fannedWindow != null &&
-                                                    !workspaceBackdrop &&
-                                                    fanItems.any {
-                                                        it.working || it.progress?.busy == true
-                                                    },
-                                            )
                                         TabStackFan(
                                             visible = fannedWindow != null && !paneObscured,
                                             items = fanItems,
@@ -1584,7 +1576,6 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             preferredAxis =
                                                 if (tabLayout.side) Orientation.Vertical
                                                 else Orientation.Horizontal,
-                                            marquee = fanMarquee,
                                             onSelect = { blockId ->
                                                 fannedTabId = null
                                                 openPane(blockId)

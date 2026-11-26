@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
@@ -48,7 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -957,5 +961,133 @@ class TabStackFanTest {
         } finally {
             ui.mainClock.autoAdvance = true
         }
+    }
+
+    @Test
+    fun selectedFanCardBorderFollowsPlateSquircleContour() {
+        val threeItems =
+            items(3).mapIndexed { index, item ->
+                item.copy(selected = index == 1, working = index == 1)
+            }
+        var dark by mutableStateOf(false)
+        var borderArgb = 0
+        ui.setContent {
+            RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1]) {
+                borderArgb = fanSelectionBorderColor(MaterialTheme.colorScheme).toArgb()
+                var fanned by remember { mutableStateOf(false) }
+                var anchorBounds by remember { mutableStateOf(Rect.Zero) }
+                var barBounds by remember { mutableStateOf(Rect.Zero) }
+
+                Box(
+                    Modifier.size(411.dp, 640.dp)
+                        .background(MaterialTheme.colorScheme.background)
+                        .testTag("Selected border fixture"),
+                ) {
+                    TabStackFan(
+                        visible = fanned,
+                        items = threeItems,
+                        anchorBounds = anchorBounds,
+                        barBounds = barBounds,
+                        preferredAxis = Orientation.Horizontal,
+                        onSelect = { fanned = false },
+                        onDismiss = { fanned = false },
+                        bar = {
+                            FloatingTabBar(Offset(0.5f, 1f), {}) { handle ->
+                                Row(
+                                    Modifier.width(FloatingTabBarWidth)
+                                        .height(FloatingTabBarHeight)
+                                        .background(
+                                            MaterialTheme.colorScheme.surface,
+                                            RexTokens.shape.tabCell,
+                                        )
+                                        .onGloballyPositioned { barBounds = it.boundsInRoot() }
+                                        .padding(horizontal = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    handle()
+                                    Box(
+                                        Modifier.height(45.dp)
+                                            .width(88.dp)
+                                            .onGloballyPositioned {
+                                                anchorBounds = it.boundsInRoot()
+                                            }
+                                            .clickable { fanned = !fanned }
+                                            .testTag("Active stacked tab"),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        ProgramStack(
+                                            threeItems.map { it.program },
+                                            1,
+                                            fixedSlot = true,
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        val tab = ui.onNodeWithTag("Active stacked tab")
+        ui.awaitDisplayed(tab)
+        tab.performClick()
+        ui.waitForIdle()
+
+        fun assertSelectedBorder(mode: String) {
+            ui.waitForIdle()
+            val expectedArgb = borderArgb
+            val cardBitmap =
+                ui.onNodeWithTag("Tab fan card pane-1")
+                    .assertIsDisplayed()
+                    .captureToImage()
+                    .asAndroidBitmap()
+            save("Selected border fixture", "tab-stack-fan-selected-border-$mode.png")
+
+            val tileW = cardBitmap.width.toFloat()
+            val tileH = cardBitmap.height * (38f / 48f)
+            val tileTop = (cardBitmap.height - tileH) / 2f
+
+            fun matchesBorder(x: Int, y: Int, maxChannelDelta: Int): Boolean {
+                val pixel =
+                    cardBitmap.getPixel(
+                        x.coerceIn(0, cardBitmap.width - 1),
+                        y.coerceIn(0, cardBitmap.height - 1),
+                    )
+                if (Color.alpha(pixel) < 128) return false
+                return abs(Color.red(pixel) - Color.red(expectedArgb)) <= maxChannelDelta &&
+                    abs(Color.green(pixel) - Color.green(expectedArgb)) <= maxChannelDelta &&
+                    abs(Color.blue(pixel) - Color.blue(expectedArgb)) <= maxChannelDelta
+            }
+
+            // Top straight-edge midpoint on the plate contour (61x48 artboard).
+            val topEdgeX = (tileW * 0.5f).toInt()
+            val topEdgeY = (tileTop + tileH * (1.23f / 48f)).toInt()
+            assertTrue(
+                "$mode: top straight edge must carry selection stroke",
+                matchesBorder(topEdgeX, topEdgeY, maxChannelDelta = 25),
+            )
+
+            // Top-right squircle corner midpoint (55.756, 5.244) in the 61x48 artboard.
+            val squircleCornerX = (tileW * (55.756f / 61f)).toInt()
+            val squircleCornerY = (tileTop + tileH * (5.244f / 48f)).toInt()
+            assertTrue(
+                "$mode: squircle corner midpoint must carry selection stroke",
+                matchesBorder(squircleCornerX, squircleCornerY, maxChannelDelta = 25),
+            )
+
+            // Legacy RoundedCornerShape(9.dp) corner midpoint must remain clear of the stroke.
+            val legacyCornerX = (tileW * ((48f - 2.64f) / 48f)).toInt()
+            val legacyCornerY = (tileTop + tileH * (2.64f / 38f)).toInt()
+            assertFalse(
+                "$mode: legacy 9dp rounded corner must not draw detached selection stroke",
+                matchesBorder(legacyCornerX, legacyCornerY, maxChannelDelta = 40),
+            )
+            cardBitmap.recycle()
+        }
+
+        assertSelectedBorder("light")
+        ui.runOnIdle { dark = true }
+        assertSelectedBorder("dark")
     }
 }
