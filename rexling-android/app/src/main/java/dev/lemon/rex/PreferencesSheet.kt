@@ -194,6 +194,17 @@ internal fun PreferencesSheet(
                             compact = true,
                         ) {
                             SettingsRow(
+                                stringResource(R.string.language),
+                                when (language) {
+                                    "zh" -> stringResource(R.string.language_zh)
+                                    "en" -> stringResource(R.string.language_en)
+                                    else -> stringResource(R.string.language_system)
+                                },
+                                SettingsGlyph.LANGUAGE,
+                                onLanguage,
+                            )
+                            SettingsDivider()
+                            SettingsRow(
                                 stringResource(R.string.appearance),
                                 stringResource(R.string.appearance_detail),
                                 SettingsGlyph.APPEARANCE,
@@ -254,17 +265,6 @@ internal fun PreferencesSheet(
                                 }
                                 Switch(checked = immersiveStatusBar, onCheckedChange = null)
                             }
-                            SettingsDivider()
-                            SettingsRow(
-                                stringResource(R.string.language),
-                                when (language) {
-                                    "zh" -> stringResource(R.string.language_zh)
-                                    "en" -> stringResource(R.string.language_en)
-                                    else -> stringResource(R.string.language_system)
-                                },
-                                SettingsGlyph.LANGUAGE,
-                                onLanguage,
-                            )
                             SettingsDivider()
                             Column(
                                 Modifier.fillMaxWidth()

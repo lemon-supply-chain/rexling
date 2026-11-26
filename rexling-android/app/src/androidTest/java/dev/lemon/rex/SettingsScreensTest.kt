@@ -579,6 +579,26 @@ class SettingsScreensTest {
         )
     }
 
+    @Test
+    fun languageAppearsAboveAppearanceInPreferences() {
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                PreferencesSheet({}, {}, {}, {}, onClose = {})
+            }
+        }
+        val languageBounds =
+            ui.onNodeWithText(appString(R.string.language))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val appearanceBounds =
+            ui.onNodeWithText(appString(R.string.appearance))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertTrue(languageBounds.bottom <= appearanceBounds.top)
+    }
+
     private fun capture(name: String, dark: Boolean) {
         ui.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
