@@ -1399,6 +1399,44 @@ internal class RexConnection(
         }
     }
 
+    internal fun watchProgramResume(target: AppState, watch: Boolean) {
+        command(
+            "program_resume",
+            "watch" to watch,
+            "session" to target.selectedSession,
+            "block" to target.selectedBlock,
+            "connectionEpoch" to target.connectionEpoch,
+            "navigationId" to target.navigationId,
+        )
+    }
+
+    internal fun undoClose(serial: Long) {
+        val current = state.value
+        if (
+            !visible ||
+                !foreground ||
+                !current.connected ||
+                current.creating ||
+                navigationRequest.pending ||
+                current.undoClose?.serial != serial
+        )
+            return
+        activation.navigate()
+        dropResize()
+        cancelKeyRepeats()
+        controlModifier = false
+        altModifier = false
+        shiftState = ShiftKeyState()
+        keyboardRequest = ""
+        command(
+            "undo_close",
+            "serial" to serial,
+            "session" to current.selectedSession,
+            "connectionEpoch" to current.connectionEpoch,
+            "navigationId" to current.navigationId,
+        )
+    }
+
     fun refresh() = command("refresh")
 
     fun claimActivePane() {

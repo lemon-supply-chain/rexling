@@ -852,4 +852,26 @@
     <string name="forward_error_invalid_ports">请输入 1 到 65535 之间的有效端口。</string>
     <string name="forward_error_invalid_host">请输入主机名或 IP 地址。</string>
     <string name="forward_error_connect_first">请先连接服务器。</string>
+
+    <!-- Undo close & program resume -->
+    <string name="tab_closed">已关闭标签页</string>
+    <string name="pane_closed">已关闭窗格</string>
+    <string name="dismiss_undo">关闭撤销提示</string>
+    <string name="close_pane_title">关闭窗格？</string>
+    <string name="label_close_undoable_confirm">要关闭“%1$s”吗？Rex 可短暂保留正在运行的程序以便撤销。</string>
+    <string name="program_resume_title">程序恢复</string>
+    <string name="program_resume_ready">可恢复</string>
+    <string name="program_resume_blocked">无法恢复</string>
+    <string name="program_resume_none">无恢复记录</string>
+    <string name="program_resume_not_selected">未选择要恢复的程序</string>
+    <string name="program_resume_unavailable">状态不可用</string>
+    <string name="program_resume_reason_no_rule">没有匹配的恢复规则</string>
+    <string name="program_resume_reason_dir_not_allowed">工作目录不在规则允许范围内</string>
+    <string name="program_resume_reason_flag_not_listed">存在规则未列出的启动参数</string>
+    <string name="program_resume_reason_flag_value">启动参数与规则不匹配</string>
+    <string name="program_resume_reason_program_differs">恢复命令指向了不同的程序</string>
+    <string name="program_resume_reason_wrapped">程序运行在包装器中</string>
+    <string name="program_resume_reason_launch_unreadable">Rex 无法读取启动参数</string>
+    <string name="program_resume_reason_config_incomplete">Rex 无法加载其配置</string>
+    <string name="program_resume_reason_untrusted">Rex 未信任该恢复命令</string>
 </resources>

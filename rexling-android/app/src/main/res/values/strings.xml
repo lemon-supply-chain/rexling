@@ -856,4 +856,26 @@
     <string name="forward_error_invalid_ports">Enter valid ports from 1 to 65535.</string>
     <string name="forward_error_invalid_host">Enter a hostname or IP address.</string>
     <string name="forward_error_connect_first">Connect a server first.</string>
+
+    <!-- Undo close & program resume -->
+    <string name="tab_closed">Tab closed</string>
+    <string name="pane_closed">Pane closed</string>
+    <string name="dismiss_undo">Dismiss Undo</string>
+    <string name="close_pane_title">Close pane?</string>
+    <string name="label_close_undoable_confirm">Close “%1$s”? Rex can keep the running programs available briefly for Undo.</string>
+    <string name="program_resume_title">Program resume</string>
+    <string name="program_resume_ready">Ready to resume</string>
+    <string name="program_resume_blocked">Can’t resume</string>
+    <string name="program_resume_none">No resume record</string>
+    <string name="program_resume_not_selected">No program selected to resume</string>
+    <string name="program_resume_unavailable">Status unavailable</string>
+    <string name="program_resume_reason_no_rule">No matching resume rule</string>
+    <string name="program_resume_reason_dir_not_allowed">Working directory is outside the rule</string>
+    <string name="program_resume_reason_flag_not_listed">A launch flag is outside the rule</string>
+    <string name="program_resume_reason_flag_value">Launch flags don’t match the rule</string>
+    <string name="program_resume_reason_program_differs">The resume command names a different program</string>
+    <string name="program_resume_reason_wrapped">The program runs inside a wrapper</string>
+    <string name="program_resume_reason_launch_unreadable">Rex couldn’t read the launch arguments</string>
+    <string name="program_resume_reason_config_incomplete">Rex couldn’t load its configuration</string>
+    <string name="program_resume_reason_untrusted">Rex didn’t trust the resume command</string>
 </resources>

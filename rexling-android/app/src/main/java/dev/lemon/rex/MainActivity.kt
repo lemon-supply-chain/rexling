@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -291,6 +292,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             ?: windows.firstOrNull { it.blocks.isNotEmpty() }
     val activeWindowId = window?.id.orEmpty()
     val ready = state.connected && !navigation.pending && !state.creating
+    var dismissedUndo by remember(client) { mutableLongStateOf(0) }
     val keyTarget = client.keyTarget()
     val terminalHaze = remember { HazeState() }
     val workspaceHaze = remember { HazeState() }
@@ -1697,6 +1699,55 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             hazeState = terminalHaze,
                         )
                     }
+                    state.undoClose
+                        ?.takeIf { ready && !paneObscured && it.serial != dismissedUndo }
+                        ?.let { close ->
+                            val dismissUndoLabel = stringResource(R.string.dismiss_undo)
+                            Snackbar(
+                                modifier =
+                                    Modifier.align(Alignment.BottomCenter)
+                                        .widthIn(max = 380.dp)
+                                        .padding(horizontal = 12.dp)
+                                        .padding(
+                                            bottom =
+                                                if (tabLayout.side || floatingTabs) 62.dp
+                                                else 110.dp,
+                                        ),
+                                action = {
+                                    TextButton(
+                                        onClick = { client.undoClose(close.serial) },
+                                        colors =
+                                            ButtonDefaults.textButtonColors(
+                                                contentColor = SnackbarDefaults.actionColor,
+                                            ),
+                                    ) {
+                                        Text(stringResource(R.string.undo))
+                                    }
+                                },
+                                dismissAction = {
+                                    IconButton(
+                                        onClick = { dismissedUndo = close.serial },
+                                        modifier =
+                                            Modifier.semantics {
+                                                contentDescription = dismissUndoLabel
+                                            },
+                                    ) {
+                                        ChromeSymbol(
+                                            ChromeIcon.CLOSE,
+                                            Modifier.size(18.dp),
+                                            LocalContentColor.current,
+                                        )
+                                    }
+                                },
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (close.tab) R.string.tab_closed
+                                        else R.string.pane_closed,
+                                    ),
+                                )
+                            }
+                        }
                     // Loading feedback must not resize the terminal grid during navigation.
                     if (state.creating || navigation.pending)
                         LinearProgressIndicator(
@@ -1706,6 +1757,20 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
             }
         }
         if (menu) {
+            val showProgramResume =
+                ready && chosenBlock != null && chosen == liveBlock && state.supportsProgramResume
+            if (showProgramResume) {
+                DisposableEffect(
+                    client,
+                    state.selectedSession,
+                    liveBlock,
+                    state.connectionEpoch,
+                    state.navigationId,
+                ) {
+                    client.watchProgramResume(state, true)
+                    onDispose { client.watchProgramResume(state, false) }
+                }
+            }
             val canTakeControl = ready && client.hasScreen
             val canAttach = controlled && model.images.state == null
             TerminalActionsDrawer(
@@ -1825,6 +1890,8 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             }
                         else null,
                     ),
+                showProgramResume = showProgramResume,
+                programResume = state.programResume,
                 onPreferences = { openSettings(SettingsRoute.Preferences) },
                 onClosePane =
                     chosenBlock
@@ -2236,12 +2303,14 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                 title = {
                     Text(
                         if (target.tab) stringResource(R.string.close_tab_title)
-                        else stringResource(R.string.close_tab),
+                        else stringResource(R.string.close_pane_title),
                     )
                 },
                 text = {
                     Text(
-                        if (!target.tab)
+                        if (state.supportsUndoClose)
+                            stringResource(R.string.label_close_undoable_confirm, target.label)
+                        else if (!target.tab)
                             stringResource(R.string.label_close_pane_confirm, target.label)
                         else if (target.blocks.size == 1)
                             stringResource(R.string.label_close_tab_confirm_one, target.label)
@@ -2258,6 +2327,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                         enabled = ready,
                         onClick = {
                             closeTarget = null
+                            menu = false
                             if (target.tab)
                                 client.closeTab(target.session, target.id, target.blocks)
                             else client.closePane(target.session, target.id)

@@ -164,6 +164,10 @@ data class TerminalClipboardWrite(
     val local: Boolean = false,
 )
 
+data class ProgramResumeStatus(val state: String, val program: String, val reason: String)
+
+data class UndoTerminalClose(val serial: Long, val tab: Boolean)
+
 data class AppState(
     val terminalProgress: Map<String, TerminalProgress> = emptyMap(),
     val programs: Map<String, ProgramIdentity> = emptyMap(),
@@ -187,6 +191,10 @@ data class AppState(
     val serverVersion: String = "",
     val error: String = "",
     val notice: String = "",
+    val supportsProgramResume: Boolean = false,
+    val programResume: ProgramResumeStatus? = null,
+    val supportsUndoClose: Boolean = false,
+    val undoClose: UndoTerminalClose? = null,
     val sessions: List<SessionItem> = emptyList(),
     val windows: List<WindowItem> = emptyList(),
     val selectedSession: String = "",
@@ -311,6 +319,20 @@ data class AppState(
                 serverVersion = root.optString("serverVersion"),
                 error = root.optString("error"),
                 notice = root.optString("notice"),
+                supportsProgramResume = root.optBoolean("supportsProgramResume"),
+                programResume =
+                    root.optJSONObject("programResume")?.let {
+                        ProgramResumeStatus(
+                            it.optString("state"),
+                            it.optString("program"),
+                            it.optString("reason"),
+                        )
+                    },
+                supportsUndoClose = root.optBoolean("supportsUndoClose"),
+                undoClose =
+                    root.optJSONObject("undoClose")?.let {
+                        UndoTerminalClose(it.getLong("serial"), it.optBoolean("tab"))
+                    },
                 sessions =
                     root.optJSONArray("sessions").objects { value ->
                         val s = value as JSONObject
