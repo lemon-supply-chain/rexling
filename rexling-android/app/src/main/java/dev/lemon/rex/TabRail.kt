@@ -205,10 +205,11 @@ internal fun TerminalTabRail(
         portrait &&
             (switcherTransition.isRunning ||
                 switcherTransition.currentState != switcherTransition.targetState)
+    val collapsedWidth = if (floating) 48.dp else tabRailWidth(TabRailStyle.ICONS)
     // Resizes are debounced, so the animated width sends the pane only its final size.
     val width by
         androidx.compose.animation.core.animateDpAsState(
-            if (floating) (if (titles) 144.dp else 48.dp) else tabRailWidth(style, windowWidthDp),
+            if (titles) tabRailWidth(TabRailStyle.TITLES, windowWidthDp) else collapsedWidth,
             tween(sidebarTransitionMillis),
             label = "Tab rail width",
         )
@@ -678,78 +679,53 @@ internal fun TerminalTabRail(
                     thickness = .5.dp,
                     color = divider,
                 )
-                if (floating) {
-                    // Points the way the rail will go: toward the terminal to show titles, toward
-                    // the edge to hide them.
-                    val towardTerminal = if (side == TabBarPosition.LEFT) -90f else 90f
+                val atStart = side == TabBarPosition.LEFT
+                val atLeftEdge = atStart == (LocalLayoutDirection.current == LayoutDirection.Ltr)
+                val towardTerminal = if (atLeftEdge) -90f else 90f
+                val toggleWidth = 36.dp
+                val toggleInset = (collapsedWidth - toggleWidth) / 2
+                val toggle: @Composable () -> Unit = {
                     ChromeButton(
                         ChromeIcon.CHEVRON,
                         styleToggleDescription,
                         modifier =
-                            Modifier.graphicsLayer {
+                            Modifier.size(toggleWidth).graphicsLayer {
                                 rotationZ = if (titles) -towardTerminal else towardTerminal
                             },
                     ) {
                         onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
                     }
-                    Box(Modifier.padding(top = 4.dp)) {
-                        CompositionLocalProvider(
-                            LocalSidebarNewTab provides footerNewTab,
-                            LocalKeyboardActionLast provides titles,
+                }
+                if (!titles) Box(Modifier.padding(bottom = 4.dp)) { actions() }
+                // Center the toggle in the outer icon slot in either style.
+                val actionsInset = if (titles) 6.dp else 0.dp
+                Row(
+                    Modifier.fillMaxWidth()
+                        .height(activityButtonDiameter)
+                        .padding(
+                            start = if (atStart) toggleInset else actionsInset,
+                            end = if (atStart) actionsInset else toggleInset,
+                        ),
+                    horizontalArrangement =
+                        when {
+                            titles -> Arrangement.Start
+                            atStart -> Arrangement.Start
+                            else -> Arrangement.End
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (atStart) toggle()
+                    if (titles)
+                        Box(
+                            Modifier.weight(1f),
+                            contentAlignment =
+                                if (atStart) Alignment.CenterEnd else Alignment.CenterStart,
                         ) {
-                            actions()
-                        }
-                    }
-                } else {
-                    val atStart = side == TabBarPosition.LEFT
-                    val atLeftEdge =
-                        atStart == (LocalLayoutDirection.current == LayoutDirection.Ltr)
-                    val towardTerminal = if (atLeftEdge) -90f else 90f
-                    val toggleWidth = 36.dp
-                    val toggleInset = (tabRailWidth(TabRailStyle.ICONS) - toggleWidth) / 2
-                    val toggle: @Composable () -> Unit = {
-                        ChromeButton(
-                            ChromeIcon.CHEVRON,
-                            styleToggleDescription,
-                            modifier =
-                                Modifier.size(toggleWidth).graphicsLayer {
-                                    rotationZ = if (titles) -towardTerminal else towardTerminal
-                                },
-                        ) {
-                            onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
-                        }
-                    }
-                    if (!titles) Box(Modifier.padding(bottom = 4.dp)) { actions() }
-                    // Center the toggle in the outer icon slot in either style.
-                    val actionsInset = if (titles) 6.dp else 0.dp
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .height(activityButtonDiameter)
-                            .padding(
-                                start = if (atStart) toggleInset else actionsInset,
-                                end = if (atStart) actionsInset else toggleInset,
-                            ),
-                        horizontalArrangement =
-                            when {
-                                titles -> Arrangement.Start
-                                atStart -> Arrangement.Start
-                                else -> Arrangement.End
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (atStart) toggle()
-                        if (titles)
-                            Box(
-                                Modifier.weight(1f),
-                                contentAlignment =
-                                    if (atStart) Alignment.CenterEnd else Alignment.CenterStart,
-                            ) {
-                                CompositionLocalProvider(LocalSidebarNewTab provides footerNewTab) {
-                                    actions()
-                                }
+                            CompositionLocalProvider(LocalSidebarNewTab provides footerNewTab) {
+                                actions()
                             }
-                        if (!atStart) toggle()
-                    }
+                        }
+                    if (!atStart) toggle()
                 }
             }
         }
