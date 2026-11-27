@@ -1,14 +1,20 @@
 package dev.lemon.rex
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,7 +24,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +39,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
@@ -51,6 +57,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
 import kotlin.math.roundToInt
 
@@ -140,6 +147,8 @@ internal data class TabRailSessions(
 
 private val sidebarTextSize = 11.sp
 private val sidebarLineHeight = 14.sp
+private val sidebarTabIconInset = 10.5.dp
+private const val sidebarTransitionMillis = 180
 
 /**
  * A vertical tab list beside the terminal; [actions] (switcher, Activity, keyboard) sit at its
@@ -171,6 +180,7 @@ internal fun TerminalTabRail(
     sessions: TabRailSessions? = null,
     headerOverlap: () -> Int = { 0 },
     floating: Boolean = false,
+    swipeBackdrop: PaneSwipeBackdrop? = null,
     hazeState: HazeState? = null,
     handle: (@Composable () -> Unit)? = null,
     onFanToggle: ((String) -> Unit)? = null,
@@ -185,15 +195,21 @@ internal fun TerminalTabRail(
     val wideSessions = sessions.takeIf {
         !floating && titles && TabWidthClass.of(windowWidthDp) == TabWidthClass.WIDE
     }
-    val tabsAtTop = wideSessions != null
-    var showSessions by rememberSaveable(tabsAtTop) { mutableStateOf(false) }
-    // Swipe across the rail toward the terminal to show titles, back toward the screen edge to hide
-    // them.
+    val portrait = currentPaneOrientation() == PaneOrientation.PORTRAIT
+    val tabsAtTop = wideSessions != null && !portrait
+    var showSessions by rememberSaveable(wideSessions != null) { mutableStateOf(false) }
+    val switcherTransition = updateTransition(wideSessions != null, label = "Sidebar switcher")
+    // In portrait the viewport already animates. Let its bottom-aligned tabs follow
+    // that motion directly, without adding a second placement spring.
+    val tabsFollowSwitcher =
+        portrait &&
+            (switcherTransition.isRunning ||
+                switcherTransition.currentState != switcherTransition.targetState)
     // Resizes are debounced, so the animated width sends the pane only its final size.
     val width by
         androidx.compose.animation.core.animateDpAsState(
             if (floating) (if (titles) 144.dp else 48.dp) else tabRailWidth(style, windowWidthDp),
-            androidx.compose.animation.core.tween(180),
+            tween(sidebarTransitionMillis),
             label = "Tab rail width",
         )
     val tabAlignment =
@@ -214,15 +230,6 @@ internal fun TerminalTabRail(
                 },
             )
         }
-    val outward = if (side == TabBarPosition.LEFT) 1f else -1f
-    val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 32.dp.toPx() }
-    var swipe by remember { mutableFloatStateOf(0f) }
-    // Gesture navigation treats edge swipes as Back. Android lets an app opt out for at most 200dp
-    // of
-    // each edge, so claim the rail's lowest 200dp (its buttons and nearest tabs); the toggle below
-    // always works.
-    val exclusion = with(androidx.compose.ui.platform.LocalDensity.current) { 200.dp.toPx() }
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val scheme = MaterialTheme.colorScheme
     val divider = scheme.outlineVariant.copy(alpha = .65f)
     val list = rememberLazyListState()
@@ -247,11 +254,67 @@ internal fun TerminalTabRail(
         if (index >= 0 && !showSessions)
             list.animateScrollToItem(index + newTabItems, scrollOffset = -newTabClearance)
     }
+    val pageSwitcher: @Composable () -> Unit = {
+        val edge = if (portrait) Alignment.Bottom else Alignment.Top
+        switcherTransition.AnimatedVisibility(
+            visible = { it },
+            enter =
+                expandVertically(tween(sidebarTransitionMillis), expandFrom = edge) +
+                    fadeIn(tween(120, delayMillis = 32)),
+            exit =
+                shrinkVertically(tween(sidebarTransitionMillis), shrinkTowards = edge) +
+                    fadeOut(tween(110)),
+        ) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .background(scheme.surfaceVariant.copy(alpha = .45f), RoundedCornerShape(12.dp))
+                    .padding(2.dp)
+                    .selectableGroup(),
+            ) {
+                for (sessionsTab in listOf(false, true)) {
+                    val active = showSessions == sessionsTab
+                    Box(
+                        Modifier.weight(1f)
+                            .heightIn(min = 36.dp)
+                            .background(
+                                if (active) scheme.primaryContainer else Color.Transparent,
+                                RoundedCornerShape(9.dp),
+                            )
+                            .selectable(
+                                active,
+                                enabled = wideSessions != null,
+                                role = Role.Tab,
+                                onClick = { showSessions = sessionsTab },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            stringResource(
+                                if (sessionsTab) R.string.sessions else R.string.section_tabs,
+                            ),
+                            fontSize = sidebarTextSize,
+                            lineHeight = sidebarLineHeight,
+                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                            color =
+                                if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
     // A floating rail is a rounded card that hugs its tabs, so it has no fixed corner size.
     val pillShape = RexTokens.shape.tabCell
     val styleToggleDescription =
         stringResource(if (titles) R.string.show_icons_only else R.string.show_tab_titles)
     val tabsDescription = stringResource(R.string.a11y_tabs)
+    val glassVisible by
+        remember(swipeBackdrop) { derivedStateOf { (swipeBackdrop?.reveal?.invoke() ?: 0f) > 0f } }
+    val glass =
+        if (!floating && glassVisible && hazeState != null)
+            Modifier.paneFrost(hazeState, RectangleShape, edge = false, opacity = .55f)
+        else Modifier
     BoxWithConstraints(
         Modifier.then(if (floating) Modifier else Modifier.fillMaxHeight())
             .width(width)
@@ -260,18 +323,24 @@ internal fun TerminalTabRail(
             .then(
                 if (floating) Modifier
                 else
-                    Modifier.background(scheme.surface).drawWithContent {
-                        drawContent()
-                        val stroke = .5.dp.toPx()
-                        val x =
-                            if (side == TabBarPosition.LEFT) size.width - stroke / 2 else stroke / 2
-                        drawLine(
-                            divider,
-                            Offset(x, 0f),
-                            Offset(x, size.height),
-                            strokeWidth = stroke,
-                        )
-                    },
+                    Modifier.zIndex(1f)
+                        .onSizeChanged { swipeBackdrop?.railWidth = it.width }
+                        .then(glass)
+                        .drawWithContent {
+                            val opacity = 1f - (swipeBackdrop?.reveal?.invoke() ?: 0f)
+                            drawRect(scheme.surface.copy(alpha = opacity))
+                            drawContent()
+                            val stroke = .5.dp.toPx()
+                            val x =
+                                if (side == TabBarPosition.LEFT) size.width - stroke / 2
+                                else stroke / 2
+                            drawLine(
+                                divider,
+                                Offset(x, 0f),
+                                Offset(x, size.height),
+                                strokeWidth = stroke,
+                            )
+                        },
             )
             // Reaches the screen edge under the gesture handle; its buttons stay above it.
             .then(
@@ -305,10 +374,10 @@ internal fun TerminalTabRail(
             Modifier.fillMaxWidth()
                 .height(pillHeight)
                 .then(
-                    if (tabsAtTop)
+                    if (wideSessions != null)
                         Modifier.layout { measurable, constraints ->
-                            // The workspace draws beneath the compact header. Keep the sidebar
-                            // controls below it.
+                            // Keep the expanded sidebar's scrollable lists below the compact
+                            // header.
                             val inset = headerOverlap().coerceIn(0, constraints.maxHeight)
                             val content = measurable.measure(constraints.offset(vertical = -inset))
                             layout(content.width, content.height + inset) {
@@ -333,94 +402,18 @@ internal fun TerminalTabRail(
                             .testTag("Floating tab rail")
                     else Modifier,
                 )
-                .systemGestureExclusion { coordinates ->
-                    val height = coordinates.size.height.toFloat()
-                    androidx.compose.ui.geometry.Rect(
-                        0f,
-                        (height - exclusion).coerceAtLeast(0f),
-                        coordinates.size.width.toFloat(),
-                        height,
-                    )
-                }
-                .draggable(
-                    androidx.compose.foundation.gestures.rememberDraggableState { swipe += it },
-                    androidx.compose.foundation.gestures.Orientation.Horizontal,
-                    onDragStarted = { swipe = 0f },
-                    onDragStopped = {
-                        val next =
-                            when {
-                                swipe * outward > threshold -> TabRailStyle.TITLES
-                                swipe * outward < -threshold -> TabRailStyle.ICONS
-                                else -> style
-                            }
-                        swipe = 0f
-                        if (next != style) {
-                            haptic.performHapticFeedback(
-                                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                            )
-                            if (floating) onFanDismiss()
-                            onStyle(next)
-                        }
-                    },
-                )
-                .semantics {
-                    customActions =
-                        listOf(
-                            CustomAccessibilityAction(styleToggleDescription) {
-                                onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
-                                true
-                            },
-                        )
-                }
                 .padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // A floating rail carries its grip in the same column, above the tabs.
             handle?.invoke()
-            if (wideSessions != null) {
-                Row(
-                    Modifier.fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                        .background(
-                            scheme.surfaceVariant.copy(alpha = .45f),
-                            RoundedCornerShape(12.dp),
-                        )
-                        .padding(2.dp)
-                        .selectableGroup(),
-                ) {
-                    for (sessionsTab in listOf(false, true)) {
-                        val active = showSessions == sessionsTab
-                        Box(
-                            Modifier.weight(1f)
-                                .heightIn(min = 36.dp)
-                                .background(
-                                    if (active) scheme.primaryContainer else Color.Transparent,
-                                    RoundedCornerShape(9.dp),
-                                )
-                                .selectable(
-                                    active,
-                                    role = Role.Tab,
-                                    onClick = { showSessions = sessionsTab },
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                stringResource(
-                                    if (sessionsTab) R.string.sessions else R.string.section_tabs,
-                                ),
-                                fontSize = sidebarTextSize,
-                                lineHeight = sidebarLineHeight,
-                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                color =
-                                    if (active) scheme.onPrimaryContainer
-                                    else scheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
+            if (!portrait) pageSwitcher()
             if (showSessions && wideSessions != null) {
-                TabRailSessionList(wideSessions, Modifier.weight(1f).fillMaxWidth()) { key ->
+                TabRailSessionList(
+                    wideSessions,
+                    Modifier.weight(1f).fillMaxWidth(),
+                    alignment = if (tabsAtTop) Alignment.Top else Alignment.Bottom,
+                ) { key ->
                     showSessions = false
                     wideSessions.onSelect(key)
                 }
@@ -437,9 +430,12 @@ internal fun TerminalTabRail(
                     // resizes.
                     if (!titles && onNewTab != null)
                         stickyHeader(key = 0) {
+                            val placement =
+                                if (tabsFollowSwitcher) Modifier
+                                else Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
                             Box(
                                 Modifier.fillMaxWidth()
-                                    .animateItem(fadeInSpec = null, fadeOutSpec = null)
+                                    .then(placement)
                                     .then(
                                         if (floating) Modifier
                                         else Modifier.background(scheme.surface),
@@ -498,7 +494,10 @@ internal fun TerminalTabRail(
                         val moveUpLabel = stringResource(R.string.move_up)
                         val moveDownLabel = stringResource(R.string.move_down)
                         val tabOptionsLabel = stringResource(R.string.tab_options)
-                        Box(Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)) {
+                        val placement =
+                            if (tabsFollowSwitcher) Modifier
+                            else Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                        Box(placement) {
                             if (floating && active) {
                                 DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
                             }
@@ -586,12 +585,11 @@ internal fun TerminalTabRail(
                                         },
                                     )
                                     .padding(
-                                        start = if (titles) 14.dp else 5.dp,
+                                        start = sidebarTabIconInset,
                                         end = if (titles) 10.dp else 0.dp,
                                     ),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement =
-                                    if (titles) Arrangement.spacedBy(4.dp) else Arrangement.Center,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Box(
                                     Modifier.semantics { testTag = "Tab program icon ${w.id}" },
@@ -668,6 +666,7 @@ internal fun TerminalTabRail(
                         }
                     }
                 }
+            if (portrait) pageSwitcher()
             val footerNewTab =
                 if (titles && onNewTab != null) SidebarNewTab(enabled, onNewTab) else null
             Column(
@@ -761,6 +760,7 @@ internal fun TerminalTabRail(
 private fun TabRailSessionList(
     sessions: TabRailSessions,
     modifier: Modifier,
+    alignment: Alignment.Vertical,
     onSelect: (String) -> Unit,
 ) {
     val groups =
@@ -772,7 +772,7 @@ private fun TabRailSessionList(
     LazyColumn(
         modifier.semantics { contentDescription = description },
         contentPadding = PaddingValues(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp, alignment),
     ) {
         if (groups.isEmpty())
             item {

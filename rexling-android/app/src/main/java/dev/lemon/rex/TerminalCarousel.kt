@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -25,6 +26,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.chrisbanes.haze.HazeState
@@ -34,6 +36,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal val LocalKeyboardSuggestions = staticCompositionLocalOf { false }
+
+internal class PaneSwipeBackdrop(val side: TabBarPosition) {
+    var railWidth by mutableIntStateOf(0)
+    var reveal by mutableStateOf<() -> Float>({ 0f })
+}
 
 @Composable
 internal fun TerminalCarousel(
@@ -81,6 +88,7 @@ internal fun TerminalCarousel(
     headerHeightSaved: () -> Int = { 0 },
     headerOverlap: () -> Int = { 0 },
     floatingMotion: FloatingPaneMotion? = null,
+    swipeBackdrop: PaneSwipeBackdrop? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val switchLayout =
@@ -134,11 +142,19 @@ internal fun TerminalCarousel(
             toast = false
         }
     }
-    BoxWithConstraints(modifier.clipToBounds()) {
+    BoxWithConstraints(if (swipeBackdrop == null) modifier.clipToBounds() else modifier) {
         val cardWidth = maxWidth.coerceAtLeast(80.dp)
         val cardLeft = 0.dp
         val stride = with(LocalDensity.current) { (cardWidth + 8.dp).toPx() }
         val leftPx = with(LocalDensity.current) { cardLeft.toPx() }
+        val revealDistance = with(LocalDensity.current) { 24.dp.toPx() }
+        DisposableEffect(swipeBackdrop, stride, revealDistance) {
+            swipeBackdrop?.reveal = {
+                val distance = abs(drag)
+                (minOf(distance, abs(stride - distance)) / revealDistance).coerceIn(0f, 1f)
+            }
+            onDispose { swipeBackdrop?.reveal = { 0f } }
+        }
         val candidate by
             remember(stride, blocks) {
                 derivedStateOf {
@@ -205,7 +221,45 @@ internal fun TerminalCarousel(
         }
         val retained = imeHandoff.retainFor(pages.map { it.first })
         val mountedPages = pages + listOfNotNull(retained?.let { it.pane to 4 })
-        Box(Modifier.fillMaxSize().frostSource(haze, showSwitch || captureBackdrop)) {
+        val motion = dragging || settling
+        val railExtension =
+            if (motion && swipeBackdrop != null)
+                Modifier.layout { measurable, constraints ->
+                    // Give the haze source room behind the rail and report the original viewport
+                    // width.
+                    val inset = swipeBackdrop.railWidth
+                    val backdrop = measurable.measure(constraints.offset(horizontal = inset))
+                    layout(constraints.maxWidth, backdrop.height) {
+                        backdrop.placeRelative(
+                            if (swipeBackdrop.side == TabBarPosition.LEFT) -inset else 0,
+                            0,
+                        )
+                    }
+                }
+            else Modifier
+        val pageInset =
+            if (motion && swipeBackdrop != null)
+                Modifier.layout { measurable, constraints ->
+                    val inset = swipeBackdrop.railWidth
+                    val page = measurable.measure(constraints.offset(horizontal = -inset))
+                    layout(page.width + inset, page.height) {
+                        page.placeRelative(
+                            if (swipeBackdrop.side == TabBarPosition.LEFT) inset else 0,
+                            0,
+                        )
+                    }
+                }
+            else Modifier
+        Box(
+            Modifier.fillMaxSize()
+                .then(railExtension)
+                .frostSource(
+                    haze,
+                    showSwitch || captureBackdrop || (motion && swipeBackdrop != null),
+                )
+                .clipToBounds()
+                .then(pageInset),
+        ) {
             for ((block, offset) in mountedPages) {
                 val retiring = retained?.pane?.id == block.id
                 val center = offset == 0 && !retiring

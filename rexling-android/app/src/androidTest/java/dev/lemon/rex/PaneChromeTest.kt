@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -10,8 +11,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -23,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.chrisbanes.haze.HazeState
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
@@ -117,6 +121,84 @@ class PaneChromeTest {
             }
         }
         ui.mainClock.autoAdvance = false
+    }
+
+    @Test fun swipingDrawsBehindLeftSidebar() = swipeBehindSidebar(TabBarPosition.LEFT)
+
+    @Test fun swipingDrawsBehindRightSidebar() = swipeBehindSidebar(TabBarPosition.RIGHT)
+
+    private fun swipeBehindSidebar(side: TabBarPosition) {
+        val blocks = listOf(BlockItem("a", "shell"), BlockItem("b", "shell"))
+        val screen = TerminalScreen(20, 10, null, null, -1, 0, emptyList())
+        ui.setContent {
+            MaterialTheme {
+                val backdrop = remember { PaneSwipeBackdrop(side) }
+                val haze = remember { HazeState() }
+                val rail: @Composable () -> Unit = {
+                    TerminalTabRail(
+                        emptyList(),
+                        "",
+                        true,
+                        {},
+                        { emptyList() },
+                        { 0 },
+                        side,
+                        TabRailStyle.ICONS,
+                        swipeBackdrop = backdrop,
+                        hazeState = haze,
+                    ) {}
+                }
+                Row(Modifier.size(300.dp, 400.dp).clipToBounds().testTag("swipe workspace")) {
+                    if (side == TabBarPosition.LEFT) rail()
+                    TerminalCarousel(
+                        blocks,
+                        "a",
+                        "a",
+                        screen,
+                        { screen },
+                        emptyMap(),
+                        false,
+                        10f,
+                        {},
+                        {},
+                        { _, _, _, _, _ -> },
+                        {},
+                        {},
+                        { _, _ -> },
+                        {},
+                        {},
+                        { terminal = it },
+                        Modifier.weight(1f),
+                        squareCorners = true,
+                        hazeState = haze,
+                        swipeBackdrop = backdrop,
+                    )
+                    if (side == TabBarPosition.RIGHT) rail()
+                }
+            }
+        }
+        val workspace = ui.onNodeWithTag("swipe workspace")
+        fun railPixel(): androidx.compose.ui.graphics.Color {
+            val pixels = workspace.captureToImage().toPixelMap()
+            val x =
+                if (side == TabBarPosition.LEFT) pixels.width / 12
+                else pixels.width - pixels.width / 12
+            return pixels[x, pixels.height / 4]
+        }
+        val resting = railPixel()
+        val width = ui.runOnIdle { terminal.width }
+        val dx = width * .45f * if (side == TabBarPosition.LEFT) -1 else 1
+        ui.runOnIdle { terminal.onPaneDrag?.invoke(dx, true) }
+        val moving = railPixel()
+        assertTrue(
+            "The rail should show the dark terminal behind its surface",
+            resting.red - moving.red > .1f,
+        )
+        ui.runOnIdle {
+            assertEquals(width, terminal.width)
+            terminal.onPaneDrag?.invoke(0f, false)
+        }
+        assertEquals(resting, railPixel())
     }
 
     private fun badge() =
@@ -654,11 +736,36 @@ class PaneChromeTest {
                 .outputStream()
                 .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
+        fun tabIconInset(): Float {
+            val row =
+                ui.onNodeWithContentDescription(
+                        appString(R.string.a11y_tab_working, "PDF preview", "Codex"),
+                        substring = true,
+                    )
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            val icon =
+                ui.onNodeWithTag("Tab program icon tab", useUnmergedTree = true)
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            return icon.left - row.left
+        }
         check(172.dp, "titles", vertical = false)
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs)).performTouchInput {
+            swipeLeft()
+        }
+        ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).assertIsDisplayed()
+        val expandedIconInset = tabIconInset()
         val collapse = ui.onNodeWithContentDescription(appString(R.string.show_icons_only))
         val expandedToggle = collapse.fetchSemanticsNode().boundsInRoot
         collapse.performClick()
         check(52.dp, "icons", vertical = true)
+        assertEquals(
+            "The tab icon should keep the same distance from the marker",
+            expandedIconInset,
+            tabIconInset(),
+            .5f,
+        )
         val expand = ui.onNodeWithContentDescription(appString(R.string.show_tab_titles))
         val collapsedToggle = expand.fetchSemanticsNode().boundsInRoot
         assertEquals(expandedToggle, collapsedToggle)
@@ -759,6 +866,7 @@ class PaneChromeTest {
         var windowWidth by mutableIntStateOf(800)
         var overlap by mutableIntStateOf(0)
         var side by mutableStateOf(TabBarPosition.LEFT)
+        var windowOrientation by mutableIntStateOf(Configuration.ORIENTATION_LANDSCAPE)
         var current by mutableStateOf(localSession.key)
         val selectedSessions = mutableListOf<String>()
         ui.setContent {
@@ -787,10 +895,16 @@ class PaneChromeTest {
                         TerminalActions(true, true, {}, {}, vertical = style == TabRailStyle.ICONS)
                     }
                 }
-                Row(Modifier.size(360.dp, 420.dp).underWorkspaceHeader { overlap }) {
-                    if (side == TabBarPosition.LEFT) rail()
-                    Box(Modifier.weight(1f).fillMaxSize().testTag("Terminal area"))
-                    if (side == TabBarPosition.RIGHT) rail()
+                val configuration =
+                    Configuration(LocalConfiguration.current).apply {
+                        orientation = windowOrientation
+                    }
+                CompositionLocalProvider(LocalConfiguration provides configuration) {
+                    Row(Modifier.size(360.dp, 420.dp).underWorkspaceHeader { overlap }) {
+                        if (side == TabBarPosition.LEFT) rail()
+                        Box(Modifier.weight(1f).fillMaxSize().testTag("Terminal area"))
+                        if (side == TabBarPosition.RIGHT) rail()
+                    }
                 }
             }
         }
@@ -899,5 +1013,49 @@ class PaneChromeTest {
         assertEquals(bounds(tabsList).center.x, bounds(expand).center.x, 1f)
         expand.performClick()
         assertEquals(rightToggle, bounds(collapse))
+
+        ui.runOnIdle { windowOrientation = Configuration.ORIENTATION_PORTRAIT }
+        val portraitSwitcher = bounds(tabs)
+        assertTrue(bounds(activeTab).bottom <= portraitSwitcher.top)
+        assertTrue(
+            bounds(tabsList).bottom - bounds(activeTab).bottom <= with(ui.density) { 4.dp.toPx() },
+        )
+        assertTrue(portraitSwitcher.bottom <= bounds(collapse).top)
+        assertEquals(rightToggle, bounds(collapse))
+        val portraitExpandedTop = bounds(activeTab).top
+        val portraitExpandedBottom = bounds(tabsList).bottom
+        ui.mainClock.autoAdvance = false
+        collapse.performClick()
+        ui.mainClock.advanceTimeBy(96)
+        val portraitMovingTop = bounds(activeTab).top
+        val portraitMovingBottom = bounds(tabsList).bottom
+        assertEquals(rightToggle, bounds(expand))
+        ui.mainClock.advanceTimeBy(1000)
+        val portraitCollapsedTop = bounds(activeTab).top
+        val portraitCollapsedBottom = bounds(tabsList).bottom
+        assertTrue(
+            "The tabs should move with the switcher as it closes. " +
+                "Tab top $portraitExpandedTop → $portraitMovingTop → $portraitCollapsedTop. " +
+                "List bottom $portraitExpandedBottom → $portraitMovingBottom → $portraitCollapsedBottom.",
+            portraitMovingTop > portraitExpandedTop && portraitMovingTop < portraitCollapsedTop,
+        )
+        expand.performClick()
+        ui.mainClock.advanceTimeBy(96)
+        val portraitOpeningTop = bounds(activeTab).top
+        assertTrue(
+            "The tabs should follow the switcher as it opens",
+            portraitOpeningTop < portraitCollapsedTop && portraitOpeningTop > portraitExpandedTop,
+        )
+        ui.mainClock.advanceTimeBy(1000)
+        ui.mainClock.autoAdvance = true
+        assertEquals(portraitSwitcher, bounds(tabs))
+        sessions.performClick().assertIsSelected()
+        val sessionsList =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_sessions_by_server))
+        assertTrue(bounds(sessionsList).bottom <= bounds(sessions).top)
+        assertEquals(portraitSwitcher, bounds(tabs))
+        ui.runOnIdle { windowOrientation = Configuration.ORIENTATION_LANDSCAPE }
+        sessions.assertIsSelected()
+        assertTrue(bounds(sessions).bottom <= bounds(sessionsList).top)
     }
 }

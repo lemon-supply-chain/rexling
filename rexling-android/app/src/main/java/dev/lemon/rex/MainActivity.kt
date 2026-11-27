@@ -36,6 +36,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -1004,6 +1005,14 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     keyboard = keyboardAction,
                                 )
                             }
+                        val railBackdrop =
+                            remember(tabLayout.position) { PaneSwipeBackdrop(tabLayout.position) }
+                        val swipeBackdrop = railBackdrop.takeIf {
+                            !floatingTabs &&
+                                tabLayout.side &&
+                                tiles == null &&
+                                carouselBlocks.size > 1
+                        }
                         val tabRail: @Composable ((@Composable () -> Unit)?) -> Unit = { handle ->
                             val isFloatingRail = floatingTabs && handle != null
                             TerminalTabRail(
@@ -1050,6 +1059,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     ),
                                 headerOverlap = currentHeaderOverlap,
                                 floating = floatingTabs,
+                                swipeBackdrop = if (isFloatingRail) null else railBackdrop,
                                 hazeState = terminalHaze,
                                 handle = handle,
                                 onFanToggle =
@@ -1132,7 +1142,14 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                             )
                         }
                         if (blocks.isNotEmpty())
-                            Row(Modifier.weight(1f).fillMaxWidth()) {
+                            Row(
+                                Modifier.weight(1f)
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (swipeBackdrop == null) Modifier
+                                        else Modifier.clipToBounds(),
+                                    ),
+                            ) {
                                 if (!floatingTabs && tabLayout.position == TabBarPosition.LEFT)
                                     tabRail(null)
                                 val paneCoordinates = remember {
@@ -1361,6 +1378,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             navigationClearance = singlePaneNavigationClearance,
                                             bottomOverlayInset = bottomOverlayInset,
                                             floatingMotion = floatingMotion,
+                                            swipeBackdrop = swipeBackdrop,
                                         )
                                     }
                                     if (
@@ -2634,6 +2652,7 @@ private fun LiveTerminal(
     headerHeightSaved: () -> Int = { 0 },
     headerOverlap: () -> Int = { 0 },
     floatingMotion: FloatingPaneMotion? = null,
+    swipeBackdrop: PaneSwipeBackdrop? = null,
 ) {
     val layout by client.displayLayout.collectAsState()
     val screen = client.screenForLayout(layout)
@@ -2679,6 +2698,7 @@ private fun LiveTerminal(
         headerHeightSaved = headerHeightSaved,
         headerOverlap = headerOverlap,
         floatingMotion = floatingMotion,
+        swipeBackdrop = swipeBackdrop,
     )
 }
 
