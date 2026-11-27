@@ -867,6 +867,7 @@ class PaneChromeTest {
         var overlap by mutableIntStateOf(0)
         var side by mutableStateOf(TabBarPosition.LEFT)
         var windowOrientation by mutableIntStateOf(Configuration.ORIENTATION_LANDSCAPE)
+        var includeActions by mutableStateOf(true)
         var current by mutableStateOf(localSession.key)
         val selectedSessions = mutableListOf<String>()
         ui.setContent {
@@ -892,7 +893,15 @@ class PaneChromeTest {
                             },
                         headerOverlap = { overlap },
                     ) {
-                        TerminalActions(true, true, {}, {}, vertical = style == TabRailStyle.ICONS)
+                        if (includeActions) {
+                            TerminalActions(
+                                true,
+                                true,
+                                {},
+                                {},
+                                vertical = style == TabRailStyle.ICONS,
+                            )
+                        }
                     }
                 }
                 val configuration =
@@ -1014,7 +1023,10 @@ class PaneChromeTest {
         expand.performClick()
         assertEquals(rightToggle, bounds(collapse))
 
-        ui.runOnIdle { windowOrientation = Configuration.ORIENTATION_PORTRAIT }
+        ui.runOnIdle {
+            includeActions = false
+            windowOrientation = Configuration.ORIENTATION_PORTRAIT
+        }
         val portraitSwitcher = bounds(tabs)
         assertTrue(bounds(activeTab).bottom <= portraitSwitcher.top)
         assertTrue(
