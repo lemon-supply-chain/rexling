@@ -810,4 +810,46 @@
     <string name="download_error_open_picker">Android 无法打开文件选择器。</string>
     <string name="download_wait_pane_connect">请等待此窗格连接完成后再下载其中的文件。</string>
     <string name="download_allow_local_network">请允许本地网络权限，以便从此服务器下载文件。</string>
+
+    <!-- Servers drawer, editor, reachability check & forwarding drawer -->
+    <string name="servers_connected_summary_format">已连接 %1$d / %2$d 台</string>
+    <string name="servers_connected_switching_summary_format">已连接 %1$d / %2$d 台 · 切换时保持其他连接</string>
+    <string name="a11y_server_label">服务器 %1$s</string>
+    <string name="a11y_server_state_unread">有未读活动</string>
+    <string name="edit_server_action">编辑服务器</string>
+    <string name="disconnect_server_action">断开服务器</string>
+    <string name="remove_server_action">移除服务器</string>
+    <string name="remove_action">移除</string>
+    <string name="disconnect_server_confirm_title">断开服务器？</string>
+    <string name="remove_server_confirm_title">移除服务器？</string>
+    <string name="disconnect_server_confirm_message">要在这部手机上断开与“%1$s”的连接吗？</string>
+    <string name="remove_server_confirm_message">要从这部手机中移除“%1$s”吗？</string>
+    <string name="close_server_editor">关闭服务器编辑器</string>
+    <string name="back_to_servers">返回服务器列表</string>
+    <string name="server_url_supporting_text">HTTPS 地址或 ssh://user@host</string>
+    <string name="tailnet_route_short_desc">使用 Tailnet IP 或设备名。</string>
+    <string name="could_not_save_server">无法保存服务器</string>
+    <string name="checking">正在检查…</string>
+    <string name="reachable">可访问</string>
+    <string name="rex_version_format">Rex %1$s</string>
+    <string name="cant_reach_server_format">无法连接到服务器 · %1$s</string>
+    <string name="server_check_tailscale_first">请先连接内置 Tailscale</string>
+    <string name="server_check_failed">连接检查失败</string>
+    <string name="server_check_verify_ssh">连接时请验证此 SSH 主机</string>
+    <string name="server_check_rex_not_running">该 SSH 主机上未运行 Rex</string>
+    <string name="server_check_ssh_auth">SSH 身份验证失败</string>
+    <string name="server_check_refused">连接被拒绝</string>
+    <string name="server_check_timeout">连接超时</string>
+    <string name="server_check_certificate">TLS 证书验证失败</string>
+    <string name="server_check_host_not_found">找不到主机</string>
+    <string name="server_check_access_denied">访问被拒绝</string>
+    <string name="server_check_not_found">未找到 Rex 端点</string>
+    <string name="server_check_connection_failed">连接失败</string>
+    <string name="close_port_forward_editor">关闭端口转发编辑器</string>
+    <string name="back_to_port_forwarding">返回端口转发列表</string>
+    <string name="server_label">服务器</string>
+    <string name="forward_connect_first_suffix">\u0020· 请先连接</string>
+    <string name="forward_error_invalid_ports">请输入 1 到 65535 之间的有效端口。</string>
+    <string name="forward_error_invalid_host">请输入主机名或 IP 地址。</string>
+    <string name="forward_error_connect_first">请先连接服务器。</string>
 </resources>

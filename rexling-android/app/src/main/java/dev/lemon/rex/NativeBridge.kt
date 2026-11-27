@@ -35,5 +35,7 @@ object NativeBridge {
 
     @JvmStatic external fun networkCommand(request: String): String
 
+    @JvmStatic external fun probeServer(endpoint: String, builtIn: Boolean, key: String): String
+
     @JvmStatic external fun destroy(handle: Long)
 }

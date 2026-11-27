@@ -63,6 +63,7 @@ internal fun DrawerSheet(
     onClose: () -> Unit,
     animated: Boolean = true,
     dismissOnBack: Boolean = false,
+    dismissEnabled: Boolean = true,
     content: @Composable ColumnScope.(() -> Unit) -> Unit,
 ) {
     val close by rememberUpdatedState(onClose)
@@ -88,15 +89,17 @@ internal fun DrawerSheet(
         }
     }
     val dismiss: () -> Unit = {
-        returning = false
-        closing = true
+        if (dismissEnabled) {
+            returning = false
+            closing = true
+        }
     }
     val threshold = with(LocalDensity.current) { 52.dp.toPx() }
     val pull =
         DrawerPull(
             start = { returning = false },
             move = { delta ->
-                if (entered && !closing)
+                if (dismissEnabled && entered && !closing)
                     dragOffset = (dragOffset + delta).coerceIn(0f, drawerHeight.toFloat())
             },
             finish = { released ->
@@ -113,10 +116,14 @@ internal fun DrawerSheet(
     val scrimScale = if (LocalDrawerLayered.current) .5f else 1f
     val immersive = LocalImmersiveStatusBar.current
     Dialog(
-        onDismissRequest = { if (dismissOnBack) dismiss() else onClose() },
+        onDismissRequest = {
+            if (dismissEnabled) {
+                if (dismissOnBack) dismiss() else onClose()
+            }
+        },
         properties =
             DialogProperties(
-                dismissOnBackPress = dismissOnBack,
+                dismissOnBackPress = dismissOnBack && dismissEnabled,
                 dismissOnClickOutside = false,
                 usePlatformDefaultWidth = false,
                 decorFitsSystemWindows = false,
@@ -234,6 +241,8 @@ internal fun SettingsDrawer(
     backDescription: String = stringResource(R.string.back_to_appearance),
     subtitle: String? = null,
     surfaceColor: Color = Color.Transparent,
+    showClose: Boolean = true,
+    dismissEnabled: Boolean = true,
     headerActions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -255,7 +264,7 @@ internal fun SettingsDrawer(
     val surface =
         if (surfaceColor == Color.Transparent) frost
         else Modifier.background(surfaceColor, shape).then(frost)
-    DrawerSheet(onClose, animated = !fixed) { dismiss ->
+    DrawerSheet(onClose, animated = !fixed, dismissEnabled = dismissEnabled) { dismiss ->
         Column(
             surface
                 .fillMaxWidth()
@@ -266,7 +275,14 @@ internal fun SettingsDrawer(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                onBack?.let { ChromeButton(ChromeIcon.LEFT, backDescription, onClick = it) }
+                onBack?.let {
+                    ChromeButton(
+                        ChromeIcon.LEFT,
+                        backDescription,
+                        enabled = dismissEnabled,
+                        onClick = it,
+                    )
+                }
                 Column(Modifier.weight(1f)) {
                     if (subtitle == null)
                         Text(
@@ -294,7 +310,14 @@ internal fun SettingsDrawer(
                     }
                 }
                 headerActions()
-                ChromeButton(ChromeIcon.CLOSE, closeDescription, onClick = dismiss)
+                if (showClose) {
+                    ChromeButton(
+                        ChromeIcon.CLOSE,
+                        closeDescription,
+                        enabled = dismissEnabled,
+                        onClick = dismiss,
+                    )
+                }
             }
             content()
         }

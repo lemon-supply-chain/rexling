@@ -39,6 +39,7 @@ internal object NetworkSettings {
     val configurationError = MutableStateFlow<String?>(null)
     val revision = MutableStateFlow(0L)
     val sshKeys = MutableStateFlow<List<SshKeyInfo>>(emptyList())
+    private val serverChecks = Dispatchers.IO.limitedParallelism(2)
     val sshKeyBindings = MutableStateFlow<Map<String, String>>(emptyMap())
     private val initDeferred = CompletableDeferred<String?>()
     val initialization: Deferred<String?>
@@ -125,6 +126,39 @@ internal object NetworkSettings {
     private fun keyLibrary() = SshKeyLibrary(preferences.getString("ssh_library", null))
 
     fun selectedKey(endpoint: String) = keyLibrary().selected(endpoint)
+
+    suspend fun checkServer(
+        endpoint: String,
+        route: ServerNetworkRoute,
+        keyId: String?,
+    ): ServerUrlCheck =
+        withContext(serverChecks) {
+            val response =
+                try {
+                    val key = keyId?.let { decrypt(keyLibrary().secret(it)) }.orEmpty()
+                    JSONObject(
+                        NativeBridge.probeServer(
+                            endpoint,
+                            route == ServerNetworkRoute.BUILTIN,
+                            key,
+                        ),
+                    )
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    return@withContext ServerUrlCheck.Error(R.string.server_check_failed)
+                }
+            val failure = response.optString("error")
+            if (failure.isBlank())
+                ServerUrlCheck.Reachable(
+                    response
+                        .optString("version", "")
+                        .takeUnless { response.isNull("version") }
+                        .orEmpty()
+                        .filterNot { it.isISOControl() }
+                        .take(100),
+                )
+            else ServerUrlCheck.Error(serverCheckFailure(failure))
+        }
 
     fun hasKey(endpoint: String) = selectedKey(endpoint) != null
 

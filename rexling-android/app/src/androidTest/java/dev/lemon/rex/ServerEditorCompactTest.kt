@@ -36,16 +36,30 @@ class ServerEditorCompactTest {
                     ServerEditor(
                         ServerProfile.create("Shipyard 2", endpoint),
                         {},
-                        { _, _, _ -> null },
-                    )
+                        onRemove = {},
+                    ) { _, _, _ ->
+                        null
+                    }
                 }
             }
             for (value in listOf(false, true)) {
                 ui.runOnIdle { dark = value }
-                ui.onNodeWithText(appString(R.string.save_and_connect)).assertIsDisplayed()
-                // The editor selects a saved key; file/paste actions live in the keys sheet.
-                ui.onNodeWithText(appString(R.string.ssh_key)).assertIsDisplayed()
+                ui.onNodeWithText(appString(R.string.remove_server_action))
+                    .performScrollTo()
+                    .assertIsDisplayed()
+                ui.onNodeWithText(appString(R.string.save)).assertIsDisplayed()
+                val file =
+                    ui.onNodeWithText(appString(R.string.import_new_key))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                val paste =
+                    ui.onNodeWithText(appString(R.string.paste_new_key))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                assertEquals(file.center.y, paste.center.y, 2f)
+                assertTrue(file.left >= paste.right)
                 ui.onNodeWithContentDescription(appString(R.string.a11y_choose_server_icon))
+                    .performScrollTo()
                     .assertIsDisplayed()
                 val instrumentation = InstrumentationRegistry.getInstrumentation()
                 ui.waitForIdle()

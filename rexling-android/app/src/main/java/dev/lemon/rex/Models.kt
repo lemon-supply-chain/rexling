@@ -184,6 +184,7 @@ data class AppState(
     val endpoint: String = "",
     internal val clipboardWrite: TerminalClipboardWrite? = null,
     val identity: String = "",
+    val serverVersion: String = "",
     val error: String = "",
     val notice: String = "",
     val sessions: List<SessionItem> = emptyList(),
@@ -307,6 +308,7 @@ data class AppState(
                     },
                 endpoint = root.optString("endpoint"),
                 identity = root.optString("identity"),
+                serverVersion = root.optString("serverVersion"),
                 error = root.optString("error"),
                 notice = root.optString("notice"),
                 sessions =

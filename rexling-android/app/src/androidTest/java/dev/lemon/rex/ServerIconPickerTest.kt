@@ -66,10 +66,43 @@ class ServerIconPickerTest {
             assertNull(saved)
             assertEquals(0, closed)
         }
-        ui.onNodeWithText(appString(R.string.save_and_connect)).performClick()
+        ui.onNodeWithText(appString(R.string.save)).performClick()
         ui.runOnIdle {
             assertEquals(Triple(server.label, server.endpoint, ServerIcon.MACBOOK), saved)
             assertEquals(1, closed)
         }
+    }
+
+    @Test
+    fun reachabilityIsForTheSavedConnectionAndRemovalRequiresConfirmation() {
+        val server = ServerProfile.create("Shipyard", "https://shipyard.example", "fixture")
+        var removes = 0
+        val open = mutableStateOf(true)
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                if (open.value)
+                    ServerEditor(
+                        server,
+                        { open.value = false },
+                        status = ServerStatus("connected", version = "0.1.0-preview.25"),
+                        onRemove = { removes++ },
+                    ) { _, _, _ ->
+                        null
+                    }
+            }
+        }
+        val reachableText =
+            "${appString(R.string.reachable)} · ${appString(R.string.rex_version_format, "0.1.0-preview.25")}"
+        ui.onNodeWithText(reachableText).assertIsDisplayed()
+        ui.onNodeWithText(server.endpoint).performTextReplacement("https://other.example")
+        ui.onNodeWithText(reachableText).assertDoesNotExist()
+        ui.onNodeWithText(appString(R.string.remove_server_action)).performScrollTo().performClick()
+        ui.onNodeWithText(appString(R.string.remove_server_confirm_title)).assertIsDisplayed()
+        ui.runOnIdle { assertEquals(0, removes) }
+        ui.onNodeWithText(appString(R.string.cancel)).performClick()
+        ui.onNodeWithText(appString(R.string.remove_server_action)).performScrollTo().performClick()
+        ui.onNodeWithText(appString(R.string.remove_action)).performClick()
+        ui.runOnIdle { assertEquals(1, removes) }
+        ui.onNodeWithText(appString(R.string.edit_server_title)).assertDoesNotExist()
     }
 }

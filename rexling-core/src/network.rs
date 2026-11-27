@@ -9,6 +9,12 @@ static BUILT_IN: AtomicBool = AtomicBool::new(false);
 unsafe extern "C" {
     fn rexnet_command(request: *const c_char) -> *mut c_char;
     fn rexnet_dial(endpoint: *const c_char, milliseconds: c_int, error: *mut *mut c_char) -> c_int;
+    fn rexnet_probe_dial(
+        endpoint: *const c_char,
+        options: *const c_char,
+        milliseconds: c_int,
+        error: *mut *mut c_char,
+    ) -> c_int;
     fn rexnet_free(pointer: *mut c_void);
 }
 pub fn enabled() -> bool {
@@ -38,16 +44,17 @@ pub fn command(request: &str) -> Result<String> {
 pub async fn connect(
     endpoint: String,
     timeout: std::time::Duration,
+    probe_options: Option<String>,
 ) -> Result<tokio::net::UnixStream> {
     let socket = tokio::task::spawn_blocking(move || -> Result<std::os::unix::net::UnixStream> {
         let endpoint = CString::new(endpoint)?;
         let mut error = std::ptr::null_mut();
-        let descriptor = unsafe {
-            rexnet_dial(
-                endpoint.as_ptr(),
-                timeout.as_millis().min(c_int::MAX as u128) as c_int,
-                &mut error,
-            )
+        let timeout = timeout.as_millis().min(c_int::MAX as u128) as c_int;
+        let descriptor = if let Some(options) = probe_options {
+            let options = CString::new(options)?;
+            unsafe { rexnet_probe_dial(endpoint.as_ptr(), options.as_ptr(), timeout, &mut error) }
+        } else {
+            unsafe { rexnet_dial(endpoint.as_ptr(), timeout, &mut error) }
         };
         if descriptor < 0 {
             let message = if error.is_null() {

@@ -7,9 +7,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,277 +41,304 @@ internal fun PortForwardSheet(
 ) {
     val context = LocalContext.current
     var editing by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     val canAdd =
         servers.any { it.connected && it.session.isNotBlank() } && PortForwards.items.size < 64
     // Built outside the sheet on purpose: drawerFrost captures backdrop blur from the main activity
     // host on open.
     val frost = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
-    DrawerSheet(onClose) { dismiss ->
-        Column(
-            frost
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                .padding(bottom = 4.dp),
-        ) {
-            DrawerHandle(dismiss)
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    if (!editing)
+        DrawerSheet(onClose) { dismiss ->
+            Column(
+                frost
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
             ) {
-                Text(
-                    stringResource(R.string.port_forwarding),
-                    Modifier.weight(1f),
-                    style = SettingsType.row,
-                    fontWeight = FontWeight.Bold,
-                )
-                ChromeButton(
-                    ChromeIcon.ADD,
-                    stringResource(R.string.add_port_forward),
-                    enabled = canAdd,
+                DrawerHandle(dismiss)
+                Row(
+                    Modifier.fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .padding(start = 16.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    editing = true
+                    Text(
+                        stringResource(R.string.port_forwarding),
+                        Modifier.weight(1f),
+                        style = SettingsType.row,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    ChromeButton(
+                        ChromeIcon.ADD,
+                        stringResource(R.string.add_port_forward),
+                        enabled = canAdd,
+                    ) {
+                        editing = true
+                    }
+                    ChromeButton(
+                        ChromeIcon.CLOSE,
+                        stringResource(R.string.close_port_forwarding),
+                        onClick = dismiss,
+                    )
                 }
-                ChromeButton(
-                    ChromeIcon.CLOSE,
-                    stringResource(R.string.close_port_forwarding),
-                    onClick = dismiss,
-                )
-            }
-            Text(
-                stringResource(
-                    R.string.running_forwards_format,
-                    PortForwards.items.count { it.running },
-                ),
-                Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                style = SettingsType.detail,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            PortForwards.notice?.let { notice ->
                 Text(
-                    notice,
-                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    stringResource(
+                        R.string.running_forwards_format,
+                        PortForwards.items.count { it.running },
+                    ),
+                    Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     style = SettingsType.detail,
-                    color = MaterialTheme.colorScheme.error,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = { PortForwards.notice = null }) {
-                    Text(stringResource(R.string.dismiss))
+                PortForwards.notice?.let { notice ->
+                    Text(
+                        notice,
+                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = SettingsType.detail,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    TextButton(onClick = { PortForwards.notice = null }) {
+                        Text(stringResource(R.string.dismiss))
+                    }
                 }
-            }
-            if (PortForwards.items.isEmpty()) {
-                Text(
-                    stringResource(R.string.tap_localhost_hint),
-                    Modifier.padding(16.dp),
-                    style = SettingsType.detail,
-                )
-                TextButton(
-                    onClick = { editing = true },
-                    enabled = canAdd,
-                    modifier = Modifier.padding(horizontal = 8.dp),
+                if (PortForwards.items.isEmpty()) {
+                    Text(
+                        stringResource(R.string.tap_localhost_hint),
+                        Modifier.padding(16.dp),
+                        style = SettingsType.detail,
+                    )
+                    TextButton(
+                        onClick = { editing = true },
+                        enabled = canAdd,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    ) {
+                        Text(stringResource(R.string.add_port_forward))
+                    }
+                }
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 440.dp),
+                    state = listState,
+                    contentPadding =
+                        PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(stringResource(R.string.add_port_forward))
-                }
-            }
-            LazyColumn(
-                Modifier.fillMaxWidth().heightIn(max = 440.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                PortForwards.items
-                    .groupBy { it.serverId.ifBlank { it.endpoint } }
-                    .forEach { (serverId, entries) ->
-                        item(key = "server:$serverId") {
-                            val profile = servers.firstOrNull { it.profile.id == serverId }?.profile
-                            Row(
-                                Modifier.fillMaxWidth().padding(top = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                ServerGlyph(profile?.icon ?: ServerIcon.GLOBE, Modifier.size(16.dp))
-                                Text(
-                                    profile?.label ?: entries.first().server,
-                                    style = SettingsType.section,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        items(entries, key = { it.id }) { item ->
-                            val actionDesc =
-                                stringResource(
-                                    if (item.running) R.string.stop_forward
-                                    else R.string.start_forward,
-                                )
-                            Column(
-                                Modifier.fillMaxWidth()
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f),
-                                        RoundedCornerShape(12.dp),
-                                    )
-                                    .padding(start = 4.dp, end = 0.dp, top = 4.dp, bottom = 4.dp),
-                            ) { // alpha-ok item surface
+                    PortForwards.items
+                        .groupBy { it.serverId.ifBlank { it.endpoint } }
+                        .forEach { (serverId, entries) ->
+                            item(key = "server:$serverId") {
+                                val profile =
+                                    servers.firstOrNull { it.profile.id == serverId }?.profile
                                 Row(
-                                    Modifier.heightIn(min = 48.dp),
+                                    Modifier.fillMaxWidth().padding(top = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
-                                    val stateColor =
-                                        when (item.phase) {
-                                            "active" -> MaterialTheme.colorScheme.primary
-                                            "connecting",
-                                            "reconnecting" -> Color(0xFFD69B42)
-                                            "failed" -> MaterialTheme.colorScheme.error
-                                            else -> MaterialTheme.colorScheme.outline
-                                        }
-                                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                        IconButton(
-                                            onClick = {
-                                                if (item.running)
-                                                    PortForwards.stop(context, item.id)
-                                                else
-                                                    (onStart
-                                                        ?: { id: String ->
-                                                            PortForwards.requestStart(context, id)
-                                                        })(item.id)
-                                            },
-                                            modifier =
-                                                Modifier.fillMaxSize().semantics {
-                                                    contentDescription = actionDesc
-                                                },
-                                        ) {
-                                            Box(
-                                                Modifier.size(36.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        MaterialTheme.colorScheme.primary.copy(
-                                                            alpha = .09f,
-                                                        ),
-                                                    ),
-                                                contentAlignment = Alignment.Center,
-                                            ) { // alpha-ok decorative tint
-                                                ChromeSymbol(
-                                                    if (item.running) ChromeIcon.STOP
-                                                    else ChromeIcon.PLAY,
-                                                    Modifier.size(19.dp),
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Box(
-                                        Modifier.size(6.dp)
-                                            .background(stateColor, CircleShape)
-                                            .semantics {
-                                                contentDescription =
-                                                    context.getString(
-                                                        R.string.a11y_forward_phase,
-                                                        item.phase,
-                                                    )
-                                            },
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        "${item.boundPort.takeIf {it>0} ?: "auto"}",
-                                        style = SettingsType.row.copy(fontFamily = MonoUi),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    ChromeSymbol(
-                                        ChromeIcon.RIGHT,
-                                        Modifier.padding(horizontal = 4.dp).size(16.dp),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ServerGlyph(
+                                        profile?.icon ?: ServerIcon.GLOBE,
+                                        Modifier.size(16.dp),
                                     )
                                     Text(
-                                        item.target,
-                                        Modifier.weight(1f),
-                                        style = SettingsType.row.copy(fontFamily = MonoUi),
+                                        profile?.label ?: entries.first().server,
+                                        style = SettingsType.section,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
                                     )
-                                    Spacer(Modifier.width(8.dp))
-                                    IconButton(
-                                        onClick = { PortForwards.remove(context, item.id) },
-                                        modifier =
-                                            Modifier.size(48.dp).semantics {
-                                                contentDescription =
-                                                    context.getString(
-                                                        R.string.a11y_remove_forward,
-                                                        item.target,
-                                                    )
-                                            },
-                                    ) {
-                                        ChromeSymbol(
-                                            ChromeIcon.CLOSE,
-                                            Modifier.size(18.dp),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
                                 }
-                                if (item.error.isNotBlank())
-                                    Text(
-                                        item.error,
-                                        Modifier.padding(start = 68.dp, bottom = 4.dp),
-                                        style = SettingsType.detail,
-                                        color = MaterialTheme.colorScheme.error,
+                            }
+                            items(entries, key = { it.id }) { item ->
+                                val actionDesc =
+                                    stringResource(
+                                        if (item.running) R.string.stop_forward
+                                        else R.string.start_forward,
                                     )
-                                if (item.address.isNotBlank() && item.phase == "active")
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .background(
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                alpha = .45f,
+                                            ),
+                                            RoundedCornerShape(12.dp),
+                                        )
+                                        .padding(
+                                            start = 4.dp,
+                                            end = 0.dp,
+                                            top = 4.dp,
+                                            bottom = 4.dp,
+                                        ),
+                                ) { // alpha-ok item surface
                                     Row(
-                                        Modifier.padding(start = 68.dp).height(32.dp),
+                                        Modifier.heightIn(min = 48.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
+                                        val stateColor =
+                                            when (item.phase) {
+                                                "active" -> MaterialTheme.colorScheme.primary
+                                                "connecting",
+                                                "reconnecting" -> Color(0xFFD69B42)
+                                                "failed" -> MaterialTheme.colorScheme.error
+                                                else -> MaterialTheme.colorScheme.outline
+                                            }
+                                        Box(
+                                            Modifier.size(48.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    if (item.running)
+                                                        PortForwards.stop(context, item.id)
+                                                    else
+                                                        (onStart
+                                                            ?: { id: String ->
+                                                                PortForwards.requestStart(
+                                                                    context,
+                                                                    id,
+                                                                )
+                                                            })(item.id)
+                                                },
+                                                modifier =
+                                                    Modifier.fillMaxSize().semantics {
+                                                        contentDescription = actionDesc
+                                                    },
+                                            ) {
+                                                Box(
+                                                    Modifier.size(36.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = .09f,
+                                                            ),
+                                                        ),
+                                                    contentAlignment = Alignment.Center,
+                                                ) { // alpha-ok decorative tint
+                                                    ChromeSymbol(
+                                                        if (item.running) ChromeIcon.STOP
+                                                        else ChromeIcon.PLAY,
+                                                        Modifier.size(19.dp),
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        Box(
+                                            Modifier.size(6.dp)
+                                                .background(stateColor, CircleShape)
+                                                .semantics {
+                                                    contentDescription =
+                                                        context.getString(
+                                                            R.string.a11y_forward_phase,
+                                                            item.phase,
+                                                        )
+                                                },
+                                        )
+                                        Spacer(Modifier.width(6.dp))
                                         Text(
-                                            item.url,
+                                            "${item.boundPort.takeIf {it>0} ?: "auto"}",
+                                            style = SettingsType.row.copy(fontFamily = MonoUi),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        ChromeSymbol(
+                                            ChromeIcon.RIGHT,
+                                            Modifier.padding(horizontal = 4.dp).size(16.dp),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            item.target,
                                             Modifier.weight(1f),
-                                            style = SettingsType.detail,
+                                            style = SettingsType.row.copy(fontFamily = MonoUi),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
-                                        TextButton(
-                                            onClick = {
-                                                PortForwards.openBrowser(context, item.url)
-                                            },
-                                            modifier = Modifier.height(32.dp),
-                                            contentPadding =
-                                                PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                        ) {
-                                            Text(
-                                                stringResource(R.string.open_link),
-                                                style = SettingsType.detail,
-                                            )
-                                        }
+                                        Spacer(Modifier.width(8.dp))
                                         IconButton(
-                                            onClick = {
-                                                (context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                                        as ClipboardManager)
-                                                    .setPrimaryClip(
-                                                        ClipData.newPlainText(
-                                                            context.getString(
-                                                                R.string.forwarded_link,
-                                                            ),
-                                                            item.url,
-                                                        ),
-                                                    )
-                                            },
+                                            onClick = { PortForwards.remove(context, item.id) },
                                             modifier =
-                                                Modifier.width(48.dp).height(32.dp).semantics {
+                                                Modifier.size(48.dp).semantics {
                                                     contentDescription =
                                                         context.getString(
-                                                            R.string.a11y_copy_forwarded_url,
+                                                            R.string.a11y_remove_forward,
+                                                            item.target,
                                                         )
                                                 },
                                         ) {
                                             ChromeSymbol(
-                                                ChromeIcon.COPY,
-                                                Modifier.size(19.dp),
+                                                ChromeIcon.CLOSE,
+                                                Modifier.size(18.dp),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                     }
+                                    if (item.error.isNotBlank())
+                                        Text(
+                                            item.error,
+                                            Modifier.padding(start = 68.dp, bottom = 4.dp),
+                                            style = SettingsType.detail,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    if (item.address.isNotBlank() && item.phase == "active")
+                                        Row(
+                                            Modifier.padding(start = 68.dp).height(32.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                item.url,
+                                                Modifier.weight(1f),
+                                                style = SettingsType.detail,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            TextButton(
+                                                onClick = {
+                                                    PortForwards.openBrowser(context, item.url)
+                                                },
+                                                modifier = Modifier.height(32.dp),
+                                                contentPadding =
+                                                    PaddingValues(
+                                                        horizontal = 8.dp,
+                                                        vertical = 0.dp,
+                                                    ),
+                                            ) {
+                                                Text(
+                                                    stringResource(R.string.open_link),
+                                                    style = SettingsType.detail,
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    (context.getSystemService(
+                                                            Context.CLIPBOARD_SERVICE,
+                                                        ) as ClipboardManager)
+                                                        .setPrimaryClip(
+                                                            ClipData.newPlainText(
+                                                                context.getString(
+                                                                    R.string.forwarded_link,
+                                                                ),
+                                                                item.url,
+                                                            ),
+                                                        )
+                                                },
+                                                modifier =
+                                                    Modifier.width(48.dp).height(32.dp).semantics {
+                                                        contentDescription =
+                                                            context.getString(
+                                                                R.string.a11y_copy_forwarded_url,
+                                                            )
+                                                    },
+                                            ) {
+                                                ChromeSymbol(
+                                                    ChromeIcon.COPY,
+                                                    Modifier.size(19.dp),
+                                                    color =
+                                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                }
                             }
                         }
-                    }
+                }
             }
         }
-    }
     if (editing)
         ForwardEditor(servers, selectedServer, onClose = { editing = false }) {
             target,
@@ -320,6 +350,7 @@ internal fun PortForwardSheet(
         }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ForwardEditor(
     servers: List<ForwardServer>,
@@ -328,14 +359,11 @@ private fun ForwardEditor(
     onSave: (ForwardServer, String, Int, Int) -> Unit,
 ) {
     var serverId by remember {
+        val available = servers.filter { it.connected && it.session.isNotBlank() }
         mutableStateOf(
-            servers
-                .firstOrNull {
-                    it.profile.id == selectedServer && it.connected && it.session.isNotBlank()
-                }
+            (available.firstOrNull { it.profile.id == selectedServer } ?: available.firstOrNull())
                 ?.profile
-                ?.id
-                ?: servers.firstOrNull { it.connected && it.session.isNotBlank() }?.profile?.id,
+                ?.id,
         )
     }
     var serverMenu by remember { mutableStateOf(false) }
@@ -345,123 +373,167 @@ private fun ForwardEditor(
     var local by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var advanced by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(stringResource(R.string.add_port_forward), style = SettingsType.title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box {
-                    TextButton(onClick = { serverMenu = true }) {
-                        server?.let {
-                            ServerGlyph(it.profile.icon, Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                        }
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(10.dp)
+    val invalidPortsError = stringResource(R.string.forward_error_invalid_ports)
+    val invalidHostError = stringResource(R.string.forward_error_invalid_host)
+    val connectFirstError = stringResource(R.string.forward_error_connect_first)
+
+    fun forward() {
+        val remote = port.toIntOrNull()
+        val localPort = if (local.isBlank()) remote else local.toIntOrNull()
+        val name = host.trim().removeSurrounding("[", "]")
+        if (remote == null || remote !in 1..65535 || localPort == null || localPort !in 0..65535)
+            error = invalidPortsError
+        else if (
+            name.isBlank() ||
+                name.length > 253 ||
+                name.any { it.isWhitespace() || it == '/' || it.isISOControl() }
+        )
+            error = invalidHostError
+        else if (server == null || !server.connected || server.session.isBlank())
+            error = connectFirstError
+        else onSave(server, name, remote, localPort)
+    }
+
+    SettingsDrawer(
+        stringResource(R.string.add_port_forward),
+        stringResource(R.string.close_port_forward_editor),
+        onClose,
+        onBack = onClose,
+        backDescription = stringResource(R.string.back_to_port_forwarding),
+        surfaceColor = colors.surface,
+        showClose = false,
+        headerActions = {
+            Button(
+                ::forward,
+                modifier = Modifier.padding(end = 8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            ) {
+                Text(stringResource(R.string.forward_action), style = SettingsType.row)
+            }
+        },
+    ) {
+        // alpha-ok subtle divider line
+        HorizontalDivider(color = colors.outlineVariant.copy(alpha = .55f))
+        Column(
+            Modifier.fillMaxWidth()
+                .weight(1f, fill = false)
+                .heightIn(max = 560.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(top = 12.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ExposedDropdownMenuBox(serverMenu, { serverMenu = it }) {
+                OutlinedTextField(
+                    server?.profile?.label.orEmpty(),
+                    {},
+                    Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    readOnly = true,
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.server_label)) },
+                    shape = shape,
+                    textStyle = SettingsType.body,
+                    placeholder = {
                         Text(
-                            "${server?.profile?.label ?: stringResource(R.string.choose_server)} ▾",
+                            stringResource(R.string.choose_server),
+                            style = SettingsType.detail,
+                        )
+                    },
+                    leadingIcon = {
+                        server?.let { ServerGlyph(it.profile.icon, Modifier.size(20.dp)) }
+                    },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(serverMenu) },
+                )
+                ExposedDropdownMenu(serverMenu, { serverMenu = false }) {
+                    servers.forEach { target ->
+                        val available = target.connected && target.session.isNotBlank()
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    target.profile.label +
+                                        if (available) ""
+                                        else stringResource(R.string.forward_connect_first_suffix),
+                                    style = SettingsType.row,
+                                )
+                            },
+                            leadingIcon = {
+                                ServerGlyph(target.profile.icon, Modifier.size(19.dp))
+                            },
+                            enabled = available,
+                            onClick = {
+                                serverId = target.profile.id
+                                serverMenu = false
+                                error = null
+                            },
                         )
                     }
-                    DropdownMenu(serverMenu, { serverMenu = false }) {
-                        servers.forEach { target ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        target.profile.label +
-                                            if (!target.connected || target.session.isBlank())
-                                                " · connect first"
-                                            else "",
-                                    )
-                                },
-                                leadingIcon = {
-                                    ServerGlyph(target.profile.icon, Modifier.size(19.dp))
-                                },
-                                enabled = target.connected && target.session.isNotBlank(),
-                                onClick = {
-                                    serverId = target.profile.id
-                                    serverMenu = false
-                                },
-                            )
-                        }
-                    }
                 }
+            }
+            OutlinedTextField(
+                port,
+                {
+                    port = it
+                    error = null
+                },
+                Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.remote_port)) },
+                singleLine = true,
+                shape = shape,
+                textStyle = SettingsType.body.copy(fontFamily = MonoUi),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+            TextButton(
+                onClick = { advanced = !advanced },
+                contentPadding = PaddingValues(horizontal = 12.dp),
+            ) {
+                Text(
+                    if (advanced) stringResource(R.string.hide_advanced)
+                    else stringResource(R.string.advanced),
+                    style = SettingsType.row,
+                )
+            }
+            if (advanced) {
                 OutlinedTextField(
-                    port,
+                    host,
                     {
-                        port = it
+                        host = it
                         error = null
                     },
-                    label = { Text(stringResource(R.string.remote_port)) },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.remote_host)) },
                     singleLine = true,
+                    shape = shape,
+                    textStyle = SettingsType.body.copy(fontFamily = MonoUi),
+                )
+                OutlinedTextField(
+                    local,
+                    {
+                        local = it
+                        error = null
+                    },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.phone_port)) },
+                    placeholder = {
+                        Text(
+                            stringResource(R.string.same_as_remote),
+                            style = SettingsType.detail,
+                        )
+                    },
+                    supportingText = {
+                        Text(
+                            stringResource(R.string.phone_port_zero_hint),
+                            style = SettingsType.detail,
+                        )
+                    },
+                    singleLine = true,
+                    shape = shape,
+                    textStyle = SettingsType.body.copy(fontFamily = MonoUi),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
-                TextButton(
-                    onClick = { advanced = !advanced },
-                    contentPadding = PaddingValues(horizontal = 0.dp),
-                ) {
-                    Text(
-                        if (advanced) stringResource(R.string.hide_advanced)
-                        else stringResource(R.string.advanced),
-                    )
-                }
-                if (advanced) {
-                    OutlinedTextField(
-                        host,
-                        {
-                            host = it
-                            error = null
-                        },
-                        label = { Text(stringResource(R.string.remote_host)) },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        local,
-                        {
-                            local = it
-                            error = null
-                        },
-                        label = { Text(stringResource(R.string.phone_port)) },
-                        placeholder = { Text(stringResource(R.string.same_as_remote)) },
-                        supportingText = {
-                            Text(
-                                stringResource(R.string.phone_port_zero_hint),
-                                style = SettingsType.detail,
-                            )
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                }
-                error?.let {
-                    Text(it, style = SettingsType.detail, color = MaterialTheme.colorScheme.error)
-                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val remote = port.toIntOrNull()
-                    val localPort = if (local.isBlank()) remote else local.toIntOrNull()
-                    val name = host.trim().removeSurrounding("[", "]")
-                    if (
-                        remote == null ||
-                            remote !in 1..65535 ||
-                            localPort == null ||
-                            localPort !in 0..65535
-                    )
-                        error = "Enter valid ports from 1 to 65535."
-                    else if (
-                        name.isBlank() ||
-                            name.length > 253 ||
-                            name.any { it.isWhitespace() || it == '/' || it.isISOControl() }
-                    )
-                        error = "Enter a hostname or IP address."
-                    else if (server == null || !server.connected || server.session.isBlank())
-                        error = "Connect a server first."
-                    else onSave(server, name, remote, localPort)
-                },
-            ) {
-                Text(stringResource(R.string.forward_action))
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.cancel)) } },
-    )
+            error?.let { Text(it, style = SettingsType.detail, color = colors.error) }
+        }
+    }
 }

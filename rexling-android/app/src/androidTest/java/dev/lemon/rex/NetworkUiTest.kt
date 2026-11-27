@@ -129,8 +129,8 @@ class NetworkUiTest {
         var editor by mutableStateOf(false)
         compose.setContent {
             RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1]) {
-                EmptyServerContent { editor = true }
-                if (editor) ServerEditor(null, { editor = false }, { _, _, _ -> null })
+                EmptyServerContent(onAdd = { editor = true })
+                if (editor) ServerEditor(null, { editor = false }) { _, _, _ -> null }
             }
         }
         compose.onNodeWithText(appString(R.string.add_server_title)).performClick()
@@ -205,7 +205,7 @@ class NetworkUiTest {
     @Test
     fun emptyServerStateOpensAddServerInsteadOfQuickTailscaleSetup() {
         var added = 0
-        compose.setContent { MaterialTheme { EmptyServerContent { added++ } } }
+        compose.setContent { MaterialTheme { EmptyServerContent(onAdd = { added++ }) } }
         compose.onNodeWithText(appString(R.string.welcome_title)).assertIsDisplayed()
         compose.onNodeWithText(appString(R.string.rex_server_url)).assertDoesNotExist()
         compose.onNodeWithText(appString(R.string.connect_over_tailscale)).assertDoesNotExist()
@@ -293,8 +293,9 @@ class NetworkUiTest {
                 ServerEditor(
                     ServerProfile.create("Test SSH", "ssh://tester@example.com"),
                     {},
-                    { _, _, _ -> null },
-                )
+                ) { _, _, _ ->
+                    null
+                }
             }
         }
         compose

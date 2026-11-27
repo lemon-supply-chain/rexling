@@ -2,6 +2,7 @@ package dev.lemon.rex
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 
 internal val ServerIcon.labelRes: Int
@@ -113,20 +115,25 @@ internal fun ServerGlyph(
 internal fun ServerIconPicker(
     selected: ServerIcon,
     compact: Boolean = false,
+    enabled: Boolean = true,
     onSelect: (ServerIcon) -> Unit,
 ) {
     val chooseIconDescription = stringResource(R.string.a11y_choose_server_icon)
+    val selectedLabel = stringResource(selected.labelRes)
     var open by remember { mutableStateOf(false) }
-    Box {
+    Box(Modifier.then(if (compact) Modifier.padding(top = 8.dp) else Modifier)) {
         Row(
             (if (compact)
                     Modifier.height(56.dp)
-                        .width(52.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .width(62.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
                 else Modifier.fillMaxWidth())
-                .clickable(role = Role.Button) { open = true }
-                .semantics { contentDescription = chooseIconDescription }
+                .clickable(enabled = enabled, role = Role.Button) { open = true }
+                .semantics {
+                    contentDescription = chooseIconDescription
+                    stateDescription = selectedLabel
+                }
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement =
@@ -136,17 +143,26 @@ internal fun ServerIconPicker(
             if (!compact) {
                 Text(stringResource(R.string.icon), Modifier.weight(1f), style = SettingsType.row)
                 Text(
-                    stringResource(selected.labelRes),
+                    selectedLabel,
                     style = SettingsType.detail,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                ChromeSymbol(
-                    ChromeIcon.CHEVRON,
-                    Modifier.size(14.dp),
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             } else Spacer(Modifier.width(4.dp))
+            ChromeSymbol(
+                ChromeIcon.CHEVRON,
+                Modifier.size(14.dp),
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        if (compact)
+            Text(
+                stringResource(R.string.icon),
+                Modifier.offset(x = 9.dp, y = (-8).dp)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 4.dp),
+                style = SettingsType.detail,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         DropdownMenu(
             open,
             { open = false },

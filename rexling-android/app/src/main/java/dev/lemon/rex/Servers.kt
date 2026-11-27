@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import androidx.annotation.StringRes
 import java.net.URI
 import java.util.Locale
 import java.util.UUID
@@ -139,7 +140,42 @@ object SavedServers {
             .toString()
 }
 
-data class ServerStatus(val phase: String = "disconnected", val error: String = "") {
+internal sealed interface ServerUrlCheck {
+    data object Editing : ServerUrlCheck
+
+    data object Checking : ServerUrlCheck
+
+    data class Reachable(val version: String) : ServerUrlCheck
+
+    data class Error(@param:StringRes val reasonRes: Int) : ServerUrlCheck
+}
+
+@StringRes
+internal fun serverCheckFailure(error: String): Int {
+    val message = error.lowercase(Locale.ROOT)
+    return when {
+        "verify this ssh host" in message -> R.string.server_check_verify_ssh
+        "rex is not running" in message -> R.string.server_check_rex_not_running
+        "unable to authenticate" in message -> R.string.server_check_ssh_auth
+        "connection refused" in message -> R.string.server_check_refused
+        "timeout" in message || "timed out" in message || "deadline exceeded" in message ->
+            R.string.server_check_timeout
+        "certificate" in message -> R.string.server_check_certificate
+        "no such host" in message || "name resolution" in message ->
+            R.string.server_check_host_not_found
+        "http error: 401" in message || "http error: 403" in message ->
+            R.string.server_check_access_denied
+        "did not negotiate" in message || "http error: 404" in message ->
+            R.string.server_check_not_found
+        else -> R.string.server_check_connection_failed
+    }
+}
+
+data class ServerStatus(
+    val phase: String = "disconnected",
+    val error: String = "",
+    val version: String = "",
+) {
     val connected: Boolean
         get() = phase == "connected"
 
