@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import org.junit.Assert.*
@@ -219,6 +220,46 @@ class TabStackFanGeometryTest {
             assertTrue(pose.centerX + halfW <= workspace.width - 7.9f)
             assertTrue(pose.centerY - halfH >= 7.9f)
             assertTrue(pose.centerY + halfH <= workspace.height - 7.9f)
+        }
+    }
+
+    @Test
+    fun swipeResolutionMatchesSpreadAxisForAllDirections() {
+        for (dir in listOf(FanDirection.UP, FanDirection.DOWN)) {
+            assertEquals(
+                FanTapAction.PAGE_FORWARD,
+                resolveFanSwipeAction(dir, Offset(-40f, 0f), thresholdPx = 24f),
+            )
+            assertEquals(
+                FanTapAction.PAGE_BACKWARD,
+                resolveFanSwipeAction(dir, Offset(40f, 0f), thresholdPx = 24f),
+            )
+            assertEquals(
+                FanTapAction.NONE,
+                resolveFanSwipeAction(dir, Offset(-10f, 0f), thresholdPx = 24f),
+            )
+            assertEquals(
+                FanTapAction.NONE,
+                resolveFanSwipeAction(dir, Offset(-40f, 50f), thresholdPx = 24f),
+            )
+        }
+        for (dir in listOf(FanDirection.LEFT, FanDirection.RIGHT)) {
+            assertEquals(
+                FanTapAction.PAGE_FORWARD,
+                resolveFanSwipeAction(dir, Offset(0f, 40f), thresholdPx = 24f),
+            )
+            assertEquals(
+                FanTapAction.PAGE_BACKWARD,
+                resolveFanSwipeAction(dir, Offset(0f, -40f), thresholdPx = 24f),
+            )
+            assertEquals(
+                FanTapAction.NONE,
+                resolveFanSwipeAction(dir, Offset(0f, 10f), thresholdPx = 24f),
+            )
+            assertEquals(
+                FanTapAction.NONE,
+                resolveFanSwipeAction(dir, Offset(50f, 40f), thresholdPx = 24f),
+            )
         }
     }
 }

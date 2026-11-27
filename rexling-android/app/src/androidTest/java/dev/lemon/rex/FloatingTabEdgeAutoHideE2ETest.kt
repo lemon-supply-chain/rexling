@@ -7,7 +7,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isSelected
@@ -351,7 +350,7 @@ class FloatingTabEdgeAutoHideE2ETest {
 
             awaitHiddenAtEdgeAndReopenFan()
             ui.onNodeWithTag("Tab fan card b1").assertIsDisplayed()
-            ui.onNodeWithTag("Tab fan card b1").performTouchInput { doubleClick() }
+            ui.onNodeWithTag("Tab fan card b1").performTouchInput { click() }
             ui.waitUntil(3_000) {
                 ui.onAllNodesWithTag("Tab stack fan").fetchSemanticsNodes().isEmpty()
             }
