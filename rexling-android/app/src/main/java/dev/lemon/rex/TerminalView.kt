@@ -140,6 +140,10 @@ class TerminalView(context: Context) : View(context) {
     var onPaneDrag: ((Float, Boolean) -> Unit)? = null
     var onPaneDragEnd: ((Float, Float) -> Unit)? = null
     internal var onPaneControlsTap: ((Float, Float) -> Boolean)? = null
+    internal var onFocusTap: (() -> Unit)? = null
+    private val acceptsPointer: Boolean
+        get() = interactive || onFocusTap != null
+
     private var startX = 0f
     private var startY = 0f
     private var dragging = false
@@ -1121,6 +1125,10 @@ class TerminalView(context: Context) : View(context) {
 
     private fun finishTap(x: Float, y: Float, showKeyboard: Boolean) {
         if (pressedMouseTarget != mouseTarget()) return
+        if (!interactive) {
+            onFocusTap?.invoke()
+            return
+        }
         val link = pressedLink
         if (link == null) terminalTap(x, y, showKeyboard)
         else if (link == linkAt(x, y)) onOpenLink(link.url)
@@ -1152,7 +1160,7 @@ class TerminalView(context: Context) : View(context) {
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (
-            interactive &&
+            acceptsPointer &&
                 event.isFromSource(InputDevice.SOURCE_MOUSE) &&
                 event.actionButton == MotionEvent.BUTTON_PRIMARY &&
                 event.actionMasked in
@@ -1166,7 +1174,7 @@ class TerminalView(context: Context) : View(context) {
             return true
         }
         if (selection != null && event.actionMasked == MotionEvent.ACTION_SCROLL) return true
-        if (interactive && event.actionMasked == MotionEvent.ACTION_SCROLL) {
+        if (acceptsPointer && event.actionMasked == MotionEvent.ACTION_SCROLL) {
             val lines = (-event.getAxisValue(MotionEvent.AXIS_VSCROLL) * 3).roundToInt()
             if (lines != 0) {
                 scrollMotion.reset()
@@ -1261,7 +1269,7 @@ class TerminalView(context: Context) : View(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!interactive) return false
+        if (!acceptsPointer) return false
         val fromMouse = event.isFromSource(InputDevice.SOURCE_MOUSE)
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             pointerPress = null
@@ -1381,7 +1389,8 @@ class TerminalView(context: Context) : View(context) {
                         PaneGesture.Result.TAP ->
                             if (!suppressScrollTap) {
                                 val openedControls =
-                                    !fromMouse &&
+                                    interactive &&
+                                        !fromMouse &&
                                         pressedLink == null &&
                                         onPaneControlsTap?.invoke(event.x, event.y) == true
                                 if (!openedControls)
@@ -1722,9 +1731,7 @@ class TerminalView(context: Context) : View(context) {
 
     override fun performClick(): Boolean {
         super.performClick()
-        if (interactive) {
-            if (controlled) keyboard() else onActivate(true)
-        }
+        if (!interactive) onFocusTap?.invoke() else if (controlled) keyboard() else onActivate(true)
         return true
     }
 

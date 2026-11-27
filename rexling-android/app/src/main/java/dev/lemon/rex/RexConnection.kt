@@ -1505,6 +1505,50 @@ internal class RexConnection(
             )
     }
 
+    private fun mirrorScrollTarget(session: String, window: String, block: String): AppState? {
+        val current = state.value
+        val request = mirrorRequest
+        return current.takeIf {
+            visible &&
+                foreground &&
+                it.connected &&
+                !it.creating &&
+                !navigationRequest.pending &&
+                session == it.selectedSession &&
+                block != it.selectedBlock &&
+                request.session == session &&
+                request.window == window &&
+                request.panes.any { pane -> pane.block == block }
+        }
+    }
+
+    internal fun wheelMirror(
+        session: String,
+        window: String,
+        block: String,
+        lines: Int,
+        col: Int,
+        row: Int,
+        cw: Int,
+        ch: Int,
+    ) {
+        val current = mirrorScrollTarget(session, window, block) ?: return
+        command(
+            "wheel",
+            "mirror" to true,
+            "session" to session,
+            "window" to window,
+            "block" to block,
+            "navigationId" to current.navigationId,
+            "connectionEpoch" to current.connectionEpoch,
+            "lines" to lines,
+            "col" to col,
+            "row" to row,
+            "cw" to cw,
+            "ch" to ch,
+        )
+    }
+
     fun releaseControl() {
         activation.release()
         dropResize()
@@ -1628,6 +1672,27 @@ internal class RexConnection(
     fun scrollToBottom() {
         if (!navigationRequest.pending && state.value.screen != null)
             command("scroll", "block" to state.value.selectedBlock, "bottom" to true)
+    }
+
+    internal fun scrollMirror(
+        session: String,
+        window: String,
+        block: String,
+        lines: Int,
+        bottom: Boolean = false,
+    ) {
+        val current = mirrorScrollTarget(session, window, block) ?: return
+        command(
+            "scroll",
+            "mirror" to true,
+            "session" to session,
+            "window" to window,
+            "block" to block,
+            "navigationId" to current.navigationId,
+            "connectionEpoch" to current.connectionEpoch,
+            "lines" to lines,
+            "bottom" to bottom,
+        )
     }
 
     fun key(name: String) = type(TerminalInput.key(name))

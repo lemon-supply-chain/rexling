@@ -74,6 +74,8 @@ impl Commands {
                     "block",
                     "navigationId",
                     "connectionEpoch",
+                    "mirror",
+                    "window",
                     "col",
                     "row",
                     "cw",
