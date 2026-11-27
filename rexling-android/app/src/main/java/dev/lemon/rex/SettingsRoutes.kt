@@ -30,8 +30,9 @@ internal sealed interface SettingsRoute {
 
 /**
  * Cancel, swipe-down and system Back close the top drawer and reveal the level it was opened from.
- * Only the top renders, and an editor opened from the terminal keeps no parent, so closing it still
- * returns to the terminal.
+ * Every route in the stack stays mounted underneath the top drawer so returning preserves scroll
+ * and UI state without re-entering animation, while an editor opened directly from the terminal
+ * still has no parent and closes back to the terminal.
  */
 internal object SettingsNav {
     fun open(stack: MutableList<SettingsRoute>, route: SettingsRoute) {
@@ -41,5 +42,9 @@ internal object SettingsNav {
 
     fun close(stack: MutableList<SettingsRoute>) {
         stack.removeLastOrNull()
+    }
+
+    fun close(stack: MutableList<SettingsRoute>, index: Int, route: SettingsRoute) {
+        if (index == stack.lastIndex && stack.getOrNull(index) == route) stack.removeAt(index)
     }
 }

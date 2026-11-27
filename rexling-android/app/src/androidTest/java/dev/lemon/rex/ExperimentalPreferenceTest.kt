@@ -71,31 +71,4 @@ class ExperimentalPreferenceTest {
         toggle.performClick().assertIsOff()
         ui.runOnIdle { assertEquals(2, calls) }
     }
-
-    @Test
-    fun compactTopBarOptionTogglesIndependently() {
-        val enabled = mutableStateOf(false)
-        var calls = 0
-        ui.setContent {
-            RexTheme(true, ThemeCatalog.defaults[0]) {
-                PreferencesSheet(
-                    {},
-                    {},
-                    {},
-                    {},
-                    {},
-                    compactTopBar = enabled.value,
-                    onCompactTopBar = {
-                        enabled.value = it
-                        calls++
-                    },
-                )
-            }
-        }
-        val toggle = ui.onNode(hasText(appString(R.string.compact_top_bar)) and isToggleable())
-        toggle.performScrollTo().assertIsOff().performClick().assertIsOn()
-        ui.runOnIdle { assertEquals(1, calls) }
-        toggle.performClick().assertIsOff()
-        ui.runOnIdle { assertEquals(2, calls) }
-    }
 }

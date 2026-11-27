@@ -60,12 +60,12 @@ class UiAnimationPerformanceTest {
                             true,
                             programs,
                             0,
-                            "~/Dev/rexling",
                             {},
                             {},
                             {},
                             title = "Investigate UI performance",
                             working = animated,
+                            directory = "~/Dev/rexling",
                             menu = {},
                         )
                         TerminalTabs(

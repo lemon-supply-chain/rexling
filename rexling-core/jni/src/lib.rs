@@ -177,17 +177,24 @@ pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadCreate(
     _class: JClass,
     request: JString,
 ) -> jlong {
+    create_file_transfer(&mut env, request, false)
+}
+fn create_file_transfer(env: &mut JNIEnv, request: JString, receiving: bool) -> jlong {
     let result =
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<u64> {
             let request: String = env.get_string(&request)?.into();
-            uploads::create(serde_json::from_str(&request)?)
+            uploads::create(serde_json::from_str(&request)?, receiving)
         }));
     match result {
         Ok(Ok(id)) => id as jlong,
         _ => {
             let _ = env.throw_new(
                 "java/lang/IllegalStateException",
-                "Could not start file upload",
+                if receiving {
+                    "Could not start file download"
+                } else {
+                    "Could not start file upload"
+                },
             );
             0
         }
@@ -203,6 +210,30 @@ pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadPoll(
 }
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_lemon_rex_NativeBridge_uploadDestroy(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    uploads::destroy(handle as u64);
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_downloadCreate(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jlong {
+    create_file_transfer(&mut env, request, true)
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_downloadPoll(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    string(&mut env, uploads::poll(handle as u64).to_string())
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_downloadDestroy(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -276,4 +307,47 @@ pub extern "system" fn Java_dev_lemon_rex_NativeBridge_networkCommand(
         Err(_) => "{\"error\":\"Network command failed\"}".into(),
     };
     string(&mut env, response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_lemon_rex_NativeBridge_probeServer(
+    mut env: JNIEnv,
+    _class: JClass,
+    endpoint: JString,
+    built_in: jni::sys::jboolean,
+    key: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+        || -> anyhow::Result<serde_json::Value> {
+            let endpoint: String = env.get_string(&endpoint)?.into();
+            let key: String = env.get_string(&key)?.into();
+            use std::time::Duration;
+            let endpoint = rex_core::transport::Endpoint::new(&endpoint, Duration::from_secs(4))?;
+            #[cfg(target_os = "android")]
+            let endpoint = endpoint.with_probe_options(built_in != 0, &key);
+            #[cfg(not(target_os = "android"))]
+            let _ = (built_in, key);
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            let result = runtime.block_on(async {
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    let mut control =
+                        rex_core::control::Control::connect(endpoint, None, Default::default())
+                            .await?;
+                    let version = control.call("server.version", serde_json::json!({})).await?;
+                    Ok::<_, anyhow::Error>(version)
+                })
+                .await?
+            });
+            runtime.shutdown_background();
+            result
+        },
+    ));
+    let response = match result {
+        Ok(Ok(version)) => serde_json::json!({"version": version["rex_version"]}),
+        Ok(Err(error)) => serde_json::json!({"error": format!("{error:#}")}),
+        Err(_) => serde_json::json!({"error": "Connection check failed"}),
+    };
+    string(&mut env, response.to_string())
 }

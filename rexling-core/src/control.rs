@@ -12,6 +12,9 @@ use std::{
 use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::Message;
 
+pub const UNDO_CLOSE_API_REVISION: u64 = 23;
+pub const PROGRAM_RESUME_API_REVISION: u64 = 24;
+
 pub fn redact(value: &mut Value) {
     match value {
         Value::Object(map) => {
@@ -117,9 +120,21 @@ impl Control {
     pub async fn connect(endpoint: Endpoint, token: Option<&str>, trace: Trace) -> Result<Self> {
         Self::connect_revision(endpoint, token, trace, 9).await
     }
+    pub async fn connect_workspace(endpoint: Endpoint, token: Option<&str>) -> Result<Self> {
+        Self::connect_revision(
+            endpoint,
+            token,
+            Trace::default(),
+            PROGRAM_RESUME_API_REVISION,
+        )
+        .await
+    }
     /// Uploads use their own connection so revision 11 never changes the live terminal contract.
     pub async fn connect_upload(endpoint: Endpoint) -> Result<Self> {
         Self::connect_revision(endpoint, None, Trace::default(), 11).await
+    }
+    pub async fn connect_download(endpoint: Endpoint) -> Result<Self> {
+        Self::connect_revision(endpoint, None, Trace::default(), 19).await
     }
     pub async fn connect_forward(endpoint: Endpoint, token: Option<&str>) -> Result<Self> {
         Self::connect_revision(endpoint, token, Trace::default(), 14).await

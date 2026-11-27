@@ -3,28 +3,35 @@ package dev.lemon.rex
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import kotlin.math.PI
+import kotlin.math.cos
 
-private val flashColors =
-    listOf(Color.Transparent, Color.White.copy(alpha = .85f), Color.Transparent)
+internal fun workingBarBrightness(phase: Float): Float =
+    (.725 - .275 * cos(phase * 2 * PI)).toFloat()
 
-/** Filled bar with an optional traveling highlight for working tabs. */
-internal fun DrawScope.drawWorkingBar(
+/** Vertical markers fill upward; horizontal markers fill across the tab. */
+internal fun DrawScope.drawTabMarker(
     color: Color,
     origin: Offset,
     size: Size,
-    phase: Float? = null,
+    percent: Int?,
+    brightness: Float,
     vertical: Boolean = false,
-    radius: CornerRadius = CornerRadius.Zero,
 ) {
-    drawRoundRect(color, origin, size, radius)
-    if (phase == null) return
-    val length = if (vertical) size.height else size.width
-    val start = (if (vertical) origin.y else origin.x) + (phase * 1.5f - .5f) * length
-    val brush =
-        if (vertical) Brush.verticalGradient(flashColors, start, start + length * .5f)
-        else Brush.horizontalGradient(flashColors, start, start + length * .5f)
-    drawRoundRect(brush, origin, size, radius)
+    if (percent != null)
+        drawRoundRect(
+            color.copy(alpha = .18f),
+            origin,
+            size,
+            CornerRadius(size.minDimension / 2f),
+        )
+    val fraction = (percent ?: 100).coerceIn(0, 100) / 100f
+    if (fraction == 0f) return
+    val fill =
+        if (vertical) size.copy(height = size.height * fraction)
+        else size.copy(width = size.width * fraction)
+    val start = if (vertical) origin.copy(y = origin.y + size.height - fill.height) else origin
+    drawRoundRect(color.copy(alpha = brightness), start, fill, CornerRadius(fill.minDimension / 2f))
 }

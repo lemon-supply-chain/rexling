@@ -2,8 +2,12 @@ package dev.lemon.rex
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -88,14 +92,27 @@ class TabPaneSwitcherTest {
     fun tappingATabOrPaneOpensItDirectly() {
         show()
         row(appString(R.string.a11y_tab_title, "Project")).assertIsSelected()
+        ui.onNodeWithText("Project", useUnmergedTree = true).assertPaneTitleTypography()
+        ui.onNodeWithText(
+                "${appString(R.string.viewing)} · ${appQuantity(R.plurals.pane_count, 3)} · ~/Dev/portside",
+                useUnmergedTree = true,
+            )
+            .assertPaneDetailTypography()
         ui.onNodeWithText("Open tab").assertDoesNotExist()
         capture("tabs-light")
         row(appString(R.string.a11y_tab_title, "Review changes")).performTouchInput { click() }
         ui.onNodeWithText(appString(R.string.section_panes)).performClick()
         row(appString(R.string.a11y_pane_title, "Plan next steps")).assertIsSelected()
+        ui.onNodeWithText("Plan next steps", useUnmergedTree = true).assertPaneTitleTypography()
+        ui.onNodeWithText("${appString(R.string.viewing)} · ~/Dev/portside", useUnmergedTree = true)
+            .assertPaneDetailTypography()
         row(appString(R.string.a11y_pane_title, "fish")).performTouchInput { click() }
         ui.onNodeWithText("Open pane").assertDoesNotExist()
         ui.runOnIdle { assertEquals(listOf("tab:w2", "pane:a"), calls) }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_close_tab_and_pane_switcher))
+            .performClick()
+        ui.waitUntil(5_000) { ui.runOnUiThread { "dismiss" in calls } }
+        ui.runOnIdle { assertEquals(listOf("tab:w2", "pane:a", "dismiss"), calls) }
     }
 
     @Test
@@ -283,6 +300,25 @@ class TabPaneSwitcherTest {
                 .compress(Bitmap.CompressFormat.PNG, 100, it)
         }
     }
+}
+
+internal fun SemanticsNodeInteraction.assertPaneTitleTypography() =
+    assertDrawerTypography(13.sp, 16.sp, FontWeight.SemiBold)
+
+internal fun SemanticsNodeInteraction.assertPaneDetailTypography() =
+    assertDrawerTypography(11.sp, 14.sp, FontWeight.Normal)
+
+private fun SemanticsNodeInteraction.assertDrawerTypography(
+    size: androidx.compose.ui.unit.TextUnit,
+    lineHeight: androidx.compose.ui.unit.TextUnit,
+    weight: FontWeight,
+) {
+    val layouts = mutableListOf<TextLayoutResult>()
+    performSemanticsAction(SemanticsActions.GetTextLayoutResult) { get -> assertTrue(get(layouts)) }
+    val style = layouts.single().layoutInput.style
+    assertEquals(size, style.fontSize)
+    assertEquals(lineHeight, style.lineHeight)
+    assertEquals(weight, style.fontWeight)
 }
 
 internal fun SemanticsNodeInteraction.swipeForSwitcherActions() = performTouchInput { swipeLeft() }

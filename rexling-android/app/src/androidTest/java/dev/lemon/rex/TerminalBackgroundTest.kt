@@ -172,6 +172,58 @@ class TerminalBackgroundTest {
     }
 
     @Test
+    fun reverseVideoCursorKeepsItsColorInsideTheGrid() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val context = instrumentation.targetContext
+            val grid = TerminalFonts(context).configure(android.graphics.Paint(), 10f)
+            val padding = (10 * context.resources.displayMetrics.density).roundToInt()
+            val width = (3 * grid.cellWidth).toInt() + padding * 2
+            val height = (3 * grid.cellHeight).toInt() + padding * 2
+            val background = 0xff43546a.toInt()
+            val inverse = 0xff202432.toInt()
+            val cells =
+                listOf(
+                    TerminalCell(0, 0, " ", inverse, background, 8, 1),
+                    TerminalCell(2, 2, " ", inverse, background, 8, 1),
+                )
+            val frame =
+                TerminalScreen(3, 3, null, null, -1, 0, cells, cursorAnchorX = 0, cursorAnchorY = 0)
+            val view =
+                TerminalView(context).apply {
+                    allowHiddenCursorInput = true
+                    edgePolicy = TerminalEdgePolicy.EDITOR
+                    setTerminalPaddingDp(10, 10, 10)
+                    screen = frame
+                    layout(0, 0, width, height)
+                }
+            val image = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            try {
+                val leftCell = padding + (grid.cellWidth / 2).toInt()
+                val topCell = padding + (grid.cellHeight / 2).toInt()
+                val rightCell = width - leftCell - 1
+                val bottomCell = height - topCell - 1
+                view.draw(Canvas(image))
+                assertEquals(background, image.getPixel(1, topCell))
+                assertEquals(background, image.getPixel(leftCell, 1))
+                assertEquals(inverse, image.getPixel(leftCell, topCell))
+                assertEquals(inverse, image.getPixel(width - 2, bottomCell))
+                val initialRecordings = view.recordedRowCount
+
+                view.screen = frame.copy(cursorAnchorX = 2, cursorAnchorY = 2)
+                view.draw(Canvas(image))
+                assertEquals(inverse, image.getPixel(1, topCell))
+                assertEquals(background, image.getPixel(width - 2, bottomCell))
+                assertEquals(background, image.getPixel(rightCell, height - 2))
+                assertEquals(inverse, image.getPixel(rightCell, bottomCell))
+                assertEquals(initialRecordings + 2, view.recordedRowCount)
+            } finally {
+                image.recycle()
+            }
+        }
+    }
+
+    @Test
     fun wideCharacterSpacersDoNotEraseTheLeadingCellsBackground() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val expected = 0xff394457.toInt()

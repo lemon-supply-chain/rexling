@@ -32,6 +32,8 @@ pub type Ws = Box<dyn Socket>;
 pub struct Endpoint {
     url: Url,
     pub timeout: Duration,
+    #[cfg(target_os = "android")]
+    probe_options: Option<String>,
 }
 
 impl Endpoint {
@@ -69,7 +71,19 @@ impl Endpoint {
             );
         }
         ensure!(!timeout.is_zero(), "timeout must be positive");
-        Ok(Self { url, timeout })
+        Ok(Self {
+            url,
+            timeout,
+            #[cfg(target_os = "android")]
+            probe_options: None,
+        })
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn with_probe_options(mut self, built_in: bool, key: &str) -> Self {
+        self.probe_options =
+            Some(serde_json::json!({"builtin": built_in, "key": key}).to_string());
+        self
     }
 
     pub async fn open(&self, path: &str, protocol: &str) -> Result<Ws> {
@@ -119,9 +133,13 @@ impl Endpoint {
                 }
             } else {
                 #[cfg(target_os = "android")]
-                if ssh || crate::network::enabled() {
-                    let stream =
-                        crate::network::connect(self.url.to_string(), self.timeout).await?;
+                if ssh || crate::network::enabled() || self.probe_options.is_some() {
+                    let stream = crate::network::connect(
+                        self.url.to_string(),
+                        self.timeout,
+                        self.probe_options.clone(),
+                    )
+                    .await?;
                     let (ws, response) = tokio_tungstenite::client_async_tls_with_config(
                         request,
                         stream,

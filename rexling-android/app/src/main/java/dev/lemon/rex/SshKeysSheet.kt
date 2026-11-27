@@ -34,7 +34,11 @@ private enum class KeySource {
 }
 
 @Composable
-internal fun SshKeyEditor(selected: String?, onSelected: (String?) -> Unit) {
+internal fun SshKeyEditor(
+    selected: String?,
+    enabled: Boolean = true,
+    onSelected: (String?) -> Unit,
+) {
     val keys by NetworkSettings.sshKeys.collectAsState()
     val key = keys.firstOrNull { it.id == selected }
     var expanded by remember { mutableStateOf(false) }
@@ -52,7 +56,11 @@ internal fun SshKeyEditor(selected: String?, onSelected: (String?) -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Box {
-            TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(0.dp)) {
+            TextButton(
+                enabled = enabled,
+                onClick = { expanded = true },
+                contentPadding = PaddingValues(0.dp),
+            ) {
                 Text(
                     key?.name ?: stringResource(R.string.no_key),
                     style = SettingsType.row,
@@ -107,12 +115,14 @@ internal fun SshKeyEditor(selected: String?, onSelected: (String?) -> Unit) {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(
+                enabled = enabled,
                 onClick = { source = KeySource.PASTE },
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
             ) {
                 Text(stringResource(R.string.paste_new_key), style = SettingsType.detail)
             }
             TextButton(
+                enabled = enabled,
                 onClick = { source = KeySource.FILE },
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
             ) {

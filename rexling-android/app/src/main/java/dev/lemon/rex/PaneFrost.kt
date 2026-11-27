@@ -2,26 +2,21 @@
 
 package dev.lemon.rex
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -69,6 +64,11 @@ internal fun Modifier.paneFrost(
             )
         }
     return clip(shape)
+        .drawBehind {
+            if (haze.areas.none { it.contentLayer != null }) {
+                drawRect(resolvedTint.copy(alpha = RexTokens.frost.fallbackOpacity))
+            }
+        }
         .then(
             if (invalidator == null) Modifier.hazeEffect(haze, style = style)
             else Modifier.then(PopupFrostElement(haze, style, invalidator)),
@@ -256,30 +256,4 @@ internal fun rememberBackdropCapture(visible: Boolean): Boolean {
         capture = visible
     }
     return visible || capture
-}
-
-@Composable
-internal fun DrawerHandle(active: Boolean = false, modifier: Modifier = Modifier) {
-    val motion = LocalMotionEnabled.current
-    val color by
-        animateColorAsState(
-            if (active) MaterialTheme.colorScheme.roles.action
-            else MaterialTheme.colorScheme.outlineVariant,
-            if (motion) RexTokens.motion.fastEffects() else snap(),
-            label = "DrawerHandle color",
-        )
-    val width by
-        animateDpAsState(
-            if (active) 36.dp else 28.dp,
-            if (motion) RexTokens.motion.fastSpatial() else snap(),
-            label = "DrawerHandle width",
-        )
-    Box(
-        modifier.fillMaxWidth().height(16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier.width(width).height(3.dp).background(color, RoundedCornerShape(3.dp)),
-        )
-    }
 }

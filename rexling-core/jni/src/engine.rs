@@ -2,9 +2,9 @@
 use crate::input_queue::{Commands, Target, is_input};
 use anyhow::{Context, Result, ensure};
 use rex_core::{
-    control::{Control, Trace},
+    control::{Control, PROGRAM_RESUME_API_REVISION, Trace, UNDO_CLOSE_API_REVISION},
     data::{Data, Resume},
-    ghostty::{Frame, Replica},
+    ghostty::{Frame, Replica, Terminal},
     transport::Endpoint,
 };
 use serde_json::{Value, json};
@@ -136,6 +136,31 @@ fn input_event(paste: bool, text: &str) -> Value {
     } else {
         json!({"type":"key","payload":{"key":"unidentified","mods":"","consumed_mods":"","text":text,"unshifted_codepoint":0,"composing":false,"action":"press"}})
     }
+}
+
+fn wheel_text(terminal: &mut Terminal, value: &Value, lines: i32) -> Result<Option<String>> {
+    let flags = terminal.input_flags()?;
+    let bytes = if flags & 1 != 0 {
+        terminal.wheel(
+            lines > 0,
+            value["col"].as_i64().unwrap_or(0) as i32,
+            value["row"].as_i64().unwrap_or(0) as i32,
+            value["cw"].as_u64().unwrap_or(1).clamp(1, 1024) as u32,
+            value["ch"].as_u64().unwrap_or(1).clamp(1, 1024) as u32,
+        )?
+    } else if flags & 6 == 6 {
+        match (flags & 8 != 0, lines < 0) {
+            (true, true) => b"\x1bOA".to_vec(),
+            (true, false) => b"\x1bOB".to_vec(),
+            (false, true) => b"\x1b[A".to_vec(),
+            (false, false) => b"\x1b[B".to_vec(),
+        }
+    } else {
+        return Ok(None);
+    };
+    String::from_utf8(bytes.repeat(lines.unsigned_abs() as usize))
+        .map(Some)
+        .context("Legacy mouse coordinates cannot be sent as UTF-8 terminal input")
 }
 #[cfg(test)]
 mod shift_enter_tests {
@@ -584,6 +609,85 @@ struct RetainedFloating {
     data: Data,
     replica: Replica,
 }
+struct ProgramResumeWatch {
+    target: Target,
+    initial: Option<ProgramTask>,
+    status: Value,
+}
+
+fn program_resume_status(payload: &Value) -> Value {
+    let Some(records) = payload["records"].as_array() else {
+        return json!({"state":"unavailable"});
+    };
+    let record = records
+        .iter()
+        .find(|record| record["chosen"] == true && record["trusted"] == true)
+        .or_else(|| records.iter().find(|record| record["chosen"] == true))
+        .or_else(|| records.first());
+    let Some(record) = record else {
+        return json!({"state":"none"});
+    };
+    let ready = record["chosen"] == true && record["trusted"] == true;
+    let state = if ready {
+        "ready"
+    } else if record["trusted"] == true {
+        "notSelected"
+    } else {
+        "blocked"
+    };
+    let program: String = record["program"]
+        .as_str()
+        .unwrap_or("")
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(80)
+        .collect();
+    // Resume commands may contain secrets. Keep only the status fields needed by the drawer.
+    let reason = record["untrusted_reason"].as_str().filter(|reason| {
+        matches!(
+            *reason,
+            "no_rule"
+                | "dir_not_allowed"
+                | "flag_not_listed"
+                | "flag_value"
+                | "flags_differ"
+                | "program_differs"
+                | "wrapped"
+                | "launch_unreadable"
+                | "config_incomplete"
+        )
+    });
+    json!({"state":state,"program":program,"reason":reason})
+}
+
+#[cfg(test)]
+#[test]
+fn resume_status_requires_a_trusted_chosen_record_and_drops_command() {
+    let ready = json!({"chosen":true,"trusted":true,"program":"claude","command":["claude","--resume","secret"]});
+    let blocked =
+        json!({"chosen":true,"program":"codex","untrusted_reason":"flag_not_listed"});
+    assert_eq!(
+        program_resume_status(&json!({"records":[blocked, ready]})),
+        json!({"state":"ready","program":"claude","reason":null})
+    );
+    assert_eq!(
+        program_resume_status(&json!({"records":[blocked]})),
+        json!({"state":"blocked","program":"codex","reason":"flag_not_listed"})
+    );
+    assert_eq!(
+        program_resume_status(&json!({"records":[]})),
+        json!({"state":"none"})
+    );
+}
+
+const UNDO_CLOSE_WINDOW: Duration = Duration::from_secs(55);
+
+struct UndoClose {
+    serial: u64,
+    tab: bool,
+    expires: tokio::time::Instant,
+}
+
 struct Actor {
     latest_navigation: Arc<AtomicU64>,
     shared: Arc<Mutex<Shared>>,
@@ -610,8 +714,14 @@ struct Actor {
     data_resume: Option<Resume>,
     phase: String,
     identity: String,
+    server_version: String,
+    server_version_reply: Option<ProgramTask>,
     error: String,
     notice: String,
+    supports_undo_close: bool,
+    program_resume: Option<ProgramResumeWatch>,
+    undo_close_serial: u64,
+    undo_close: Option<UndoClose>,
     progress_reports: BTreeMap<String, Value>,
     clipboard_serial: u64,
     clipboard: Value,
@@ -696,8 +806,14 @@ impl Actor {
             data_resume: None,
             phase: "disconnected".into(),
             identity: String::new(),
+            server_version: String::new(),
+            server_version_reply: None,
             error: String::new(),
             notice: String::new(),
+            supports_undo_close: false,
+            program_resume: None,
+            undo_close_serial: 0,
+            undo_close: None,
             progress_reports: BTreeMap::new(),
             clipboard_serial: 0,
             clipboard: Value::Null,
@@ -755,6 +871,15 @@ impl Actor {
             session_details: json!({}),
         }
     }
+    fn supports_program_resume(&self) -> bool {
+        self.phase == "connected"
+            && self.control.as_ref().is_some_and(|control| {
+                control.welcome()["api_revision"]
+                    .as_u64()
+                    .is_some_and(|revision| revision >= PROGRAM_RESUME_API_REVISION)
+            })
+    }
+
     fn publish(&mut self) {
         self.mirror_waiting = self.mirror.waiting().map(str::to_owned).collect();
         if self.activity_dirty {
@@ -784,6 +909,11 @@ impl Actor {
             self.activity_snapshot = Arc::new(items);
             self.activity_dirty = false;
         }
+        let resume = self
+            .program_resume
+            .as_ref()
+            .filter(|watch| watch.target == self.input_target());
+        let supports_program_resume = self.supports_program_resume();
         if let Ok(mut shared) = self.shared.lock() {
             shared.activity = self.activity_snapshot.clone();
             shared.revision += 1;
@@ -805,6 +935,11 @@ impl Actor {
                 "terminalProgress":terminal_progress,"identity":self.identity,"error":self.error,"notice":self.notice,"clipboard":self.clipboard,"sessions":self.sessions,
                 "mirrorWaiting":self.mirror_waiting,"windows":self.windows,"selectedSession":self.selected_session,"staleSession":self.stale_session,
                 "awaitingPaneSelection":self.awaiting_pane_selection,
+                "serverVersion":self.server_version,
+                "supportsProgramResume":supports_program_resume,
+                "programResume":resume.map(|watch| &watch.status),
+                "supportsUndoClose":self.phase == "connected" && self.supports_undo_close,
+                "undoClose":self.undo_close.as_ref().map(|close| json!({"serial":close.serial,"tab":close.tab})),
                 "selectedBlock":self.selected_block,"navigationId":self.navigation_id,"tabMoveId":self.tab_move_id,"paneMoveId":self.pane_move_id,"connectionEpoch":self.connection_epoch,"otherOwner":self.other_owner,"controlled":self.controlled,"creating":self.creating,"sessionDetails":self.session_details,"paneCatalog":self.pane_catalog,"paneCatalogLoading":self.pane_catalog_task.is_some(),"programs":self.programs,"directories":self.directories,"titles":self.titles,"working":self.working,"activityError":self.activity_error,"activityPartial":self.activity_partial,"activityLoading":(self.activity_open || self.monitoring) && (self.activity_task.is_some() || self.activity_full),"attentionCount":self.attention_count}).to_string();
             shared
                 .pending_previews
@@ -880,7 +1015,12 @@ impl Actor {
                 .mirror
                 .retry_due()
                 .filter(|_| self.visible && active && self.control.is_some());
+            let undo_expires = self.undo_close.as_ref().map(|close| close.expires);
             tokio::select! {
+                _ = async { if let Some(expires) = undo_expires { tokio::time::sleep_until(expires).await; } else { pending::<()>().await; } } => {
+                    self.undo_close = None;
+                    self.publish();
+                },
                 value=rx.recv()=>{
                     let Some(value)=value else{break;};
                     if value["type"]=="shutdown"{break;}
@@ -915,6 +1055,29 @@ impl Actor {
                                 let _=self.commands.push(json!({"type":"refresh"}),&self.input_target());self.publish();
                             }
                         } else if ack.target.connection==self.connection_epoch {self.recover(error);self.notice="Request outcome is uncertain; input was not resent".into();self.publish();}
+                    }
+                },
+                result=async {match &mut self.server_version_reply {
+                    Some(reply)=>reply.await,None=>pending().await
+                }}=>{
+                    self.server_version_reply = None;
+                    if let Ok(version) = result
+                        && let Some(version) = version["rex_version"].as_str()
+                        && !version.trim().is_empty() {
+                        self.server_version = version.trim().chars().filter(|c| !c.is_control()).take(100).collect();
+                        self.publish();
+                    }
+                },
+                result=async {match self.program_resume.as_mut().and_then(|watch| watch.initial.as_mut()) {
+                    Some(task)=>task.await,None=>pending().await
+                }}=>{
+                    let target = self.input_target();
+                    if let Some(watch) = self.program_resume.as_mut() {
+                        watch.initial = None;
+                        if watch.target == target && watch.status.is_null() {
+                            watch.status = program_resume_status(&result.unwrap_or(Value::Null));
+                            self.publish();
+                        }
                     }
                 },
                 result=async {match &mut self.connect_task {Some(task)=>task.await,None=>pending().await}}=>{
@@ -1043,7 +1206,11 @@ impl Actor {
                         self.retry=None;
                         if let Some(endpoint)=self.endpoint.clone() {
                             let token=self.control_token.clone();
-                            self.connect_task=Some(Box::pin(async move {Control::connect(endpoint,token.as_deref(),Trace::default()).await}));
+                            let monitoring=self.monitoring;
+                            self.connect_task=Some(Box::pin(async move {
+                                if monitoring {Control::connect(endpoint,token.as_deref(),Trace::default()).await}
+                                else {Control::connect_workspace(endpoint,token.as_deref()).await}
+                            }));
                         }
                     }
                     if self.phase=="connected" && self.activity_task.is_none() && self.activity_refresh<=now && (self.activity_full || !self.activity_pending.is_empty()) {
@@ -1114,6 +1281,10 @@ impl Actor {
         }
     }
     async fn disconnect(&mut self) {
+        self.program_resume = None;
+        self.server_version.clear();
+        self.server_version_reply = None;
+        self.undo_close = None;
         let _ = tokio::time::timeout(Duration::from_secs(2), self.release_session_panes()).await;
         self.close_retained_floating().await;
         self.awaiting_pane_selection = false;
@@ -1165,6 +1336,10 @@ impl Actor {
         self.owned_blocks.clear();
     }
     fn lose_connections(&mut self) {
+        self.program_resume = None;
+        self.server_version.clear();
+        self.server_version_reply = None;
+        self.undo_close = None;
         self.owned_blocks.clear();
         self.retained_floating = None;
         self.mirror.clear();
@@ -1206,6 +1381,9 @@ impl Actor {
         self.publish();
     }
     fn clear_ended_session(&mut self, session: String) {
+        if self.selected_session == session {
+            self.undo_close = None;
+        }
         self.owned_blocks.clear();
         self.stale_session = session;
         self.selected_session.clear();
@@ -1263,7 +1441,11 @@ impl Actor {
 
     async fn connected(&mut self, mut control: Control) -> Result<()> {
         let endpoint = self.endpoint.clone().context("server missing")?;
-        let resumed = control.welcome()["client"]["resumed"] == true;
+        let welcome = control.welcome();
+        let resumed = welcome["client"]["resumed"] == true;
+        self.supports_undo_close = welcome["api_revision"]
+            .as_u64()
+            .is_some_and(|revision| revision >= UNDO_CLOSE_API_REVISION);
         self.control_token = control.token().map(str::to_owned);
         self.sessions = control
             .call("session.attach_all", json!({"event_scope":"all"}))
@@ -1274,6 +1456,12 @@ impl Actor {
             .as_str()
             .unwrap_or("Connected")
             .to_owned();
+        // Version is supplementary metadata. Don't wait for it before opening a pane.
+        if !self.monitoring
+            && let Ok(reply) = control.start_call("server.version", json!({})).await
+        {
+            self.server_version_reply = Some(Box::pin(reply.receive()));
+        }
         self.control = Some(control);
         self.phase = "connected".into();
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
@@ -1688,6 +1876,21 @@ impl Actor {
                     && let (Some(id), Some(name)) =
                         (block["block_id"].as_str(), block["name"].as_str())
                 {
+                    if name == "program_resume_changed" {
+                        let target = self.input_target();
+                        if let Some(watch) = self.program_resume.as_mut()
+                            && watch.target == target
+                            && target.session == sid
+                            && target.block == id
+                        {
+                            let status = program_resume_status(&block["payload"]);
+                            if status != watch.status {
+                                watch.status = status;
+                                self.publish();
+                            }
+                        }
+                        return Ok(());
+                    }
                     if name == "progress_report" {
                         if crate::progress::update(
                             &mut self.progress_reports,
@@ -1872,6 +2075,9 @@ impl Actor {
     }
     async fn send_input(&mut self, value: Value) -> Result<()> {
         ensure!(!self.monitoring, "Background monitor is read-only");
+        if value["type"] == "wheel" && value["mirror"] == true {
+            return self.send_mirror_wheel(&value).await;
+        }
         let target = self.input_target();
         if !target.matches(&value) {
             return Ok(());
@@ -1966,6 +2172,47 @@ impl Actor {
         });
         Ok(())
     }
+    fn mirror_scroll_block<'a>(&self, value: &'a Value) -> Option<&'a str> {
+        let block = value["block"].as_str()?;
+        if !self.visible
+            || self.paused
+            || self.phase != "connected"
+            || value["session"] != self.selected_session
+            || block == self.selected_block
+            || value["navigationId"].as_u64() != Some(self.navigation_id)
+            || value["connectionEpoch"].as_u64() != Some(self.connection_epoch)
+            || self.navigation_id < self.latest_navigation.load(Ordering::Acquire)
+            || !self.mirror.wants(&self.selected_session, block)
+        {
+            return None;
+        }
+        let window = pane_window(&self.windows, &self.selected_block)?;
+        let zoomed = window["zoomed"].as_str().unwrap_or("");
+        (window["id"] == value["window"] && (zoomed.is_empty() || zoomed == block)).then_some(block)
+    }
+
+    async fn send_mirror_wheel(&mut self, value: &Value) -> Result<()> {
+        let Some(block) = self.mirror_scroll_block(value) else {
+            return Ok(());
+        };
+        let lines = crate::input_queue::wheel_lines(value) as i32;
+        if lines == 0 || !self.owned_blocks.contains(block) {
+            return Ok(());
+        }
+        let Some(terminal) = self.mirror.owned_terminal(block)? else {
+            return Ok(());
+        };
+        match wheel_text(terminal, value, lines)? {
+            Some(text) if !text.is_empty() => {
+                let mut target = self.input_target();
+                target.block = block.to_owned();
+                self.start_input(target, false, &text).await
+            }
+            None => self.mirror.scroll(block, Some(lines)),
+            _ => Ok(()),
+        }
+    }
+
     async fn send_wheel(&mut self, value: &Value, target: Target) -> Result<()> {
         if !self.visible
             || self.paused
@@ -1982,32 +2229,14 @@ impl Actor {
             return Ok(());
         };
         let terminal = replica.terminal()?;
-        let flags = terminal.input_flags()?;
-        let bytes = if flags & 1 != 0 {
-            terminal.wheel(
-                lines > 0,
-                value["col"].as_i64().unwrap_or(0) as i32,
-                value["row"].as_i64().unwrap_or(0) as i32,
-                value["cw"].as_u64().unwrap_or(1).clamp(1, 1024) as u32,
-                value["ch"].as_u64().unwrap_or(1).clamp(1, 1024) as u32,
-            )?
-        } else if flags & 6 == 6 {
-            match (flags & 8 != 0, lines < 0) {
-                (true, true) => b"\x1bOA".to_vec(),
-                (true, false) => b"\x1bOB".to_vec(),
-                (false, true) => b"\x1b[A".to_vec(),
-                (false, false) => b"\x1b[B".to_vec(),
-            }
-        } else {
+        let Some(text) = wheel_text(terminal, value, lines)? else {
             terminal.scroll_viewport(lines);
             self.dirty = true;
             return Ok(());
         };
-        if bytes.is_empty() {
+        if text.is_empty() {
             return Ok(());
         }
-        let text = String::from_utf8(bytes.repeat(lines.unsigned_abs() as usize))
-            .context("Legacy mouse coordinates cannot be sent as UTF-8 terminal input")?;
         if !self.controlled {
             self.take_selected().await?;
             if target != self.input_target()
@@ -2047,6 +2276,40 @@ impl Actor {
             "Background monitor is read-only"
         );
         match kind {
+            "program_resume" => {
+                let target = self.input_target();
+                if value["watch"] == true {
+                    if !target.matches(&value)
+                        || !self.supports_program_resume()
+                        || target.block.is_empty()
+                    {
+                        return Ok(());
+                    }
+                    let control = self.control.as_mut().expect("connected control");
+                    let reply = control
+                        .start_call(
+                            "com.superlogical.terminal.program_resume_records",
+                            json!({"session_id":target.session,"block_id":target.block,"args":{}}),
+                        )
+                        .await;
+                    let (initial, status) = match reply {
+                        Ok(reply) => (Some(Box::pin(reply.receive()) as ProgramTask), Value::Null),
+                        Err(_) => (None, json!({"state":"unavailable"})),
+                    };
+                    self.program_resume = Some(ProgramResumeWatch {
+                        target,
+                        initial,
+                        status,
+                    });
+                } else if self
+                    .program_resume
+                    .as_ref()
+                    .is_some_and(|watch| watch.target.matches(&value))
+                {
+                    self.program_resume = None;
+                }
+                self.publish();
+            }
             "monitor" => {
                 // Irreversible for this handle. Must be enabled before connecting or selecting a pane.
                 ensure!(
@@ -2370,6 +2633,7 @@ impl Actor {
                         .await;
                 }
                 let attached = self.control.as_mut().unwrap().attach(&id).await?;
+                self.undo_close = None;
                 self.selected_session = id;
                 self.selected_block.clear();
                 self.awaiting_pane_selection = false;
@@ -2481,6 +2745,7 @@ impl Actor {
                     .context("session ID required")?
                     .to_owned();
                 if self.selected_session != session {
+                    self.undo_close = None;
                     self.preview_task = None;
                     self.summary_task = None;
                     self.program_task = None;
@@ -2651,7 +2916,7 @@ impl Actor {
                             "This tab changed while you were confirming. Review it before closing"
                         );
                     }
-                    let (method, args) = if tab {
+                    let (method, mut args) = if tab {
                         (
                             "session.close_window",
                             json!({"session_id":self.selected_session,"window_id":id}),
@@ -2662,15 +2927,28 @@ impl Actor {
                             json!({"session_id":self.selected_session,"block_id":id}),
                         )
                     };
-                    if let Err(error) = self
+                    let expires = tokio::time::Instant::now() + UNDO_CLOSE_WINDOW;
+                    if self.supports_undo_close {
+                        args["undoable"] = json!(true);
+                    }
+                    match self
                         .control
                         .as_mut()
                         .context("not connected")?
                         .call(method, args)
                         .await
-                        && !missing_terminal(&error)
                     {
-                        return Err(error);
+                        Ok(_) if self.supports_undo_close => {
+                            self.undo_close_serial += 1;
+                            self.undo_close = Some(UndoClose {
+                                serial: self.undo_close_serial,
+                                tab,
+                                expires,
+                            });
+                        }
+                        Ok(_) => {}
+                        Err(error) if missing_terminal(&error) => {}
+                        Err(error) => return Err(error),
                     }
                 }
                 if self.refresh_close_view().await? && self.selected_block.is_empty() {
@@ -2688,6 +2966,50 @@ impl Actor {
                 }
                 self.creating = false;
                 self.notice = if tab { "Tab closed" } else { "Pane closed" }.into();
+                self.publish();
+            }
+            "undo_close" => {
+                if !self.visible
+                    || self.phase != "connected"
+                    || self.paused
+                    || self.creating
+                    || value["session"] != self.selected_session
+                    || value["connectionEpoch"].as_u64() != Some(self.connection_epoch)
+                    || value["navigationId"].as_u64() != Some(self.navigation_id)
+                    || self.navigation_id < self.latest_navigation.load(Ordering::Acquire)
+                    || !self.undo_close.as_ref().is_some_and(|close| {
+                        value["serial"].as_u64() == Some(close.serial)
+                            && tokio::time::Instant::now() < close.expires
+                    })
+                {
+                    return Ok(());
+                }
+                self.undo_close = None;
+                self.creating = true;
+                self.error.clear();
+                self.publish();
+                let result = self
+                    .control
+                    .as_mut()
+                    .context("not connected")?
+                    .call("client.undo_close", json!({}))
+                    .await;
+                if let Err(error) = &result
+                    && error
+                        .downcast_ref::<rex_core::control::RpcError>()
+                        .is_some_and(|rpc| rpc.code == "not_found")
+                {
+                    anyhow::bail!("This close can no longer be undone.");
+                }
+                let restored = result?;
+                if restored["session_id"] == self.selected_session
+                    && self.navigation_id >= self.latest_navigation.load(Ordering::Acquire)
+                    && self.refresh_close_view().await?
+                    && let Some(block) = restored["block_id"].as_str()
+                {
+                    self.open_block(block.to_owned(), None).await?;
+                }
+                self.creating = false;
                 self.publish();
             }
             "new_tab" | "new_pane" => {
@@ -2903,17 +3225,26 @@ impl Actor {
                 }
             }
             "scroll" => {
+                let lines = (value["bottom"] != true).then(|| {
+                    value["lines"]
+                        .as_i64()
+                        .unwrap_or(0)
+                        .clamp(-100000, 100000) as i32
+                });
+                if value["mirror"] == true {
+                    if let Some(block) = self.mirror_scroll_block(&value) {
+                        self.mirror.scroll(block, lines)?;
+                    }
+                    return Ok(());
+                }
                 if value["block"].as_str() != Some(self.selected_block.as_str()) {
                     return Ok(());
                 }
                 if let Some(replica) = self.replica.as_mut().filter(|r| r.ready()) {
                     let terminal = replica.terminal()?;
-                    if value["bottom"] == true {
-                        terminal.scroll_to_bottom();
-                    } else {
-                        terminal.scroll_viewport(
-                            value["lines"].as_i64().unwrap_or(0).clamp(-100000, 100000) as i32,
-                        );
+                    match lines {
+                        Some(lines) => terminal.scroll_viewport(lines),
+                        None => terminal.scroll_to_bottom(),
                     }
                     self.dirty = true;
                 }
@@ -3401,7 +3732,7 @@ fn preview_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> Previe
     })
 }
 // Executable identifiers and a display directory cross JNI; never command arguments or user IDs.
-fn program_candidates(process: &Value, status: &Value) -> Value {
+fn program_candidates(process: &Value, status: &Value, terminal: &Value) -> Value {
     let foreground = &process["foreground"];
     let mut names: Vec<String> = Vec::new();
     let mut add = |value: &Value| {
@@ -3422,6 +3753,24 @@ fn program_candidates(process: &Value, status: &Value) -> Value {
                 add(&record["app"]);
             }
         }
+    } else if foreground.is_null()
+        && terminal["owner"].is_null()
+        && terminal["title"]
+            .as_str()
+            .is_some_and(|title| title.starts_with("π - "))
+        && status["records"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|record| {
+                record["owner"].is_null()
+                    && record["id"].as_str().is_none_or(str::is_empty)
+                    && record["app"] == "pi"
+            })
+    {
+        // Some Rex hosts report only the login wrapper. Pi's own title corroborates
+        // its ownerless status without taking precedence over an identified process.
+        add(&json!("pi"));
     }
     let source = if foreground.is_object() {
         foreground
@@ -3576,7 +3925,7 @@ fn program_task(endpoint: Endpoint, session: String, ids: Vec<String>) -> Progra
                     }
                     titles.insert(id.clone(),json!(program_title(&process,&status,&terminal)));
                     directories.insert(id.clone(), json!(program_directory(&process)));
-                    programs.insert(id, program_candidates(&process, &status));
+                    programs.insert(id, program_candidates(&process, &status, &terminal));
                 }
             }
             let _ = control.close().await;
@@ -3759,7 +4108,7 @@ fn pane_catalog_task(endpoint: Endpoint) -> SummaryTask {
                 .await;
                 match result {
                     Ok(Ok((process, title))) => {
-                        item["programs"] = program_candidates(&process, &Value::Null);
+                        item["programs"] = program_candidates(&process, &Value::Null, &Value::Null);
                         item["directory"] = json!(program_directory(&process));
                         item["title"] = json!(program_title(&process, &Value::Null, &title));
                     }
@@ -4240,17 +4589,44 @@ mod tests {
             {"effective_app":"claude-code","owner":{"pid":12,"name":"node"}}
         ]});
         assert_eq!(
-            program_candidates(&process, &status),
+            program_candidates(&process, &status, &Value::Null),
             json!(["claude-code", "/tools/agent.js", "node"])
         );
         assert_eq!(
             program_candidates(
                 &json!({"foreground":null,"child":{"argv0":"-fish","name":"fish"}}),
-                &status
+                &status,
+                &Value::Null
             ),
             json!(["-fish", "fish"])
         );
-        assert_eq!(program_candidates(&json!({}), &status), json!([]));
+        assert_eq!(
+            program_candidates(&json!({}), &status, &Value::Null),
+            json!([])
+        );
+    }
+    #[test]
+    fn pi_status_and_title_identify_the_pane_when_foreground_metadata_is_missing() {
+        let process = json!({"child":{"name":"login","path":"/usr/bin/login"}});
+        let title = json!({"title":"π - rexling"});
+        let status = json!({"records":[{"app":"pi","effective_app":"pi","state":"idle"}]});
+        let login = json!(["/usr/bin/login", "login"]);
+        assert_eq!(
+            program_candidates(&process, &status, &title),
+            json!(["pi", "/usr/bin/login", "login"])
+        );
+        assert_eq!(program_candidates(&process, &Value::Null, &title), login);
+        assert_eq!(
+            program_candidates(&process, &status, &json!({"title":"fish"})),
+            login
+        );
+        let stale = json!({"records":[{"app":"pi","owner":{"pid":12,"name":"node"}}]});
+        assert_eq!(program_candidates(&process, &stale, &title), login);
+        let foreground = json!({"foreground":{"pid":13,"name":"nvim"}});
+        assert_eq!(
+            program_candidates(&foreground, &status, &title),
+            json!(["nvim"])
+        );
     }
     #[test]
     fn program_titles_prefer_live_terminal_titles_and_reject_stale_owners() {
@@ -4375,7 +4751,10 @@ mod tests {
         }
     }
     fn text(state: &Value) -> String {
-        state["screen"]["cells"]
+        frame_text(&state["screen"])
+    }
+    fn frame_text(frame: &Value) -> String {
+        frame["cells"]
             .as_array()
             .into_iter()
             .flatten()
@@ -5415,6 +5794,95 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires an explicitly supplied Rex server with Undo Close support"]
+    fn live_undo_close_restores_pane_and_last_tab_with_terminal_history() {
+        let endpoint = std::env::var("REX_TEST_SERVER").expect("set REX_TEST_SERVER");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let mut writer = runtime
+            .block_on(Control::connect(
+                Endpoint::new(&endpoint, Duration::from_secs(10)).unwrap(),
+                None,
+                Trace::default(),
+            ))
+            .unwrap();
+        let layout = json!({"block":{"flavor":"com.superlogical.terminal.shell","options":{"shell":"none",
+            "command":["/bin/sh","-c","stty -echo; seq 10100 10220; exec cat"]}}});
+        let created = runtime
+            .block_on(writer.call(
+                "session.create",
+                json!({"label":"rexling-undo-close-test",
+                    "initial_windows":[{"layout":{"split":{"direction":"horizontal","before":layout,"after":layout}}}]}),
+            ))
+            .unwrap();
+        let id = &created["session_id"];
+        let tab = &created["initial_windows"][0]["window_id"];
+        let blocks = &created["initial_windows"][0]["block_ids"];
+        let block = &blocks[0];
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let app = Session::spawn().unwrap();
+            app.command(json!({"type":"connect","server":endpoint}))
+                .unwrap();
+            wait(&app, |v| v["phase"] == "connected" && v["supportsUndoClose"] == true);
+            app.command(json!({"type":"session","id":id,"block":block,"navigationId":1}))
+                .unwrap();
+            wait(&app, |v| text(v).contains("10220"));
+            app.command(json!({"type":"take"})).unwrap();
+            wait(&app, |v| v["controlled"] == true);
+            app.command(json!({"type":"input","text":"PRESERVED_BEFORE_CLOSE\n"}))
+                .unwrap();
+            wait(&app, |v| text(v).contains("PRESERVED_BEFORE_CLOSE"));
+            let undo_command = |state: &Value| {
+                json!({"type":"undo_close","serial":state["undoClose"]["serial"],
+                    "session":id,"connectionEpoch":state["connectionEpoch"],"navigationId":state["navigationId"]})
+            };
+
+            app.command(json!({"type":"close_pane","session":id,"id":block}))
+                .unwrap();
+            let closed = wait(&app, |v| v["undoClose"]["tab"] == false && v["creating"] == false);
+            assert_eq!(closed["selectedBlock"], blocks[1]);
+            let undo = undo_command(&closed);
+            let mut stale = undo.clone();
+            stale["serial"] = json!(0);
+            app.command(stale).unwrap();
+            app.command(undo).unwrap();
+            let restored = wait(&app, |v| {
+                v["selectedBlock"] == *block && text(v).contains("PRESERVED_BEFORE_CLOSE")
+            });
+            assert_eq!(restored["windows"][0]["id"], *tab);
+            assert!(restored["undoClose"].is_null());
+
+            app.command(json!({"type":"close_tab","session":id,"id":tab,"blocks":blocks}))
+                .unwrap();
+            let closed = wait(&app, |v| v["undoClose"]["tab"] == true && v["creating"] == false);
+            assert_eq!(closed["windows"], json!([]));
+            app.command(undo_command(&closed)).unwrap();
+            let restored = wait(&app, |v| {
+                v["selectedBlock"] == *block && text(v).contains("PRESERVED_BEFORE_CLOSE")
+            });
+            assert_eq!(restored["windows"][0]["id"], *tab);
+            app.command(json!({"type":"scroll","block":block,"lines":-10000}))
+                .unwrap();
+            wait(&app, |v| text(v).contains("10100"));
+            app.command(json!({"type":"take"})).unwrap();
+            wait(&app, |v| v["controlled"] == true);
+            app.command(json!({"type":"input","text":"STILL_RUNNING\n"}))
+                .unwrap();
+            wait(&app, |v| text(v).contains("STILL_RUNNING"));
+        }));
+        runtime
+            .block_on(writer.attach(id.as_str().unwrap()))
+            .unwrap();
+        runtime
+            .block_on(writer.call("session.destroy", json!({"session_id":id})))
+            .unwrap();
+        runtime.block_on(writer.close()).unwrap();
+        result.unwrap();
+    }
+
+    #[test]
     #[ignore = "requires an explicitly supplied owned Rex server"]
     fn live_close_session_preserves_other_views_and_closes_current() {
         let endpoint = std::env::var("REX_TEST_SERVER").expect("set REX_TEST_SERVER");
@@ -5576,7 +6044,7 @@ while True:
 
     #[test]
     #[ignore = "requires an explicitly supplied owned server with python3"]
-    fn live_full_screen_wheel_scrolls_without_terminal_history() {
+    fn live_wheel_and_scrollback_scroll_the_requested_pane() {
         let endpoint = std::env::var("REX_TEST_SERVER").expect("set REX_TEST_SERVER");
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -5608,12 +6076,18 @@ while True:
   os.write(1,('\x1b[H\x1b[2JSCROLL_POSITION:'+str(position)).encode())
  if len(buffer)>4096: buffer=buffer[-64:]
 "###;
+        let mouse_pane = json!({"block":{"flavor":"com.superlogical.terminal.shell","options":{"shell":"none","command":["/usr/bin/python3","-u","-c",script]}}});
+        let history_pane = json!({"block":{"flavor":"com.superlogical.terminal.shell","options":{"shell":"none",
+            "command":["/bin/sh","-c","i=0; while [ \"$i\" -lt 120 ]; do printf 'HISTORY_%03d\\n' \"$i\"; i=$((i+1)); done; exec cat"]}}});
         let created=runtime.block_on(writer.call("session.create",json!({"label":format!("rexlink-wheel-test-{}",std::process::id()),
-            "initial_windows":[{"layout":{"block":{"flavor":"com.superlogical.terminal.shell","options":{"shell":"none","command":["/usr/bin/python3","-u","-c",script]}}}}]}))).unwrap();
+            "initial_windows":[{"layout":{"split":{"direction":"horizontal","before":mouse_pane,"after":{
+                "split":{"direction":"vertical","before":history_pane,"after":mouse_pane}}}}}]}))).unwrap();
         let id = created["session_id"].as_str().unwrap();
-        let block = created["initial_windows"][0]["block_ids"][0]
-            .as_str()
-            .unwrap();
+        let window = &created["initial_windows"][0]["window_id"];
+        let blocks = &created["initial_windows"][0]["block_ids"];
+        let block = blocks[0].as_str().unwrap();
+        let history = blocks[1].as_str().unwrap();
+        let mirror = blocks[2].as_str().unwrap();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let app = Session::spawn().unwrap();
             app.command(json!({"type":"connect","server":endpoint}))
@@ -5640,6 +6114,43 @@ while True:
             std::thread::sleep(Duration::from_millis(100));
             let state: Value = serde_json::from_str(&app.poll(0).unwrap()).unwrap();
             assert!(text(&state).contains("SCROLL_POSITION:-1"));
+
+            let history_request = json!({"block":history,"columns":40,"rows":20});
+            app.command(json!({"type":"mirror","session":id,"window":window,"panes":[history_request]})).unwrap();
+            let at_bottom =
+                wait(&app, |v| frame_text(&v["previews"][history]).contains("HISTORY_119"));
+            let bottom = at_bottom["previews"][history]["scrollbar"][1]
+                .as_u64()
+                .unwrap();
+            assert!(bottom > 4);
+            let mut scroll = json!({"type":"scroll","mirror":true,"session":id,"window":window,"block":history,
+                "navigationId":at_bottom["navigationId"],"connectionEpoch":at_bottom["connectionEpoch"],"lines":-4});
+            let mut stale = scroll.clone();
+            stale["window"] = json!("old-window");
+            app.command(stale).unwrap();
+            app.command(scroll.clone()).unwrap();
+            let scrolled = wait(&app, |v| {
+                v["previews"][history]["scrollbar"][1] == bottom - 4
+            });
+            assert_eq!(scrolled["selectedBlock"], block);
+            assert_eq!(scrolled["controlled"], true);
+            assert!(text(&scrolled).contains("SCROLL_POSITION:-1"));
+            scroll["bottom"] = json!(true);
+            app.command(scroll).unwrap();
+            wait(&app, |v| v["previews"][history]["scrollbar"][1] == bottom);
+
+            app.command(json!({"type":"mirror","session":id,"window":window,
+                "panes":[history_request,{"block":mirror,"columns":40,"rows":20}]})).unwrap();
+            let ready =
+                wait(&app, |v| frame_text(&v["previews"][mirror]).contains("SCROLL_POSITION:0"));
+            app.command(json!({"type":"wheel","mirror":true,"session":id,"window":window,"block":mirror,
+                "navigationId":ready["navigationId"],"connectionEpoch":ready["connectionEpoch"],
+                "lines":-2,"col":4,"row":5,"cw":10,"ch":20})).unwrap();
+            let scrolled =
+                wait(&app, |v| frame_text(&v["previews"][mirror]).contains("SCROLL_POSITION:-2"));
+            assert_eq!(scrolled["selectedBlock"], block);
+            assert_eq!(scrolled["controlled"], true);
+            assert!(text(&scrolled).contains("SCROLL_POSITION:-1"));
         }));
         runtime.block_on(writer.attach(id)).unwrap();
         runtime
@@ -5788,8 +6299,14 @@ while True:
                 v["attentionCount"].as_u64().is_some_and(|n| n >= 2)
             });
             assert!(
-                closed["activity"].is_null(),
-                "Closed-sheet updates must carry only the attention count"
+                closed["activity"].as_array().is_some_and(|items| {
+                    items.iter().any(|item| {
+                        item["session"] == ids[1]
+                            && item["block"] == blocks[1]
+                            && item["state"] == "done"
+                    })
+                }),
+                "Tab badges need pane-scoped activity records even when the sheet is closed"
             );
             app.command(json!({"type":"activity","open":true})).unwrap();
             let listed = until(&app, |v| {
@@ -5865,7 +6382,14 @@ while True:
             assert!(background["screen"].is_null());
             assert_eq!(background["controlled"], false);
             let alerted = until(&app, |v| {
-                v["attentionCount"].as_u64().is_some_and(|n| n > 0) && v["activity"].is_null()
+                v["attentionCount"].as_u64().is_some_and(|n| n > 0)
+                    && v["activity"].as_array().is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item["block"] == blocks[1]
+                                && item["id"] == ""
+                                && item["state"] == "blocked"
+                        })
+                    })
             });
             assert_eq!(alerted["controlled"], false);
             app.command(json!({"type":"activity","open":true})).unwrap();
@@ -5895,7 +6419,10 @@ while True:
                     .is_some_and(|e| e.contains("no longer available"))
             });
             assert_eq!(stale["controlled"], false);
-            assert_eq!(stale["selectedBlock"], "");
+            assert_eq!(
+                stale["selectedBlock"], blocks[1],
+                "A stale Activity link must leave the current pane selected"
+            );
         }));
         for id in &ids {
             runtime.block_on(writer.attach(id)).unwrap();

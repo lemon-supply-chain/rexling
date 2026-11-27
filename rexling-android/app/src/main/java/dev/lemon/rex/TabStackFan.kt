@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,10 +32,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -50,6 +56,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.zIndex
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Maximum number of interactive cards fanned out; extra items stack on either side. */
@@ -58,8 +65,20 @@ internal const val TAB_STACK_FAN_LIMIT = 3
 /** Maximum number of visible backing card layers rendered in a side stack. */
 private const val TAB_STACK_SIDE_LAYERS = 3
 
-/** Maximum double-tap recognition window so single-tap stack expansion stays snappy. */
-private const val FAN_DOUBLE_TAP_WINDOW_MS = 180L
+/** Minimum drag distance along the spread axis to flip pages on the fan. */
+private val FanSwipeThreshold = 24.dp
+
+/** Extra outward hit extension beyond the outer primary card for single-tapping side stacks. */
+private val FanStackHitExtension = 36.dp
+
+private val FanSelectedBorderWidth = 2.5.dp
+
+/**
+ * Mac-style neutral selection ring: cool medium gray in light themes, soft white in dark themes.
+ */
+internal fun fanSelectionBorderColor(scheme: ColorScheme): Color =
+    if (scheme.surface.luminance() < .5f) tintOver(Color.White, scheme.surface, .90f)
+    else tintOver(scheme.onSurfaceVariant, scheme.surface, .82f)
 
 internal data class TabFanItem(
     val id: String,
@@ -83,10 +102,91 @@ internal enum class FanCardRole {
     TRAILING_STACK,
 }
 
-private enum class FanTapAction {
+internal enum class FanTapAction {
     NONE,
     PAGE_BACKWARD,
     PAGE_FORWARD,
+}
+
+internal fun resolveFanSwipeAction(
+    direction: FanDirection,
+    delta: Offset,
+    thresholdPx: Float,
+): FanTapAction {
+    val alongSpread: Float
+    val crossSpread: Float
+    when (direction) {
+        FanDirection.UP,
+        FanDirection.DOWN -> {
+            alongSpread = delta.x
+            crossSpread = abs(delta.y)
+        }
+        FanDirection.LEFT,
+        FanDirection.RIGHT -> {
+            // Trailing cards stack at the top (smaller y), leading cards at the bottom (larger y).
+            alongSpread = -delta.y
+            crossSpread = abs(delta.x)
+        }
+    }
+    if (abs(alongSpread) < thresholdPx || abs(alongSpread) <= crossSpread) {
+        return FanTapAction.NONE
+    }
+    return if (alongSpread < 0f) FanTapAction.PAGE_FORWARD else FanTapAction.PAGE_BACKWARD
+}
+
+private suspend fun PointerInputScope.detectFanGesture(
+    requireUnconsumedDown: Boolean = false,
+    direction: () -> FanDirection?,
+    swipeThresholdPx: Float,
+    shouldHandle: (Offset) -> Boolean = { true },
+    onOutsideTap: () -> Unit = {},
+    onPage: (FanTapAction) -> Unit,
+    onTap: () -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = requireUnconsumedDown)
+        down.consume()
+        if (!shouldHandle(down.position)) {
+            val up = waitForUpOrCancellation()
+            if (up != null) {
+                up.consume()
+                onOutsideTap()
+            }
+            return@awaitEachGesture
+        }
+        var totalDelta = Offset.Zero
+        var dragged = false
+        var paged = false
+        var lifted = false
+        while (true) {
+            val event = awaitPointerEvent()
+            val change =
+                event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+            if (change == null) break
+            if (!change.pressed) {
+                lifted = change.changedToUp()
+                change.consume()
+                break
+            }
+            totalDelta += change.position - change.previousPosition
+            if (!dragged && totalDelta.getDistance() > viewConfiguration.touchSlop) {
+                dragged = true
+            }
+            if (dragged) {
+                change.consume()
+                if (!paged) {
+                    val action =
+                        direction()?.let { resolveFanSwipeAction(it, totalDelta, swipeThresholdPx) }
+                            ?: FanTapAction.NONE
+                    if (action != FanTapAction.NONE) {
+                        paged = true
+                        onPage(action)
+                    }
+                }
+            }
+        }
+        if (!dragged && lifted) onTap()
+    }
 }
 
 internal data class FanCardPose(
@@ -436,9 +536,10 @@ internal fun computeFanLayout(
 /**
  * Anchored folding-fan card selector that pops out from a stacked tab anchor into open workspace
  * space. Displays up to 3 fanned cards while stacking extra cards tightly at the outer slot:
- * single-tapping a stacked slot expands that stack and moves the previously shown cards to stack on
- * the opposite side; double-tapping any card selects it. Taps between the fan's outermost point
- * (plus margin) and the tab bar's outer edge stay inside [FanLayout.safeZone] and do not dismiss.
+ * single-tapping any primary card selects it immediately; swiping along the fan's spread axis or
+ * single-tapping a stacked edge slot pages through overflow cards. Taps between the fan's outermost
+ * point (plus margin) and the tab bar's outer edge stay inside [FanLayout.safeZone] and do not
+ * dismiss.
  */
 @Composable
 internal fun TabStackFan(
@@ -450,7 +551,6 @@ internal fun TabStackFan(
     modifier: Modifier = Modifier,
     barBounds: Rect = anchorBounds,
     preferredAxis: Orientation? = null,
-    marquee: RainbowMarquee? = null,
     bar: @Composable () -> Unit,
 ) {
     val active = visible && items.size > 1 && !anchorBounds.isEmpty
@@ -502,6 +602,8 @@ internal fun TabStackFan(
         val touchSize = 48.dp
         val cardSizePx = with(density) { Size(cardWidth.toPx(), cardHeight.toPx()) }
         val touchSizePx = with(density) { touchSize.toPx() }
+        val swipeThresholdPx = with(density) { FanSwipeThreshold.toPx() }
+        val stackHitExtensionPx = with(density) { FanStackHitExtension.toPx() }
         val workspaceSize = Size(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         val showFan =
             active || (progress.value > 0.005f && displayItems.size > 1 && !displayAnchor.isEmpty)
@@ -520,7 +622,7 @@ internal fun TabStackFan(
                         gapPx = 12.dp.toPx(),
                         spreadStepPx = 50.dp.toPx(),
                         archPx = 10.dp.toPx(),
-                        stackStepPrimaryPx = 5.dp.toPx(),
+                        stackStepPrimaryPx = 7.dp.toPx(),
                         stackStepSecondaryPx = 2.dp.toPx(),
                         safePadPx = 28.dp.toPx(),
                         barBounds = localBar,
@@ -529,28 +631,44 @@ internal fun TabStackFan(
             } else null
 
         val currentDismiss by rememberUpdatedState(onDismiss)
+        val currentDirection by rememberUpdatedState(layout?.direction)
+        val currentSafeZone by rememberUpdatedState(layout?.safeZone ?: Rect.Zero)
+        val currentHasLeading by rememberUpdatedState((layout?.windowStart ?: 0) > 0)
+        val currentHasTrailing by
+            rememberUpdatedState(
+                layout != null && layout.visibleEnd < displayItems.size,
+            )
+        val currentItemCount by rememberUpdatedState(displayItems.size)
+        val currentWindowStart by rememberUpdatedState(layout?.windowStart ?: 0)
+        val currentSelect by rememberUpdatedState(onSelect)
+        fun pageBackward() {
+            windowStart = (currentWindowStart - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
+        }
+        fun pageForward() {
+            val maxStart = (currentItemCount - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
+            windowStart = (currentWindowStart + TAB_STACK_FAN_LIMIT).coerceAtMost(maxStart)
+        }
+        fun performPage(action: FanTapAction) {
+            when (action) {
+                FanTapAction.PAGE_FORWARD -> if (currentHasTrailing) pageForward()
+                FanTapAction.PAGE_BACKWARD -> if (currentHasLeading) pageBackward()
+                FanTapAction.NONE -> Unit
+            }
+        }
         if (active && layout != null) {
             Box(
                 Modifier.fillMaxSize()
                     .testTag("Tab stack fan scrim")
-                    .pointerInput(active, layout.safeZone) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = true)
-                            if (layout.safeZone.contains(down.position)) {
-                                // The bar itself is layered above this scrim; consume taps on the
-                                // remaining safe-zone gap so they stay open without leaking through
-                                // to the terminal.
-                                down.consume()
-                                waitForUpOrCancellation()?.consume()
-                                return@awaitEachGesture
-                            }
-                            down.consume()
-                            val up = waitForUpOrCancellation()
-                            if (up != null) {
-                                up.consume()
-                                currentDismiss()
-                            }
-                        }
+                    .pointerInput(active) {
+                        detectFanGesture(
+                            requireUnconsumedDown = true,
+                            direction = { currentDirection },
+                            swipeThresholdPx = swipeThresholdPx,
+                            shouldHandle = { currentSafeZone.contains(it) },
+                            onOutsideTap = { currentDismiss() },
+                            onPage = ::performPage,
+                            onTap = {},
+                        )
                     }
                     .semantics {
                         contentDescription = dismissFanDescription
@@ -568,32 +686,128 @@ internal fun TabStackFan(
             val t = progress.value.coerceIn(0f, 1f)
             val anchorCenterX = localAnchor.center.x
             val anchorCenterY = localAnchor.center.y
-            val settledMarquee = remember {
-                RainbowMarquee(
-                    mutableStateOf(0f),
-                    mutableStateOf(0f),
-                )
-            }
             val scheme = MaterialTheme.colorScheme
-            val cardShape = RoundedCornerShape(9.dp)
+            val assets = LocalContext.current.assets
+            val pendingCardShape = RoundedCornerShape(7.dp)
+            val selectedBorderColor = fanSelectionBorderColor(scheme)
             val spatialSpec = if (motion) RexTokens.motion.fastSpatial<Float>() else snap()
             val effectSpec = if (motion) RexTokens.motion.fastEffects<Float>() else snap()
             val hasLeading = layout.windowStart > 0
             val hasTrailing = layout.visibleEnd < displayItems.size
-            val leadingHead = displayItems.getOrNull(layout.windowStart)
-            val trailingHead = displayItems.getOrNull(layout.visibleEnd - 1)
-            val currentItemCount by rememberUpdatedState(displayItems.size)
-            val currentWindowStart by rememberUpdatedState(layout.windowStart)
-            val currentSelect by rememberUpdatedState(onSelect)
-            fun pageBackward() {
-                windowStart = (currentWindowStart - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
-            }
-            fun pageForward() {
-                val maxStart = (currentItemCount - TAB_STACK_FAN_LIMIT).coerceAtLeast(0)
-                windowStart = (currentWindowStart + TAB_STACK_FAN_LIMIT).coerceAtMost(maxStart)
-            }
+            val firstPrimaryPose = layout.cards.firstOrNull { it.role == FanCardRole.PRIMARY }
+            val lastPrimaryPose = layout.cards.lastOrNull { it.role == FanCardRole.PRIMARY }
 
             Box(Modifier.fillMaxSize().testTag("Tab stack fan")) {
+                if (active && firstPrimaryPose != null && hasLeading) {
+                    val isHorizontal =
+                        layout.direction == FanDirection.UP || layout.direction == FanDirection.DOWN
+                    val padLeft: Float
+                    val padTop: Float
+                    val padWidthPx: Float
+                    val padHeightPx: Float
+                    if (isHorizontal) {
+                        val right = firstPrimaryPose.centerX - touchSizePx / 2f
+                        padLeft = (right - stackHitExtensionPx).coerceAtLeast(0f)
+                        padTop =
+                            (firstPrimaryPose.centerY - touchSizePx / 2f).coerceIn(
+                                0f,
+                                (workspaceSize.height - touchSizePx).coerceAtLeast(0f),
+                            )
+                        padWidthPx = (right - padLeft).coerceAtLeast(0f)
+                        padHeightPx = touchSizePx
+                    } else {
+                        padLeft =
+                            (firstPrimaryPose.centerX - touchSizePx / 2f).coerceIn(
+                                0f,
+                                (workspaceSize.width - touchSizePx).coerceAtLeast(0f),
+                            )
+                        padTop =
+                            (firstPrimaryPose.centerY + touchSizePx / 2f).coerceIn(
+                                0f,
+                                workspaceSize.height,
+                            )
+                        padWidthPx = touchSizePx
+                        padHeightPx =
+                            minOf(
+                                stackHitExtensionPx,
+                                (workspaceSize.height - padTop).coerceAtLeast(0f),
+                            )
+                    }
+                    if (padWidthPx > 0f && padHeightPx > 0f) {
+                        Box(
+                            Modifier.offset { IntOffset(padLeft.roundToInt(), padTop.roundToInt()) }
+                                .size(
+                                    with(density) { padWidthPx.toDp() },
+                                    with(density) { padHeightPx.toDp() },
+                                )
+                                .zIndex(-10f)
+                                .testTag("Tab fan leading hit")
+                                .pointerInput(Unit) {
+                                    detectFanGesture(
+                                        direction = { currentDirection },
+                                        swipeThresholdPx = swipeThresholdPx,
+                                        onPage = ::performPage,
+                                        onTap = { performPage(FanTapAction.PAGE_BACKWARD) },
+                                    )
+                                },
+                        )
+                    }
+                }
+                if (active && lastPrimaryPose != null && hasTrailing) {
+                    val isHorizontal =
+                        layout.direction == FanDirection.UP || layout.direction == FanDirection.DOWN
+                    val padLeft: Float
+                    val padTop: Float
+                    val padWidthPx: Float
+                    val padHeightPx: Float
+                    if (isHorizontal) {
+                        padLeft =
+                            (lastPrimaryPose.centerX + touchSizePx / 2f).coerceIn(
+                                0f,
+                                workspaceSize.width,
+                            )
+                        padTop =
+                            (lastPrimaryPose.centerY - touchSizePx / 2f).coerceIn(
+                                0f,
+                                (workspaceSize.height - touchSizePx).coerceAtLeast(0f),
+                            )
+                        padWidthPx =
+                            minOf(
+                                stackHitExtensionPx,
+                                (workspaceSize.width - padLeft).coerceAtLeast(0f),
+                            )
+                        padHeightPx = touchSizePx
+                    } else {
+                        padLeft =
+                            (lastPrimaryPose.centerX - touchSizePx / 2f).coerceIn(
+                                0f,
+                                (workspaceSize.width - touchSizePx).coerceAtLeast(0f),
+                            )
+                        val bottom = lastPrimaryPose.centerY - touchSizePx / 2f
+                        padTop = (bottom - stackHitExtensionPx).coerceAtLeast(0f)
+                        padWidthPx = touchSizePx
+                        padHeightPx = (bottom - padTop).coerceAtLeast(0f)
+                    }
+                    if (padWidthPx > 0f && padHeightPx > 0f) {
+                        Box(
+                            Modifier.offset { IntOffset(padLeft.roundToInt(), padTop.roundToInt()) }
+                                .size(
+                                    with(density) { padWidthPx.toDp() },
+                                    with(density) { padHeightPx.toDp() },
+                                )
+                                .zIndex(-10f)
+                                .testTag("Tab fan trailing hit")
+                                .pointerInput(Unit) {
+                                    detectFanGesture(
+                                        direction = { currentDirection },
+                                        swipeThresholdPx = swipeThresholdPx,
+                                        onPage = ::performPage,
+                                        onTap = { performPage(FanTapAction.PAGE_FORWARD) },
+                                    )
+                                },
+                        )
+                    }
+                }
                 for (pose in layout.cards) {
                     val item = displayItems.getOrNull(pose.itemIndex) ?: continue
                     key(item.id) {
@@ -650,12 +864,6 @@ internal fun TabStackFan(
                                 FanCardRole.LEADING_STACK -> "Tab fan leading ${item.id}"
                                 FanCardRole.TRAILING_STACK -> "Tab fan overflow ${item.id}"
                             }
-                        val tapTargetId =
-                            when (pose.role) {
-                                FanCardRole.PRIMARY -> item.id
-                                FanCardRole.LEADING_STACK -> leadingHead?.id ?: item.id
-                                FanCardRole.TRAILING_STACK -> trailingHead?.id ?: item.id
-                            }
                         val tapAction by
                             rememberUpdatedState(
                                 when {
@@ -666,13 +874,10 @@ internal fun TabStackFan(
                                     else -> FanTapAction.NONE
                                 },
                             )
-                        val currentTargetId by rememberUpdatedState(tapTargetId)
-                        fun invokeSingleTap() {
-                            when (tapAction) {
-                                FanTapAction.PAGE_BACKWARD -> pageBackward()
-                                FanTapAction.PAGE_FORWARD -> pageForward()
-                                FanTapAction.NONE -> Unit
-                            }
+                        val currentIsPrimary by rememberUpdatedState(isPrimary)
+                        val currentRole by rememberUpdatedState(pose.role)
+                        fun invokePageAction() {
+                            performPage(tapAction)
                         }
 
                         Box(
@@ -709,7 +914,7 @@ internal fun TabStackFan(
                                                 customActions =
                                                     listOf(
                                                         CustomAccessibilityAction(pageLabel) {
-                                                            invokeSingleTap()
+                                                            invokePageAction()
                                                             true
                                                         },
                                                     )
@@ -722,7 +927,7 @@ internal fun TabStackFan(
                                             else nextPanesDescription
                                         if (active && pose.visibleInStack) {
                                             onClick {
-                                                invokeSingleTap()
+                                                invokePageAction()
                                                 true
                                             }
                                         }
@@ -731,34 +936,22 @@ internal fun TabStackFan(
                                 .then(
                                     if (active && pose.visibleInStack) {
                                         Modifier.pointerInput(Unit) {
-                                            val timeoutMs =
-                                                minOf(
-                                                    viewConfiguration.doubleTapTimeoutMillis,
-                                                    FAN_DOUBLE_TAP_WINDOW_MS,
-                                                )
-                                            awaitEachGesture {
-                                                val down1 =
-                                                    awaitFirstDown(requireUnconsumed = false)
-                                                down1.consume()
-                                                val up1 =
-                                                    waitForUpOrCancellation()
-                                                        ?: return@awaitEachGesture
-                                                up1.consume()
-                                                val down2 =
-                                                    withTimeoutOrNull(timeoutMs) {
-                                                        awaitFirstDown(requireUnconsumed = false)
+                                            detectFanGesture(
+                                                direction = { currentDirection },
+                                                swipeThresholdPx = swipeThresholdPx,
+                                                onPage = ::performPage,
+                                                onTap = {
+                                                    if (currentIsPrimary) {
+                                                        currentSelect(item.id)
+                                                    } else if (
+                                                        currentRole == FanCardRole.LEADING_STACK
+                                                    ) {
+                                                        performPage(FanTapAction.PAGE_BACKWARD)
+                                                    } else {
+                                                        performPage(FanTapAction.PAGE_FORWARD)
                                                     }
-                                                if (down2 == null) {
-                                                    invokeSingleTap()
-                                                } else {
-                                                    down2.consume()
-                                                    val up2 = waitForUpOrCancellation()
-                                                    if (up2 != null) {
-                                                        up2.consume()
-                                                        currentSelect(currentTargetId)
-                                                    }
-                                                }
-                                            }
+                                                },
+                                            )
                                         }
                                     } else {
                                         Modifier
@@ -766,29 +959,40 @@ internal fun TabStackFan(
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
+                            val shadowShape =
+                                if (item.program.pending) pendingCardShape
+                                else ProgramTileShadowShape
                             val tileModifier =
                                 Modifier.size(cardWidth, cardHeight)
                                     .shadow(
                                         if (isPrimary) 4.dp else 2.dp,
-                                        cardShape,
+                                        shadowShape,
                                         clip = false,
                                     )
                                     .then(
-                                        if (item.selected && isPrimary)
-                                            Modifier.border(1.5.dp, scheme.roles.action, cardShape)
-                                        else Modifier,
+                                        if (item.selected && isPrimary) {
+                                            if (item.program.pending) {
+                                                Modifier.border(
+                                                    FanSelectedBorderWidth,
+                                                    selectedBorderColor,
+                                                    pendingCardShape,
+                                                )
+                                            } else {
+                                                Modifier.programTileBorder(
+                                                    assets = assets,
+                                                    color = selectedBorderColor,
+                                                    width = FanSelectedBorderWidth,
+                                                    fallbackCornerRadius = 7.dp,
+                                                )
+                                            }
+                                        } else Modifier,
                                     )
                             PaneProgramTile(
                                 program = item.program,
                                 modifier = tileModifier,
                                 large = true,
                                 rotation = 0f,
-                                marquee =
-                                    when {
-                                        !item.working && item.progress?.busy != true -> null
-                                        !isPrimary -> settledMarquee
-                                        else -> marquee
-                                    },
+                                marquee = null,
                                 progress = if (isPrimary) item.progress else null,
                             )
                         }

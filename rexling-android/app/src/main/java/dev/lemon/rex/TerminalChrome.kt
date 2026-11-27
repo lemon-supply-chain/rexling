@@ -1,10 +1,11 @@
 package dev.lemon.rex
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,7 +40,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -48,6 +52,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -57,28 +62,34 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.HazeState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 internal enum class ChromeIcon {
@@ -129,8 +140,10 @@ internal enum class ChromeIcon {
     STOP,
     MOVE,
     WAFFLE,
+    GRID_2X2,
     ZOOM,
     UNZOOM,
+    CHEVRONS_DOWN,
 }
 
 @Composable
@@ -231,6 +244,13 @@ internal fun ChromeSymbol(
                     }
                 }
             }
+            ChromeIcon.GRID_2X2 -> {
+                for (row in 0..1) {
+                    for (col in 0..1) {
+                        box(4f + col * 9.5f, 4f + row * 9.5f, 6.5f, 6.5f, 1.5f)
+                    }
+                }
+            }
             ChromeIcon.ZOOM -> {
                 line(13f, 11f, 20f, 4f)
                 line(15f, 4f, 20f, 4f)
@@ -254,6 +274,12 @@ internal fun ChromeSymbol(
             ChromeIcon.CHEVRON -> {
                 line(7f, 10f, 12f, 15f)
                 line(12f, 15f, 17f, 10f)
+            }
+            ChromeIcon.CHEVRONS_DOWN -> {
+                line(7f, 6f, 12f, 11f)
+                line(12f, 11f, 17f, 6f)
+                line(7f, 13f, 12f, 18f)
+                line(12f, 18f, 17f, 13f)
             }
             ChromeIcon.SESSIONS -> {
                 box(4f, 8f, 13f, 12f)
@@ -542,6 +568,42 @@ internal fun ChromeSymbol(
     }
 }
 
+@Composable
+internal fun ScrollToLatestButton(
+    hazeState: dev.chrisbanes.haze.HazeState,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val description = stringResource(R.string.a11y_scroll_to_latest)
+    Box(
+        modifier.size(48.dp).clickable(role = Role.Button, onClick = onClick).semantics {
+            contentDescription = description
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        TransferNoticeSurface(
+            Modifier.size(36.dp)
+                .shadow(4.dp, CircleShape, clip = false)
+                .background(scheme.surface, CircleShape)
+                .border(.5.dp, scheme.outlineVariant, CircleShape),
+            hazeState,
+            container = scheme.surface,
+            title = null,
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ChromeSymbol(ChromeIcon.CHEVRONS_DOWN, color = scheme.primary)
+            }
+        }
+    }
+}
+
+internal val LocalChromeButtonWidth = compositionLocalOf { 36.dp }
+
+internal data class SidebarNewTab(val enabled: Boolean, val onClick: () -> Unit)
+
+internal val LocalSidebarNewTab = compositionLocalOf<SidebarNewTab?> { null }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChromeButton(
@@ -555,7 +617,7 @@ internal fun ChromeButton(
 ) {
     Box(
         modifier
-            .size(36.dp)
+            .size(LocalChromeButtonWidth.current, 36.dp)
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
                 enabled = enabled,
@@ -578,6 +640,87 @@ internal fun ChromeButton(
     }
 }
 
+internal val HeaderIconSlotWidth = 59.dp
+
+internal enum class CompactHeaderMode(@androidx.annotation.StringRes val labelRes: Int) {
+    NEVER(R.string.compact_header_never),
+    ALWAYS(R.string.compact_header_always),
+    WITH_KEYBOARD(R.string.compact_header_with_keyboard),
+}
+
+@Composable
+private fun SessionHeaderRow(
+    modifier: Modifier,
+    cutout: IntRect?,
+    menu: @Composable () -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Layout(
+        contents =
+            listOf(
+                {
+                    Row(
+                        Modifier.fillMaxWidth().clipToBounds(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = content,
+                    )
+                },
+                { Box(Modifier.padding(end = 9.dp)) { menu() } },
+            ),
+        modifier = modifier.fillMaxWidth(),
+    ) { children, constraints ->
+        val width = constraints.maxWidth
+        val menuButton = children[1].single().measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val trailingMenuStart = width - menuButton.width
+        var menuStart = trailingMenuStart
+        var bodyStart = 0
+        var bodyEnd = trailingMenuStart
+        var top = 0
+        if (cutout != null) {
+            val gap = 4.dp.roundToPx()
+            val start =
+                (if (layoutDirection == LayoutDirection.Ltr) cutout.left
+                else width - cutout.right) - gap
+            val end =
+                (if (layoutDirection == LayoutDirection.Ltr) cutout.right
+                else width - cutout.left) + gap
+            val before = start.coerceIn(0, width)
+            val after = end.coerceIn(0, width)
+            if (menuStart < after) menuStart = before - menuButton.width
+            val leadingWidth = minOf(before, menuStart)
+            val trailingWidth = menuStart - after
+            if (maxOf(leadingWidth, trailingWidth) < 96.dp.roundToPx()) {
+                // A wide notch may leave neither side enough room for the heading and menu.
+                menuStart = trailingMenuStart
+                top = cutout.bottom
+            } else if (leadingWidth >= trailingWidth) {
+                bodyEnd = leadingWidth
+            } else {
+                bodyStart = after
+                bodyEnd = menuStart
+            }
+        }
+        val body =
+            children[0]
+                .single()
+                .measure(
+                    constraints.copy(
+                        minWidth = bodyEnd - bodyStart,
+                        maxWidth = bodyEnd - bodyStart,
+                        minHeight = 0,
+                    ),
+                )
+        val barHeight = maxOf(body.height, menuButton.height)
+        val height =
+            maxOf(top + barHeight, cutout?.bottom ?: 0)
+                .coerceIn(constraints.minHeight, constraints.maxHeight)
+        layout(width, height) {
+            body.placeRelative(bodyStart, top + (height - top - body.height) / 2)
+            menuButton.placeRelative(menuStart, top + (height - top - menuButton.height) / 2)
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SessionHeader(
@@ -587,7 +730,6 @@ internal fun SessionHeader(
     enabled: Boolean,
     programs: List<ProgramIdentity>,
     paneIndex: Int,
-    directory: String,
     onSessions: () -> Unit,
     onSelect: (String) -> Unit,
     onLast: () -> Unit,
@@ -597,11 +739,28 @@ internal fun SessionHeader(
     expanded: Boolean = false,
     serverIcons: Map<String, ServerIcon> = emptyMap(),
     progress: TerminalProgress? = null,
-    onCollapse: (() -> Unit)? = null,
+    collapseForIme: WindowInsets? = null,
+    onHeaderHeightSaved: (Int) -> Unit = {},
+    headerHaze: HazeState? = null,
+    onHeaderOverlap: ((Int) -> Unit)? = null,
+    iconSlotWidth: androidx.compose.ui.unit.Dp = HeaderIconSlotWidth,
+    topCutout: IntRect? = null,
+    alwaysCompact: Boolean = false,
+    directory: String = "",
+    modifier: Modifier = Modifier,
+    showBottomDivider: Boolean = true,
     menu: @Composable () -> Unit,
 ) {
     val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
-    val anyWorking = working || programs.indices.any(isPaneWorking)
+    val paneTitle = title.ifBlank { program.title }
+    val scheme = MaterialTheme.colorScheme
+    val connectionStatus =
+        stringResource(
+            if (connected) R.string.a11y_state_connected else R.string.a11y_state_disconnected,
+        )
+    val connectionTint = if (connected) scheme.primary else scheme.outline
+    val openSessionDrawerLabel = stringResource(R.string.a11y_open_session_drawer)
+    val anyWorking = working || programs.indices.any(isPaneWorking) || progress?.busy == true
     val programIconDescription = stringResource(R.string.a11y_session_program_icon)
     val programStateDescription =
         stringResource(if (anyWorking) R.string.a11y_state_working else R.string.a11y_state_idle)
@@ -609,28 +768,30 @@ internal fun SessionHeader(
     val previousSessionLabel = stringResource(R.string.a11y_previous_session)
     val sessionStripDescription = stringResource(R.string.a11y_session_strip)
     val marquee = rememberRainbowMarquee(anyWorking)
-    val titleHeight = with(LocalDensity.current) { 16.sp.toDp() }
-    val directoryHeight = with(LocalDensity.current) { 12.sp.toDp() }
-    val sessionHeight = maxOf(17.dp, directoryHeight)
+    val titleHeight = with(LocalDensity.current) { SettingsType.paneTitle.lineHeight.toDp() }
+    val sessionHeight = maxOf(17.dp, with(LocalDensity.current) { 14.sp.toDp() })
     val lineStyle =
         androidx.compose.ui.text.TextStyle(
             platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
             lineHeightStyle =
                 LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
         )
+    val headingStyle =
+        lineStyle
+            .merge(SettingsType.paneTitle)
+            .copy(fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
+    val contextStyle =
+        lineStyle.copy(
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            letterSpacing = 0.sp,
+            color = scheme.onSurfaceVariant,
+        )
     val titleBaseline =
         rememberTextMeasurer()
             .measure(
                 "Ag",
-                style =
-                    androidx.compose.material3.LocalTextStyle.current
-                        .merge(lineStyle)
-                        .copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            lineHeight = 16.sp,
-                            letterSpacing = 0.sp,
-                        ),
+                style = androidx.compose.material3.LocalTextStyle.current.merge(headingStyle),
                 maxLines = 1,
             )
             .firstBaseline
@@ -701,365 +862,361 @@ internal fun SessionHeader(
                     sessions.getOrNull(index)?.let { latestSelect(it.id) }
             }
     }
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 50.dp).padding(horizontal = 9.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (!expanded) {
-            Box(
-                Modifier.height(45.dp)
-                    .clipToBounds()
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = programIconDescription
-                        stateDescription = programStateDescription
-                        if (enabled && looping)
-                            customActions =
-                                listOf(
-                                    CustomAccessibilityAction(nextSessionLabel) {
-                                        selectNeighbour(1)
-                                    },
-                                    CustomAccessibilityAction(previousSessionLabel) {
-                                        selectNeighbour(-1)
-                                    },
-                                )
-                    }
-                    .pointerInput(enabled, sessionIds, selectedId) {
-                        if (enabled && looping) {
-                            var distance = Offset.Zero
-                            detectDragGestures(
-                                onDragStart = {
-                                    distance = Offset.Zero
-                                    iconAnimation?.cancel()
-                                    iconDragY = iconSettle.value
-                                    iconDragging = true
-                                },
-                                onDragCancel = {
-                                    distance = Offset.Zero
-                                    settleIcon()
-                                },
-                                onDrag = { change, amount ->
-                                    change.consume()
-                                    distance += amount
-                                    iconDragY = distance.y.coerceIn(-iconTravel, iconTravel)
-                                },
-                                onDragEnd = {
-                                    settleIcon()
-                                    if (
-                                        abs(distance.y) >= iconSwipeDistance &&
-                                            abs(distance.y) > abs(distance.x) * 1.5f
-                                    )
-                                        selectNeighbour(if (distance.y < 0) 1 else -1)
-                                },
-                            )
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier.graphicsLayer {
-                        val y = if (iconDragging) iconDragY else iconSettle.value
-                        val progress = (abs(y) / iconTravel).coerceIn(0f, 1f)
-                        translationY = y
-                        scaleX = 1f - .06f * progress
-                        scaleY = scaleX
-                        alpha = 1f - .25f * progress
-                    },
-                ) {
-                    ProgramStack(
-                        programs,
-                        paneIndex,
-                        framed = true,
-                        fixedSlot = true,
-                        marquee = marquee,
-                        isPaneWorking = isPaneWorking,
-                        progress = progress,
-                    )
-                }
-            }
-            Spacer(Modifier.width(7.dp))
-        }
-        Column(
-            Modifier.weight(1f)
-                .then(
-                    if (onCollapse != null)
-                        Modifier.clickable(
-                            onClickLabel = stringResource(R.string.a11y_collapse_top_bar),
-                            onClick = onCollapse,
-                        )
-                    else Modifier,
-                ),
-            verticalArrangement = Arrangement.Center,
+    val full: @Composable () -> Unit = {
+        SessionHeaderRow(
+            Modifier.heightIn(min = 44.dp),
+            topCutout,
+            { if (!expanded) menu() },
         ) {
             if (!expanded) {
-                Text(
-                    title.ifBlank { program.title },
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    style = lineStyle,
-                    letterSpacing = 0.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier =
-                        Modifier.fillMaxWidth().height(titleHeight).layout { measurable, constraints
-                            ->
-                            // Fallback/emoji metrics must not move the ordinary title text.
-                            val text =
-                                measurable.measure(
-                                    constraints.copy(
-                                        minHeight = 0,
-                                        maxHeight = Constraints.Infinity,
-                                    ),
+                Box(
+                    Modifier.width(iconSlotWidth)
+                        .height(36.dp)
+                        .clipToBounds()
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = programIconDescription
+                            stateDescription = programStateDescription
+                            if (enabled && looping)
+                                customActions =
+                                    listOf(
+                                        CustomAccessibilityAction(nextSessionLabel) {
+                                            selectNeighbour(1)
+                                        },
+                                        CustomAccessibilityAction(previousSessionLabel) {
+                                            selectNeighbour(-1)
+                                        },
+                                    )
+                        }
+                        .pointerInput(enabled, sessionIds, selectedId) {
+                            if (enabled && looping) {
+                                var distance = Offset.Zero
+                                detectDragGestures(
+                                    onDragStart = {
+                                        distance = Offset.Zero
+                                        iconAnimation?.cancel()
+                                        iconDragY = iconSettle.value
+                                        iconDragging = true
+                                    },
+                                    onDragCancel = {
+                                        distance = Offset.Zero
+                                        settleIcon()
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        distance += amount
+                                        iconDragY = distance.y.coerceIn(-iconTravel, iconTravel)
+                                    },
+                                    onDragEnd = {
+                                        settleIcon()
+                                        if (
+                                            abs(distance.y) >= iconSwipeDistance &&
+                                                abs(distance.y) > abs(distance.x) * 1.5f
+                                        )
+                                            selectNeighbour(if (distance.y < 0) 1 else -1)
+                                    },
                                 )
-                            layout(
-                                text.width,
-                                constraints.maxHeight,
-                                mapOf(FirstBaseline to titleBaseline),
-                            ) {
-                                text.placeRelative(0, titleBaseline - text[FirstBaseline])
                             }
                         },
-                )
-                Text(
-                    directory,
-                    Modifier.fillMaxWidth().height(directoryHeight),
-                    fontFamily = MonoUi,
-                    fontSize = 9.sp,
-                    lineHeight = 12.sp,
-                    style = lineStyle,
-                    letterSpacing = 0.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            BoxWithConstraints(
-                Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight),
-            ) {
-                val pageWidth = if (expanded) 160.dp else maxWidth.coerceAtLeast(40.dp)
-                val pagePadding =
-                    if (expanded) ((maxWidth - pageWidth) / 2).coerceAtLeast(0.dp) else 0.dp
-                Column(
-                    Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                    contentAlignment = Alignment.Center,
                 ) {
-                    HorizontalPager(
-                        pager,
-                        Modifier.fillMaxWidth()
-                            .height(if (expanded) 32.dp else sessionHeight)
-                            .semantics { contentDescription = sessionStripDescription },
-                        userScrollEnabled = enabled && sessions.size > 1,
-                        pageSize = PageSize.Fixed(pageWidth),
-                        contentPadding = PaddingValues(horizontal = pagePadding),
-                        pageSpacing = 6.dp,
-                        key = { "$it:${sessions.getOrNull(logicalPage(it))?.id.orEmpty()}" },
-                    ) { page ->
-                        val item = sessions.getOrNull(logicalPage(page))
-                        val active = item?.id == selectedId
-                        val sessionActionLabel =
-                            if (active || item == null) stringResource(R.string.a11y_switch_session)
-                            else stringResource(R.string.a11y_session_label, item.label)
-                        Row(
-                            Modifier.requiredWidth(pageWidth)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(19.dp))
-                                .border(
-                                    1.dp,
-                                    if (expanded && active) MaterialTheme.colorScheme.primary
-                                    else Color.Transparent,
-                                    RoundedCornerShape(19.dp),
-                                )
-                                .padding(horizontal = if (expanded) 9.dp else 0.dp)
-                                .graphicsLayer {
-                                    alpha = if (active || sessions.isEmpty()) 1f else .38f
-                                }
-                                .combinedClickable(
-                                    onClick = {
-                                        if (active || item == null) onSessions()
-                                        else onSelect(item.id)
-                                    },
-                                    onLongClick = onLast,
-                                )
-                                .semantics { contentDescription = sessionActionLabel },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement =
-                                Arrangement.spacedBy(if (expanded) 6.dp else 4.dp),
-                        ) {
-                            Box(
-                                Modifier.size(if (expanded) 7.dp else 5.dp)
-                                    .background(
-                                        if (connected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(4.dp),
-                                    ),
-                            )
-                            serverIcons[item?.id]?.let {
-                                ServerGlyph(it, Modifier.size(if (expanded) 13.dp else 11.dp))
-                            }
-                            Text(
-                                item?.label
-                                    ?: stringResource(
-                                        if (connected) R.string.sessions else R.string.connect,
-                                    ),
-                                fontFamily = MonoUi,
-                                fontWeight = if (expanded) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = if (expanded) 12.sp else 9.sp,
-                                lineHeight = if (expanded) 16.sp else 12.sp,
-                                style =
-                                    androidx.compose.ui.text.TextStyle(
-                                        platformStyle =
-                                            androidx.compose.ui.text.PlatformTextStyle(
-                                                includeFontPadding = false,
-                                            ),
-                                    ),
-                                letterSpacing = 0.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color =
-                                    if (expanded) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier =
-                                    Modifier.widthIn(
-                                        max =
-                                            (pageWidth -
-                                                    (if (expanded) 50.dp else 24.dp) -
-                                                    (if (serverIcons[item?.id] != null) 15.dp
-                                                    else 0.dp))
-                                                .coerceAtLeast(10.dp),
-                                    ),
-                            )
-                            ChromeSymbol(
-                                ChromeIcon.CHEVRON,
-                                Modifier.size(if (expanded) 13.dp else 11.dp),
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    if (expanded && sessions.size > 1)
-                        PositionDots(
-                            logicalPage(pager.currentPage),
-                            sessions.size,
-                            Modifier.height(5.dp),
+                    Box(
+                        Modifier.offset(x = 2.dp).graphicsLayer {
+                            val y = if (iconDragging) iconDragY else iconSettle.value
+                            val progress = (abs(y) / iconTravel).coerceIn(0f, 1f)
+                            translationY = y
+                            scaleX = 1f - .06f * progress
+                            scaleY = scaleX
+                            alpha = 1f - .25f * progress
+                        },
+                    ) {
+                        ProgramStack(
+                            programs,
+                            paneIndex,
+                            framed = true,
+                            fixedSlot = true,
+                            marquee = marquee,
+                            isPaneWorking = isPaneWorking,
+                            progress = progress,
                         )
+                    }
+                }
+                Spacer(Modifier.width(9.dp))
+            }
+            Column(
+                Modifier.weight(1f)
+                    .padding(top = 4.dp, bottom = 4.dp, start = if (expanded) 9.dp else 0.dp)
+                    .then(
+                        if (expanded) Modifier
+                        else
+                            Modifier.combinedClickable(
+                                role = Role.Button,
+                                onClickLabel = openSessionDrawerLabel,
+                                onLongClick = onLast,
+                                onClick = onSessions,
+                            ),
+                    ),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                if (!expanded) {
+                    Text(
+                        paneTitle,
+                        style = headingStyle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier =
+                            Modifier.fillMaxWidth().height(titleHeight).layout {
+                                measurable,
+                                constraints ->
+                                // Fallback/emoji metrics must not move the ordinary title text.
+                                val text =
+                                    measurable.measure(
+                                        constraints.copy(
+                                            minHeight = 0,
+                                            maxHeight = Constraints.Infinity,
+                                        ),
+                                    )
+                                layout(
+                                    text.width,
+                                    constraints.maxHeight,
+                                    mapOf(FirstBaseline to titleBaseline),
+                                ) {
+                                    text.placeRelative(0, titleBaseline - text[FirstBaseline])
+                                }
+                            },
+                    )
+                }
+                BoxWithConstraints(
+                    Modifier.fillMaxWidth().height(if (expanded) 42.dp else sessionHeight),
+                ) {
+                    val pageWidth = if (expanded) 160.dp else maxWidth.coerceAtLeast(40.dp)
+                    val pagePadding =
+                        if (expanded) ((maxWidth - pageWidth) / 2).coerceAtLeast(0.dp) else 0.dp
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        HorizontalPager(
+                            pager,
+                            Modifier.fillMaxWidth()
+                                .height(if (expanded) 32.dp else sessionHeight)
+                                .semantics { contentDescription = sessionStripDescription },
+                            userScrollEnabled = enabled && sessions.size > 1,
+                            pageSize = PageSize.Fixed(pageWidth),
+                            contentPadding = PaddingValues(horizontal = pagePadding),
+                            pageSpacing = 6.dp,
+                            key = { "$it:${sessions.getOrNull(logicalPage(it))?.id.orEmpty()}" },
+                        ) { page ->
+                            val item = sessions.getOrNull(logicalPage(page))
+                            val active = item?.id == selectedId
+                            val sessionActionLabel =
+                                if (active || item == null)
+                                    stringResource(R.string.a11y_switch_session)
+                                else stringResource(R.string.a11y_session_label, item.label)
+                            Row(
+                                Modifier.requiredWidth(pageWidth)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(19.dp))
+                                    .border(
+                                        1.dp,
+                                        if (expanded && active)
+                                            MaterialTheme.colorScheme.primary.copy(alpha = .5f)
+                                        else Color.Transparent,
+                                        RoundedCornerShape(19.dp),
+                                    )
+                                    .padding(horizontal = if (expanded) 9.dp else 0.dp)
+                                    .graphicsLayer {
+                                        alpha = if (active || sessions.isEmpty()) 1f else .38f
+                                    }
+                                    .then(
+                                        if (expanded || (!active && item != null))
+                                            Modifier.combinedClickable(
+                                                onClick = {
+                                                    if (active || item == null) onSessions()
+                                                    else onSelect(item.id)
+                                                },
+                                                onLongClick = onLast,
+                                            )
+                                        else Modifier,
+                                    )
+                                    .semantics { contentDescription = sessionActionLabel },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(if (expanded) 6.dp else 4.dp),
+                            ) {
+                                val serverIcon = serverIcons[item?.id] ?: ServerIcon.GLOBE
+                                ServerGlyph(
+                                    serverIcon,
+                                    Modifier.size(if (expanded) 14.dp else 12.dp).semantics {
+                                        contentDescription = serverIcon.label
+                                        if (active || item == null)
+                                            stateDescription = connectionStatus
+                                    },
+                                    color =
+                                        if (active || item == null) connectionTint
+                                        else scheme.onSurfaceVariant,
+                                )
+                                val style =
+                                    if (expanded)
+                                        contextStyle.copy(
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = scheme.onSurface,
+                                        )
+                                    else contextStyle
+                                HeaderContextLine(
+                                    item?.label
+                                        ?: stringResource(
+                                            if (connected) R.string.sessions else R.string.connect,
+                                        ),
+                                    directory = directory.takeIf { active && !expanded }.orEmpty(),
+                                    style = style,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                            }
+                        }
+                        if (expanded && sessions.size > 1)
+                            PositionDots(
+                                logicalPage(pager.currentPage),
+                                sessions.size,
+                                Modifier.height(5.dp),
+                            )
+                    }
                 }
             }
         }
-        if (!expanded) {
-            if (onCollapse != null) {
-                ChromeButton(
-                    ChromeIcon.CHEVRON,
-                    stringResource(R.string.a11y_collapse_top_bar),
-                    modifier = Modifier.graphicsLayer { rotationZ = 180f },
-                    onClick = onCollapse,
+    }
+    val compact: @Composable () -> Unit = {
+        val frost =
+            headerHaze?.let {
+                Modifier.paneFrost(
+                    it,
+                    androidx.compose.ui.graphics.RectangleShape,
+                    edge = false,
+                    opacity = .66f,
+                    blur = 16.dp,
+                )
+            } ?: Modifier
+        SessionHeaderRow(frost.testTag("Compact session header"), topCutout, menu) {
+            val session = sessions.getOrNull(selectedIndex)?.label.orEmpty()
+            val serverIcon = serverIcons[selectedId] ?: ServerIcon.GLOBE
+            Row(
+                Modifier.weight(1f)
+                    .heightIn(min = 36.dp)
+                    .padding(start = 9.dp)
+                    .combinedClickable(
+                        role = Role.Button,
+                        onClickLabel = openSessionDrawerLabel,
+                        onLongClick = onLast,
+                        onClick = onSessions,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (anyWorking) {
+                    CompactWorkingIndicator(
+                        marquee = marquee,
+                        description = programStateDescription,
+                    )
+                } else {
+                    ServerGlyph(
+                        serverIcon,
+                        Modifier.size(14.dp).semantics {
+                            contentDescription = serverIcon.label
+                            stateDescription = connectionStatus
+                        },
+                        color = connectionTint,
+                    )
+                }
+                HeaderContextLine(
+                    session,
+                    directory,
+                    contextStyle,
+                    Modifier.weight(1f),
+                    title = paneTitle,
+                    titleStyle = headingStyle,
                 )
             }
-            menu()
+        }
+    }
+    val divider = scheme.outlineVariant.copy(alpha = .65f)
+    Box(
+        modifier
+            .fillMaxWidth()
+            .then(
+                if (showBottomDivider)
+                    Modifier.drawWithContent {
+                        drawContent()
+                        val stroke = .5.dp.toPx()
+                        val y = size.height - stroke / 2
+                        drawLine(
+                            divider,
+                            Offset(0f, y),
+                            Offset(size.width, y),
+                            strokeWidth = stroke,
+                        )
+                    }
+                else Modifier,
+            ),
+    ) {
+        when {
+            expanded -> full()
+            collapseForIme != null ->
+                KeyboardCollapsingHeader(
+                    collapseForIme,
+                    WindowInsets.navigationBars,
+                    onHeaderHeightSaved,
+                    onHeaderOverlap,
+                    if (alwaysCompact) null else full,
+                    compact,
+                )
+            alwaysCompact -> compact()
+            else -> full()
         }
     }
 }
 
 @Composable
-internal fun CompactSessionHeader(
-    title: String,
-    directory: String,
-    programs: List<ProgramIdentity>,
-    paneIndex: Int,
-    working: Boolean = false,
-    isPaneWorking: (Int) -> Boolean = { if (it == paneIndex) working else false },
-    onExpand: () -> Unit,
+private fun CompactWorkingIndicator(
+    marquee: RainbowMarquee?,
+    description: String,
     modifier: Modifier = Modifier,
 ) {
-    val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
-    val displayTitle = title.ifBlank { program.title }
-    val anyWorking = working || programs.indices.any(isPaneWorking)
-    val marquee = rememberRainbowMarquee(anyWorking)
-    val expandDescription = stringResource(R.string.a11y_expand_top_bar)
-    val fullText = if (directory.isNotBlank()) "$displayTitle - $directory" else displayTitle
-    val annotatedText = buildAnnotatedString {
-        withStyle(
-            SpanStyle(
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-        ) {
-            append(displayTitle)
-        }
-        if (directory.isNotBlank()) {
-            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
-                append(" - ")
-            }
-            withStyle(
-                SpanStyle(
-                    fontFamily = MonoUi,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            ) {
-                append(directory)
-            }
-        }
-    }
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .heightIn(min = 34.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClickLabel = expandDescription) { onExpand() }
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .semantics { contentDescription = fullText },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    val staticMarquee = remember { RainbowMarquee(mutableStateOf(0f), mutableStateOf(0f)) }
+    val activeMarquee = marquee ?: staticMarquee
+    Canvas(
+        modifier.size(14.dp).testTag("Compact header working indicator").semantics {
+            contentDescription = description
+        },
     ) {
-        Row(
-            Modifier.weight(1f, fill = false),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (anyWorking) {
-                Box(
-                    Modifier.size(6.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .rainbowMarquee(marquee, corner = 3.dp, thickness = 1.dp),
-                )
-            }
-            Text(
-                text = annotatedText,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        ChromeSymbol(
-            ChromeIcon.CHEVRON,
-            Modifier.size(12.dp),
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        drawRainbowDot(activeMarquee)
     }
 }
 
-/** Call only for visible busy programs; idle chrome owns no animation clock. */
+// Share one clock across tabs and Activity rows. Only active lifecycle collectors keep it running.
+private val workingPhase by lazy {
+    flow {
+            val start = SystemClock.uptimeMillis()
+            while (true) {
+                emit(((SystemClock.uptimeMillis() - start) % 1200L) / 1200f)
+                delay(50L)
+            }
+        }
+        .stateIn(
+            CoroutineScope(Dispatchers.Main.immediate),
+            SharingStarted.WhileSubscribed(replayExpirationMillis = 0L),
+            0f,
+        )
+}
+
+/** Call only for visible busy programs. Read the phase during drawing. */
 @Composable
 internal fun rememberWorkingPhase(working: Boolean): State<Float> {
     if (!working) return remember { mutableFloatStateOf(0f) }
     // A static mid-phase renders a solid bar when animations are disabled.
     if (!LocalMotionEnabled.current) return remember { mutableFloatStateOf(.5f) }
-    val transition =
-        androidx.compose.animation.core.rememberInfiniteTransition(label = "Program working")
-    return transition.animateFloat(
-        0f,
-        1f,
-        animationSpec =
-            androidx.compose.animation.core.infiniteRepeatable(
-                animation =
-                    androidx.compose.animation.core.tween(
-                        1200,
-                        easing = androidx.compose.animation.core.LinearEasing,
-                    ),
-            ),
-        label = "Working highlight",
-    )
+    return workingPhase.collectAsStateWithLifecycle()
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -1174,14 +1331,33 @@ internal fun TerminalTabs(
     onFanBarBounds: (Rect) -> Unit = {},
     onFanAnchorGone: (String) -> Unit = {},
     onMenuOpenChange: (Boolean) -> Unit = {},
+    onNewTab: (() -> Unit)? = null,
+    showTopDivider: Boolean = true,
     actions: @Composable () -> Unit,
 ) {
+    val newTab =
+        if (!floating && currentTabWidth().first != TabWidthClass.NARROW) onNewTab else null
+    val markerHeight = 3.dp
+    val markerBottom = 5.dp
+    val markerSpace = markerHeight + markerBottom
+    val newTabLabel = stringResource(R.string.label_new_tab)
+    val newTabButton: @Composable () -> Unit = {
+        newTab?.let { onClick ->
+            Box(
+                Modifier.fillMaxHeight().padding(bottom = markerHeight),
+                contentAlignment = Alignment.Center,
+            ) {
+                ChromeButton(ChromeIcon.ADD, newTabLabel, enabled = enabled, onClick = onClick)
+            }
+        }
+    }
     val currentOnMenuOpenChange by rememberUpdatedState(onMenuOpenChange)
     DisposableEffect(floating) { onDispose { if (floating) currentOnMenuOpenChange(false) } }
     // A floating bar is a fixed-length rounded card over the terminal, so its tabs scroll inside
     // it.
     val barShape = RexTokens.shape.tabCell
     val barHeight = if (floating) FloatingTabBarHeight else 45.dp
+    val divider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)
     val barModifier =
         if (floating)
             Modifier.fillMaxWidth()
@@ -1195,13 +1371,31 @@ internal fun TerminalTabs(
                 .onGloballyPositioned { onFanBarBounds(it.boundsInRoot()) }
                 .testTag("Floating tab bar")
                 .padding(horizontal = 6.dp)
-        else Modifier.fillMaxWidth().height(barHeight).padding(start = 11.dp, end = 6.dp)
+        else
+            Modifier.fillMaxWidth()
+                .height(barHeight)
+                .then(
+                    if (showTopDivider)
+                        Modifier.drawWithContent {
+                            drawContent()
+                            val stroke = .5.dp.toPx()
+                            drawLine(
+                                divider,
+                                Offset(0f, stroke / 2),
+                                Offset(size.width, stroke / 2),
+                                strokeWidth = stroke,
+                            )
+                        }
+                    else Modifier,
+                )
+                .padding(start = 11.dp, end = 6.dp)
     var revealed by remember(reorderKey) { mutableStateOf(false) }
     LaunchedEffect(reorderKey, contentReady) { if (contentReady) revealed = true }
     if (!contentReady && !revealed) {
         // Reserve the dock's normal bounds so first-load metadata cannot resize the terminal.
         Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
             handle?.invoke()
+            newTabButton()
             Spacer(Modifier.weight(1f).fillMaxHeight())
             actions()
         }
@@ -1287,6 +1481,7 @@ internal fun TerminalTabs(
     }
     Row(barModifier, verticalAlignment = Alignment.CenterVertically) {
         handle?.invoke()
+        newTabButton()
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             val density = LocalDensity.current.density
             val widths =
@@ -1362,13 +1557,12 @@ internal fun TerminalTabs(
                     val progress = paneProgress(w)
                     val indicatorColor = terminalProgressColor(progress)
                     val busy = paneWorking(w) || progress?.busy == true
-                    val workPhase =
-                        rememberWorkingPhase(
+                    val breathe =
+                        active &&
                             animateWorking &&
-                                active &&
-                                if (progress != null) progress.busy && progress.percent == null
-                                else busy,
-                        )
+                            if (progress != null) progress.busy && progress.percent == null
+                            else busy
+                    val workPhase = rememberWorkingPhase(breathe)
                     val programs = panePrograms(w)
                     val pane = selectedPane(w)
                     val program = programs.getOrNull(pane) ?: ProgramIdentity.Loading
@@ -1379,6 +1573,7 @@ internal fun TerminalTabs(
                             i + 1,
                             paneTitle(w, pane),
                         )
+                    val iconInset = (36.dp - programStackPaintedWidth(programs.size)) / 2
                     val tabOptionsLabel = stringResource(R.string.a11y_tab_options)
                     val tabContentDescription =
                         stringResource(R.string.a11y_tab_item, title, program.label) +
@@ -1399,8 +1594,7 @@ internal fun TerminalTabs(
                         if (floating && active) {
                             DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
                         }
-                        val barTrack =
-                            tintOver(indicatorColor, MaterialTheme.colorScheme.surface, .18f)
+                        val layoutDirection = LocalLayoutDirection.current
                         Column(
                             Modifier.height(45.dp)
                                 .width(width)
@@ -1414,39 +1608,34 @@ internal fun TerminalTabs(
                                 .drawWithContent {
                                     drawContent()
                                     if (active) {
-                                        val origin = Offset(0f, size.height - 2.dp.toPx())
-                                        val bar = Size(size.width, 2.dp.toPx())
-                                        if (progress != null) {
-                                            drawWorkingBar(barTrack, origin, bar)
-                                            val fill =
-                                                progress.percent?.let {
-                                                    bar.copy(width = bar.width * it / 100f)
-                                                } ?: bar
-                                            drawWorkingBar(
-                                                indicatorColor,
-                                                origin,
-                                                fill,
-                                                phase =
-                                                    if (
-                                                        progress.busy &&
-                                                            progress.percent == null &&
-                                                            animateWorking
-                                                    )
-                                                        workPhase.value
-                                                    else null,
+                                        val end = 5.dp.toPx()
+                                        // A label makes the slot's invisible leading padding
+                                        // asymmetric.
+                                        val start = end + if (showTitle) iconInset.toPx() else 0f
+                                        val bar =
+                                            Size(
+                                                (size.width - start - end).coerceAtLeast(0f),
+                                                markerHeight.toPx(),
                                             )
-                                        } else
-                                            drawWorkingBar(
-                                                indicatorColor,
-                                                origin,
-                                                bar,
-                                                phase =
-                                                    if (busy && animateWorking) workPhase.value
-                                                    else null,
+                                        val origin =
+                                            Offset(
+                                                if (layoutDirection == LayoutDirection.Ltr) start
+                                                else end,
+                                                size.height - bar.height - markerBottom.toPx(),
                                             )
+                                        val brightness =
+                                            if (breathe) workingBarBrightness(workPhase.value)
+                                            else 1f
+                                        drawTabMarker(
+                                            indicatorColor,
+                                            origin,
+                                            bar,
+                                            progress?.percent,
+                                            brightness,
+                                        )
                                     }
                                 }
-                                .clip(RoundedCornerShape(16.dp))
+                                .clipToBounds()
                                 .background(
                                     if (drag.id == w.id && drag.moved)
                                         MaterialTheme.colorScheme.surfaceVariant
@@ -1507,8 +1696,7 @@ internal fun TerminalTabs(
                                 Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement =
-                                    if (showTitle) Arrangement.spacedBy(2.dp)
-                                    else Arrangement.Center,
+                                    Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
                             ) {
                                 Box(Modifier.semantics { testTag = "Tab program icon ${w.id}" }) {
                                     ProgramStack(
@@ -1523,12 +1711,8 @@ internal fun TerminalTabs(
                                         progress = progress,
                                     )
                                     if (unread > 0) {
-                                        val layers = programs.size.coerceIn(1, 3)
-                                        val painted =
-                                            if (layers == 1) 22f else 21f + 4f * (layers - 1)
-                                        val right = (36f + painted) / 2f
                                         Box(
-                                            Modifier.offset(x = (right - 4).dp, y = (-.5).dp)
+                                            Modifier.offset(x = 32.dp - iconInset, y = (-.5).dp)
                                                 .size(8.dp)
                                                 .border(
                                                     1.5.dp,
@@ -1546,7 +1730,7 @@ internal fun TerminalTabs(
                                 if (showTitle)
                                     Text(
                                         title,
-                                        Modifier.weight(1f),
+                                        Modifier.weight(1f, fill = false),
                                         fontSize = 12.sp,
                                         lineHeight = 18.sp,
                                         style =
@@ -1566,7 +1750,7 @@ internal fun TerminalTabs(
                                         letterSpacing = 0.sp,
                                     )
                             }
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(markerSpace))
                         }
                         androidx.compose.material3.DropdownMenu(
                             menuId == w.id,
@@ -1610,6 +1794,8 @@ internal fun TerminalTabs(
     }
 }
 
+internal val activityButtonDiameter = 41.dp
+
 @Composable
 internal fun TerminalActions(
     enabled: Boolean,
@@ -1620,12 +1806,31 @@ internal fun TerminalActions(
     keyboardLabel: String = "",
     onKeyboard: (() -> Unit)? = null,
     vertical: Boolean = false,
-    sideRail: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") sideRail: Boolean = false,
+    keyboard: (@Composable () -> Unit)? = null,
 ) {
     val activityDescription = stringResource(R.string.activity)
     val activityState =
         if (attentionCount > 0) stringResource(R.string.a11y_activity_new_items, attentionCount)
         else stringResource(R.string.a11y_activity_all_seen)
+    val renderedKeyboard: (@Composable () -> Unit)? =
+        keyboard
+            ?: onKeyboard?.let { click ->
+                { ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = click) }
+            }
+    val sidebarNewTab = if (!vertical) LocalSidebarNewTab.current else null
+    val newTabButton: (@Composable () -> Unit)? = sidebarNewTab?.let { action ->
+        {
+            ChromeButton(
+                ChromeIcon.ADD,
+                stringResource(R.string.label_new_tab),
+                enabled = action.enabled,
+                readable = activityEnabled,
+                onClick = action.onClick,
+            )
+        }
+    }
+    // The icon-only side rail stacks these actions.
     @Composable
     fun Group(content: @Composable () -> Unit) =
         if (vertical)
@@ -1636,16 +1841,39 @@ internal fun TerminalActions(
                 content()
             }
         else
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                content()
+            BoxWithConstraints {
+                val buttonCount =
+                    1 +
+                        (if (renderedKeyboard != null) 1 else 0) +
+                        (if (newTabButton != null) 1 else 0)
+                val (buttonWidth, spacing) =
+                    if (constraints.hasBoundedWidth)
+                        with(LocalDensity.current) {
+                            val availableForSmall =
+                                (constraints.maxWidth - activityButtonDiameter.roundToPx())
+                                    .coerceAtLeast(0)
+                            val widthPx =
+                                (availableForSmall / buttonCount).coerceIn(
+                                    24.dp.roundToPx(),
+                                    36.dp.roundToPx(),
+                                )
+                            val gapPx =
+                                ((constraints.maxWidth -
+                                        widthPx * buttonCount -
+                                        activityButtonDiameter.roundToPx()) / buttonCount)
+                                    .coerceIn(0, 4.dp.roundToPx())
+                            widthPx.toDp() to gapPx.toDp()
+                        }
+                    else 36.dp to 4.dp
+                CompositionLocalProvider(LocalChromeButtonWidth provides buttonWidth) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(spacing),
+                    ) {
+                        content()
+                    }
+                }
             }
-    val keyboardButton: @Composable () -> Unit = {
-        if (onKeyboard != null)
-            ChromeButton(ChromeIcon.KEYBOARD, keyboardLabel, enabled, onClick = onKeyboard)
-    }
     val switcherButton: @Composable () -> Unit = {
         ChromeButton(
             ChromeIcon.SPLIT,
@@ -1656,7 +1884,10 @@ internal fun TerminalActions(
         )
     }
     val activityButton: @Composable () -> Unit = {
-        Box(Modifier.size(41.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(activityButtonDiameter).testTag("Activity button surface"),
+            contentAlignment = Alignment.Center,
+        ) {
             Box(
                 Modifier.matchParentSize()
                     .clip(RoundedCornerShape(23.dp))
@@ -1699,15 +1930,158 @@ internal fun TerminalActions(
         }
     }
     Group {
-        if (sideRail) {
-            activityButton()
-            switcherButton()
-            keyboardButton()
-        } else {
-            keyboardButton()
-            switcherButton()
-            activityButton()
+        if (!vertical) renderedKeyboard?.invoke()
+        newTabButton?.invoke()
+        switcherButton()
+        activityButton()
+        if (vertical) renderedKeyboard?.invoke()
+    }
+}
+
+@Composable
+internal fun TerminalKeyboardButton(
+    controlled: Boolean,
+    enabled: Boolean,
+    keyboardVisible: Boolean,
+    readable: Boolean = enabled,
+    inputKey: String = "",
+    onPaste: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val keyboardDescription =
+        stringResource(
+            when {
+                !controlled -> R.string.a11y_take_control_and_show_keyboard
+                keyboardVisible -> R.string.a11y_hide_keyboard
+                else -> R.string.a11y_show_keyboard
+            },
+        )
+    key(inputKey) {
+        ChromeButton(
+            if (keyboardVisible) ChromeIcon.HIDE_KEYBOARD else ChromeIcon.KEYBOARD,
+            keyboardDescription,
+            enabled,
+            readable = readable,
+            onLongClick = if (controlled && enabled) onPaste else null,
+            onClick = onClick,
+        )
+    }
+}
+
+internal val KeyboardBarKeyGap = 4.dp
+internal val KeyboardBarMinKeyWidth = 42.dp
+internal val KeyboardBarFadingEdgeWidth = 20.dp
+internal val KeyboardBarDividerHeight = 22.dp
+
+internal fun keyboardBarKeyWidth(
+    viewportWidth: Dp,
+    keyCount: Int,
+    minKeyWidth: Dp = KeyboardBarMinKeyWidth,
+    gap: Dp = KeyboardBarKeyGap,
+): Dp {
+    if (keyCount <= 0) return minKeyWidth
+    val even = (viewportWidth - gap * (keyCount - 1).coerceAtLeast(0)) / keyCount
+    return maxOf(minKeyWidth, even)
+}
+
+internal fun keyboardBarFadingEdgeStrengths(
+    scrollValue: Int,
+    maxScrollValue: Int,
+    fadeWidthPx: Float,
+): Pair<Float, Float> {
+    if (maxScrollValue <= 0 || fadeWidthPx <= 0f) return 0f to 0f
+    val start = (scrollValue / fadeWidthPx).coerceIn(0f, 1f)
+    val end = ((maxScrollValue - scrollValue) / fadeWidthPx).coerceIn(0f, 1f)
+    return start to end
+}
+
+private fun Modifier.horizontalFadingEdge(
+    scrollState: ScrollState,
+    fadeWidth: Dp = KeyboardBarFadingEdgeWidth,
+): Modifier =
+    this.graphicsLayer {
+            compositingStrategy =
+                if (scrollState.maxValue > 0) CompositingStrategy.Offscreen
+                else CompositingStrategy.Auto
         }
+        .drawWithContent {
+            drawContent()
+            val fadePx = minOf(fadeWidth.toPx(), size.width / 2f)
+            val (startStrength, endStrength) =
+                keyboardBarFadingEdgeStrengths(scrollState.value, scrollState.maxValue, fadePx)
+            val rtl = layoutDirection == LayoutDirection.Rtl
+            val leftStrength = if (rtl) endStrength else startStrength
+            val rightStrength = if (rtl) startStrength else endStrength
+            if (leftStrength > 0f && fadePx > 0f) {
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors =
+                                listOf(Color.Black.copy(alpha = 1f - leftStrength), Color.Black),
+                            startX = 0f,
+                            endX = fadePx,
+                        ),
+                    topLeft = Offset.Zero,
+                    size = Size(fadePx, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            if (rightStrength > 0f && fadePx > 0f) {
+                val startX = size.width - fadePx
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors =
+                                listOf(Color.Black, Color.Black.copy(alpha = 1f - rightStrength)),
+                            startX = startX,
+                            endX = size.width,
+                        ),
+                    topLeft = Offset(startX, 0f),
+                    size = Size(fadePx, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+        }
+
+@Composable
+private fun KeyboardBarVerticalDivider(tag: String) {
+    val thickness = with(LocalDensity.current) { 1f.toDp() }
+    Box(
+        Modifier.padding(horizontal = 4.dp)
+            .width(thickness)
+            .height(KeyboardBarDividerHeight)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f))
+            .testTag(tag),
+    )
+}
+
+@Composable
+private fun KeyboardFnButton(
+    enabled: Boolean,
+    readable: Boolean,
+    expanded: Boolean,
+    showDescription: String,
+    hideDescription: String,
+    stateDescription: String,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val ink =
+        if (expanded) tintOver(scheme.onPrimary, scheme.primary, if (readable) 1f else .38f)
+        else if (readable) scheme.onSurface else scheme.onSurfaceVariant
+    Box(
+        Modifier.size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (expanded) scheme.primary else Color.Transparent)
+            .semantics(mergeDescendants = true) {
+                contentDescription = if (expanded) hideDescription else showDescription
+                this.stateDescription = stateDescription
+                selected = expanded
+            }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        ChromeSymbol(ChromeIcon.GRID_2X2, color = ink)
     }
 }
 
@@ -1734,7 +2108,8 @@ internal fun KeyboardBar(
     onPrompt: ((Int) -> Unit)? = null,
     toolbarKeys: List<ToolbarKey> = ToolbarLayout.defaults,
     controlItems: List<ControlShortcut> = ControlShortcutConfig.defaults,
-    onKeyboard: () -> Unit,
+    showTopDivider: Boolean = true,
+    onKeyboard: (() -> Unit)?,
 ) {
     val toolbar = ToolbarLayout.normalize(toolbarKeys)
     var expanded by remember { mutableStateOf(false) }
@@ -1747,193 +2122,189 @@ internal fun KeyboardBar(
     val terminalKeysDescription = stringResource(R.string.a11y_terminal_keys)
     val pasteKeyDescription = stringResource(R.string.a11y_paste_key)
     val tabKeyDescription = stringResource(R.string.a11y_tab_key)
-    val keyboardDescription =
-        stringResource(
-            when {
-                !controlled -> R.string.a11y_take_control_and_show_keyboard
-                keyboardVisible -> R.string.a11y_hide_keyboard
-                else -> R.string.a11y_show_keyboard
-            },
-        )
-    // The extra-key trigger lives just before Esc, outside the initial viewport.
-    val keyScroll = rememberScrollState(initial = Int.MAX_VALUE)
+    val keyScroll = rememberScrollState(initial = 0)
     LaunchedEffect(keyboardVisible) {
         if (!keyboardVisible) {
             expanded = false
-            keyScroll.scrollTo(keyScroll.maxValue)
+            keyScroll.scrollTo(0)
         }
     }
-    LaunchedEffect(expanded, toolbar) { if (!expanded) keyScroll.scrollTo(keyScroll.maxValue) }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        Box(
+    Column(Modifier.fillMaxWidth()) {
+        Spacer(
             Modifier.fillMaxWidth()
                 .height(1.dp)
-                .background(
-                    tintOver(
-                        MaterialTheme.colorScheme.outline,
-                        MaterialTheme.colorScheme.surface,
-                        .4f,
-                    ),
+                .then(
+                    if (showTopDivider)
+                        Modifier.background(
+                            tintOver(
+                                MaterialTheme.colorScheme.outline,
+                                MaterialTheme.colorScheme.surface,
+                                .4f,
+                            ),
+                        )
+                    else Modifier,
                 ),
         )
         Row(
-            Modifier.fillMaxWidth().height(45.dp).padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            Modifier.fillMaxWidth().height(45.dp).padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (toolbar.isEmpty())
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
-                    ChromeButton(
-                        ChromeIcon.CHEVRON,
-                        if (expanded) hideExtraKeys else showExtraKeys,
-                        enabled,
-                    ) {
-                        expanded = !expanded
-                    }
-                }
-            else
-                BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+            KeyboardFnButton(
+                enabled = enabled,
+                readable = readable,
+                expanded = expanded,
+                showDescription = showExtraKeys,
+                hideDescription = hideExtraKeys,
+                stateDescription = extraKeysState,
+            ) {
+                expanded = !expanded
+            }
+            if (toolbar.isEmpty()) {
+                Spacer(Modifier.weight(1f).fillMaxHeight())
+            } else {
+                KeyboardBarVerticalDivider("Keyboard bar leading divider")
+                BoxWithConstraints(
+                    Modifier.weight(1f)
+                        .fillMaxHeight()
+                        .horizontalFadingEdge(keyScroll)
+                        .testTag("Terminal keys viewport"),
+                ) {
                     val visibleWidth = maxWidth
-                    val keyWidth =
-                        (visibleWidth - 4.dp * (toolbar.size - 1).coerceAtLeast(0)) /
-                            toolbar.size.coerceAtLeast(1)
+                    val minGroupWidth =
+                        KeyboardBarMinKeyWidth * toolbar.size +
+                            KeyboardBarKeyGap * (toolbar.size - 1).coerceAtLeast(0)
+                    val fitsViewport = minGroupWidth <= visibleWidth
+                    LaunchedEffect(fitsViewport) {
+                        if (fitsViewport && keyScroll.value != 0) keyScroll.scrollTo(0)
+                    }
+
+                    @Composable
+                    fun renderKeys(keyModifier: () -> Modifier) {
+                        toolbar.forEach { item ->
+                            key(item.id) {
+                                val modifier = keyModifier()
+                                when (item) {
+                                    ToolbarKey.CONTROL ->
+                                        ControlDockKey(
+                                            controlled,
+                                            control,
+                                            readable,
+                                            modifier,
+                                            onControl,
+                                            onControlShortcut,
+                                            shortcutGesture,
+                                            controlItems,
+                                            inputKey,
+                                        )
+                                    ToolbarKey.ALT ->
+                                        DockKey(
+                                            "alt",
+                                            controlled,
+                                            alt,
+                                            description = "Alt",
+                                            modifier = modifier,
+                                            icon = ChromeIcon.ALT,
+                                            readable = readable,
+                                            onClick = onAlt,
+                                        )
+                                    ToolbarKey.SHIFT ->
+                                        ShiftDockKey(
+                                            controlled,
+                                            shift,
+                                            modifier,
+                                            onShift,
+                                            onShiftPress,
+                                            onShiftRelease,
+                                            readable = readable,
+                                        )
+                                    ToolbarKey.ARROWS ->
+                                        ArrowJoystickDockKey(
+                                            controlled,
+                                            modifier,
+                                            onKey,
+                                            readable,
+                                            inputKey,
+                                            keyboardVisible,
+                                            arrowJoystickEnabled,
+                                            onPrompt,
+                                        )
+                                    ToolbarKey.PASTE ->
+                                        DockKey(
+                                            "paste",
+                                            controlled && onPaste != null,
+                                            description = pasteKeyDescription,
+                                            modifier = modifier,
+                                            icon = ChromeIcon.PASTE,
+                                            readable = readable,
+                                        ) {
+                                            onPaste?.invoke()
+                                        }
+                                    else ->
+                                        DockKey(
+                                            item.label,
+                                            controlled,
+                                            description =
+                                                if (item == ToolbarKey.TAB) tabKeyDescription
+                                                else item.label,
+                                            modifier = modifier,
+                                            icon = item.icon,
+                                            readable = readable,
+                                            repeat =
+                                                item in
+                                                    listOf(
+                                                        ToolbarKey.BACKSPACE,
+                                                        ToolbarKey.DELETE,
+                                                        ToolbarKey.UP,
+                                                        ToolbarKey.DOWN,
+                                                        ToolbarKey.LEFT,
+                                                        ToolbarKey.RIGHT,
+                                                    ),
+                                            inputKey = inputKey,
+                                        ) {
+                                            if (item.controlLetter.isNotBlank())
+                                                onControlShortcut(item.controlLetter)
+                                            else onKey(item.terminal)
+                                        }
+                                }
+                            }
+                        }
+                    }
+
                     Row(
                         Modifier.fillMaxSize()
                             .systemGestureExclusion()
                             .horizontalScroll(keyScroll)
                             .semantics { contentDescription = terminalKeysDescription },
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(KeyboardBarKeyGap),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            Modifier.width(keyWidth)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(11.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .semantics {
-                                    contentDescription =
-                                        if (expanded) hideExtraKeys else showExtraKeys
-                                    stateDescription = extraKeysState
-                                }
-                                .clickable(enabled = enabled, role = Role.Button) {
-                                    expanded = !expanded
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ChromeSymbol(
-                                ChromeIcon.CHEVRON,
-                                Modifier.size(16.dp).graphicsLayer {
-                                    rotationZ = if (expanded) 180f else 0f
-                                },
-                            )
-                        }
-                        // Give the visible group an exact viewport width so pixel rounding
-                        // cannot clip Esc when the hidden trigger is scrolled away.
-                        Row(
-                            Modifier.width(visibleWidth).fillMaxHeight(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            toolbar.forEach { item ->
-                                key(item.id) {
-                                    when (item) {
-                                        ToolbarKey.CONTROL ->
-                                            ControlDockKey(
-                                                controlled,
-                                                control,
-                                                readable,
-                                                Modifier.weight(1f),
-                                                onControl,
-                                                onControlShortcut,
-                                                shortcutGesture,
-                                                controlItems,
-                                                inputKey,
-                                            )
-                                        ToolbarKey.ALT ->
-                                            DockKey(
-                                                "alt",
-                                                controlled,
-                                                alt,
-                                                description = "Alt",
-                                                modifier = Modifier.weight(1f),
-                                                icon = ChromeIcon.ALT,
-                                                readable = readable,
-                                                onClick = onAlt,
-                                            )
-                                        ToolbarKey.SHIFT ->
-                                            ShiftDockKey(
-                                                controlled,
-                                                shift,
-                                                Modifier.weight(1f),
-                                                onShift,
-                                                onShiftPress,
-                                                onShiftRelease,
-                                                readable = readable,
-                                            )
-                                        ToolbarKey.ARROWS ->
-                                            ArrowJoystickDockKey(
-                                                controlled,
-                                                Modifier.weight(1f),
-                                                onKey,
-                                                readable,
-                                                inputKey,
-                                                keyboardVisible,
-                                                arrowJoystickEnabled,
-                                                onPrompt,
-                                            )
-                                        ToolbarKey.PASTE ->
-                                            DockKey(
-                                                "paste",
-                                                controlled && onPaste != null,
-                                                description = pasteKeyDescription,
-                                                modifier = Modifier.weight(1f),
-                                                icon = ChromeIcon.PASTE,
-                                                readable = readable,
-                                            ) {
-                                                onPaste?.invoke()
-                                            }
-                                        else ->
-                                            DockKey(
-                                                item.label,
-                                                controlled,
-                                                description =
-                                                    if (item == ToolbarKey.TAB) tabKeyDescription
-                                                    else item.label,
-                                                modifier = Modifier.weight(1f),
-                                                icon = item.icon,
-                                                readable = readable,
-                                                repeat =
-                                                    item in
-                                                        listOf(
-                                                            ToolbarKey.BACKSPACE,
-                                                            ToolbarKey.DELETE,
-                                                            ToolbarKey.UP,
-                                                            ToolbarKey.DOWN,
-                                                            ToolbarKey.LEFT,
-                                                            ToolbarKey.RIGHT,
-                                                        ),
-                                                inputKey = inputKey,
-                                            ) {
-                                                if (item.controlLetter.isNotBlank())
-                                                    onControlShortcut(item.controlLetter)
-                                                else onKey(item.terminal)
-                                            }
-                                    }
-                                }
+                        if (fitsViewport) {
+                            Row(
+                                Modifier.width(visibleWidth).fillMaxHeight(),
+                                horizontalArrangement = Arrangement.spacedBy(KeyboardBarKeyGap),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                renderKeys { Modifier.weight(1f) }
                             }
+                        } else {
+                            renderKeys { Modifier.width(KeyboardBarMinKeyWidth) }
                         }
                     }
                 }
-            key(inputKey) {
-                ChromeButton(
-                    if (keyboardVisible) ChromeIcon.HIDE_KEYBOARD else ChromeIcon.KEYBOARD,
-                    keyboardDescription,
-                    enabled,
-                    readable = readable,
-                    onLongClick = if (controlled && enabled) onPaste else null,
-                    onClick = onKeyboard,
-                )
+                if (onKeyboard != null) {
+                    KeyboardBarVerticalDivider("Keyboard bar trailing divider")
+                }
             }
+            if (onKeyboard != null)
+                TerminalKeyboardButton(
+                    controlled,
+                    enabled,
+                    keyboardVisible,
+                    readable,
+                    inputKey,
+                    onPaste,
+                    onKeyboard,
+                )
         }
         if (expanded) {
             val extra =
@@ -1951,7 +2322,10 @@ internal fun KeyboardBar(
                     ),
                 )
             for (row in extra) Row(
-                Modifier.fillMaxWidth().height(43.dp).padding(bottom = 6.dp),
+                Modifier.fillMaxWidth()
+                    .height(43.dp)
+                    .padding(horizontal = 8.dp)
+                    .padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 for ((label, key) in row) DockKey(
@@ -2069,7 +2443,6 @@ private fun ShiftDockKey(
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    down.consume()
                     press()
                     var cancelled = true
                     try {
@@ -2078,11 +2451,11 @@ private fun ShiftDockKey(
                                 awaitPointerEvent().changes.firstOrNull { it.id == down.id }
                                     ?: break
                             if (change.isConsumed) break
-                            change.consume()
                             if (!change.pressed) {
                                 cancelled =
                                     change.position.x !in 0f..size.width.toFloat() ||
                                         change.position.y !in 0f..size.height.toFloat()
+                                if (!cancelled) change.consume()
                                 break
                             }
                         }

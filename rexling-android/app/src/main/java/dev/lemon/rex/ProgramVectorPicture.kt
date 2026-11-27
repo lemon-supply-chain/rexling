@@ -156,6 +156,15 @@ internal class SkeuomorphicCardChrome(private val outline: Path, accent: Int) {
         const val ARTBOARD_WIDTH = 61f
         const val ARTBOARD_HEIGHT = 48f
 
+        /** Outer edge inset of the card rim (`1.23 - 1.16 / 2`) in 61x48 artboard units. */
+        const val OUTER_RIM_INSET = 0.65f
+
+        /**
+         * Best-fit corner radius in 61x48 artboard units for the outer rim squircle, used by
+         * hardware-accelerated `Outline.Rounded` elevation shadows on API 28+.
+         */
+        const val OUTER_RIM_CORNER_RADIUS = 14.6f
+
         private val plateMatrix = Matrix().apply { setTranslate(-6f, -6f) }
 
         // Fallback tiles share one plate and a handful of skin palettes, so the chrome and the fill
@@ -170,6 +179,17 @@ internal class SkeuomorphicCardChrome(private val outline: Path, accent: Int) {
                 ?: ProgramCatalog.plate(assets)
                     ?.let { Path(it).apply { transform(plateMatrix) } }
                     ?.also { sharedPlate = it }
+
+        /** Returns a copy of [defaultPlate] scaled from the 61x48 artboard to [width]x[height]. */
+        fun scaledPlatePath(assets: AssetManager, width: Float, height: Float): Path? {
+            if (width <= 0f || height <= 0f) return null
+            val base = defaultPlate(assets) ?: return null
+            return Path(base).apply {
+                transform(
+                    Matrix().apply { setScale(width / ARTBOARD_WIDTH, height / ARTBOARD_HEIGHT) },
+                )
+            }
+        }
 
         fun forAccent(assets: AssetManager, accent: Int): SkeuomorphicCardChrome? =
             defaultPlate(assets)?.let { plate ->

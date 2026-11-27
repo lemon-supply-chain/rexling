@@ -139,10 +139,16 @@ class TerminalView(context: Context) : View(context) {
 
     var onPaneDrag: ((Float, Boolean) -> Unit)? = null
     var onPaneDragEnd: ((Float, Float) -> Unit)? = null
+    internal var onPaneControlsTap: ((Float, Float) -> Boolean)? = null
+    internal var onFocusTap: (() -> Unit)? = null
+    private val acceptsPointer: Boolean
+        get() = interactive || onFocusTap != null
+
     private var startX = 0f
     private var startY = 0f
     private var dragging = false
     private var scrolling = false
+    private var draggedKeyboardViewport = false
     private var lastScrollY = 0f
     private var scrollPixels = 0f
     private var lastFlingY = 0
@@ -158,6 +164,7 @@ class TerminalView(context: Context) : View(context) {
     internal var onInputConnectionReady: () -> Unit = {}
     var onScroll: (Int) -> Unit = {}
     var onWheel: (Int, Int, Int, Int, Int) -> Unit = { lines, _, _, _, _ -> onScroll(lines) }
+    internal var keyboardPan: TerminalImePanState? = null
     var onActivate: (Boolean) -> Unit = {}
     var onMouseClick: (Int, Int, Int, Int) -> Unit = { _, _, _, _ -> }
     internal var onSemanticCopy: ((TerminalScreen, Int, Int, Boolean) -> Boolean)? = null
@@ -190,6 +197,7 @@ class TerminalView(context: Context) : View(context) {
             if (field != value) {
                 field = value
                 reportCursorViewport()
+                invalidate()
             }
         }
 
@@ -341,6 +349,7 @@ class TerminalView(context: Context) : View(context) {
         val cells: List<TerminalCell>,
         val recording: TerminalRowRecording,
         val links: List<TerminalLink>,
+        val paddingCursorColumn: Int?,
     ) {
         val contentHash by lazy(LazyThreadSafetyMode.NONE) { rowContentHash(cells) }
 
@@ -525,6 +534,26 @@ class TerminalView(context: Context) : View(context) {
         // Content that only moved keeps its recording: reuse rows by content
         // when the whole screen shifted, so only edge and uncovered rows need recording.
         reuseShiftedRows(frame, visibleRows)
+        val anchorRow = frame.cursorAnchorY ?: -1
+        val paddingCursor =
+            if (
+                allowHiddenCursorInput &&
+                    frame.cursorX == null &&
+                    frame.cursorY == null &&
+                    frame.scroll.below == 0L &&
+                    anchorRow in 0 until visibleRows
+            ) {
+                frame.lines[anchorRow].firstOrNull { cell ->
+                    cell.x == frame.cursorAnchorX &&
+                        cell.x < visibleColumns &&
+                        cell.width > 0 &&
+                        cell.attributes and 8 != 0 &&
+                        (cell.x == 0 ||
+                            cell.x + cell.width >= visibleColumns ||
+                            anchorRow == 0 ||
+                            anchorRow == visibleRows - 1)
+                }
+            } else null
         val slide = slideFor(frame)
         val saveClip = canvas.save()
         if (isEditor) canvas.clipRect(0f, 0f, width.toFloat(), height.toFloat())
@@ -551,6 +580,7 @@ class TerminalView(context: Context) : View(context) {
                 }
             for (y in 0 until visibleRows) {
                 val cells = frame.lines[y]
+                val cursor = paddingCursor.takeIf { y == anchorRow }
                 var row = recorded[y]
                 val links = rowLinks[y]
                 val origin = if (isEditor && y == 0) 0f else insetTop + y * cellHeight
@@ -561,12 +591,13 @@ class TerminalView(context: Context) : View(context) {
                     row == null ||
                         !row.recording.valid ||
                         !sameCells(row.cells, cells) ||
-                        row.links != links
+                        row.links != links ||
+                        row.paddingCursorColumn != cursor?.x
                 ) {
                     val recording =
                         row?.recording ?: TerminalRowRecording.create(canvas.isHardwareAccelerated)
                     recording.record(width, bottom.toInt().coerceAtLeast(1)) { target ->
-                        drawRow(target, cells, visibleColumns, top, bottom)
+                        drawRow(target, cells, visibleColumns, top, bottom, paddingCursor = cursor)
                         target.save()
                         target.clipRect(
                             insetHorizontal,
@@ -586,7 +617,7 @@ class TerminalView(context: Context) : View(context) {
                         )
                         target.restore()
                     }
-                    row = RecordedRow(cells, recording, links)
+                    row = RecordedRow(cells, recording, links, cursor?.x)
                     recorded[y] = row
                     recordedRowCount++
                 }
@@ -616,7 +647,15 @@ class TerminalView(context: Context) : View(context) {
                         if (isEditor && y == visibleRows - 1) height - origin else top + cellHeight
                     val save = canvas.save()
                     canvas.translate(0f, origin)
-                    drawRow(canvas, frame.lines[y], visibleColumns, top, bottom, pass)
+                    drawRow(
+                        canvas,
+                        frame.lines[y],
+                        visibleColumns,
+                        top,
+                        bottom,
+                        pass,
+                        paddingCursor.takeIf { y == anchorRow },
+                    )
                     if (pass == 2) {
                         canvas.save()
                         canvas.clipRect(
@@ -862,29 +901,42 @@ class TerminalView(context: Context) : View(context) {
         top: Float,
         bottom: Float,
         pass: Int = 0,
+        paddingCursor: TerminalCell? = null,
     ) {
         var start = 0
         var end = 0
         var color = 0
         fun flush() {
-            if (pass == 2 || end <= start || start >= columns || color == palette.background) return
-            backgroundPaint.color = color
-            if (extendPadding) {
-                canvas.drawRect(
-                    if (start == 0) 0f else insetHorizontal + start * cellWidth,
-                    0f,
-                    if (end >= columns) width.toFloat() else insetHorizontal + end * cellWidth,
-                    bottom,
-                    backgroundPaint,
-                )
-            } else {
+            if (pass == 2 || end <= start || start >= columns) return
+            val left = if (extendPadding && start == 0) 0f else insetHorizontal + start * cellWidth
+            val right =
+                if (extendPadding && end >= columns) width.toFloat()
+                else insetHorizontal + minOf(end, columns) * cellWidth
+            if (
+                paddingCursor != null &&
+                    start == paddingCursor.x &&
+                    end == start + paddingCursor.width
+            ) {
+                // An agent can draw its caret with reverse video while keeping the hardware
+                // cursor hidden. Extend the original cell background into the padding.
+                if (extendPadding) {
+                    val base = palette.background(paddingCursor)
+                    if (base != palette.background) {
+                        backgroundPaint.color = base
+                        canvas.drawRect(left, 0f, right, bottom, backgroundPaint)
+                    }
+                }
+                backgroundPaint.color = color
                 canvas.drawRect(
                     insetHorizontal + start * cellWidth,
-                    0f,
-                    insetHorizontal + minOf(end, columns) * cellWidth,
-                    bottom,
+                    top,
+                    minOf(insetHorizontal + end * cellWidth, width - insetHorizontal),
+                    minOf(top + cellHeight, bottom),
                     backgroundPaint,
                 )
+            } else if (color != palette.background) {
+                backgroundPaint.color = color
+                canvas.drawRect(left, 0f, right, bottom, backgroundPaint)
             }
         }
         for (cell in cells) {
@@ -994,6 +1046,22 @@ class TerminalView(context: Context) : View(context) {
         }
     }
 
+    private fun dragScroll(pixels: Float) {
+        val frame = screen ?: return
+        // Scrollback can reveal earlier text on its own. Application wheel events cannot expose
+        // the clipped part of this terminal view, so give the local viewport first use of the drag.
+        val remaining =
+            if (
+                pixels > 0 ||
+                    frame.scroll.offset == 0L ||
+                    (frame.applicationScroll && frame.scroll.below == 0L)
+            )
+                keyboardPan?.consumeDrag(pixels) ?: pixels
+            else pixels
+        if (remaining != pixels) draggedKeyboardViewport = true
+        if (remaining != 0f) scrollByPixels(remaining)
+    }
+
     internal val scrollTranslation: Float
         get() = screen?.let { slideFor(it) } ?: 0f
 
@@ -1057,6 +1125,10 @@ class TerminalView(context: Context) : View(context) {
 
     private fun finishTap(x: Float, y: Float, showKeyboard: Boolean) {
         if (pressedMouseTarget != mouseTarget()) return
+        if (!interactive) {
+            onFocusTap?.invoke()
+            return
+        }
         val link = pressedLink
         if (link == null) terminalTap(x, y, showKeyboard)
         else if (link == linkAt(x, y)) onOpenLink(link.url)
@@ -1088,7 +1160,7 @@ class TerminalView(context: Context) : View(context) {
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (
-            interactive &&
+            acceptsPointer &&
                 event.isFromSource(InputDevice.SOURCE_MOUSE) &&
                 event.actionButton == MotionEvent.BUTTON_PRIMARY &&
                 event.actionMasked in
@@ -1102,7 +1174,7 @@ class TerminalView(context: Context) : View(context) {
             return true
         }
         if (selection != null && event.actionMasked == MotionEvent.ACTION_SCROLL) return true
-        if (interactive && event.actionMasked == MotionEvent.ACTION_SCROLL) {
+        if (acceptsPointer && event.actionMasked == MotionEvent.ACTION_SCROLL) {
             val lines = (-event.getAxisValue(MotionEvent.AXIS_VSCROLL) * 3).roundToInt()
             if (lines != 0) {
                 scrollMotion.reset()
@@ -1182,13 +1254,13 @@ class TerminalView(context: Context) : View(context) {
     }
 
     internal fun selectedLinkAction(action: TerminalLinkAction): Boolean {
-        val url = selectionLink?.url?.let(TerminalLinks::webUrl) ?: return false
+        val url = selectionLink?.url?.let(TerminalLinks::openableUrl) ?: return false
         when (action) {
             TerminalLinkAction.OPEN -> onOpenLink(url)
             TerminalLinkAction.COPY_ADDRESS ->
                 (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(
-                        ClipData.newPlainText(context.getString(R.string.a11y_web_link), url),
+                        ClipData.newPlainText(context.getString(R.string.terminal_link), url),
                     )
             TerminalLinkAction.SHARE -> onShareLink(url)
         }
@@ -1197,7 +1269,7 @@ class TerminalView(context: Context) : View(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!interactive) return false
+        if (!acceptsPointer) return false
         val fromMouse = event.isFromSource(InputDevice.SOURCE_MOUSE)
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             pointerPress = null
@@ -1212,6 +1284,7 @@ class TerminalView(context: Context) : View(context) {
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             touchVelocity?.recycle()
             touchVelocity = VelocityTracker.obtain()
+            draggedKeyboardViewport = false
         }
         val sample = MotionEvent.obtain(event)
         sample.offsetLocation(event.rawX - event.x, event.rawY - event.y)
@@ -1269,7 +1342,7 @@ class TerminalView(context: Context) : View(context) {
                         paneGesture.cancel()
                     }
                     if (scrolling) {
-                        scrollByPixels(lastScrollY - event.rawY)
+                        dragScroll(lastScrollY - event.rawY)
                         lastScrollY = event.rawY
                     } else if (dragging) onPaneDrag?.invoke(dx, true)
                 }
@@ -1293,7 +1366,7 @@ class TerminalView(context: Context) : View(context) {
                     val frame = screen
                     val history =
                         frame?.scroll?.takeUnless { frame.applicationScroll && it.below == 0L }
-                    if (history != null && history.available > 0) {
+                    if (!draggedKeyboardViewport && history != null && history.available > 0) {
                         val minimum =
                             -(history.offset.toDouble() * cellHeight)
                                 .coerceAtMost(1000000.0)
@@ -1314,8 +1387,15 @@ class TerminalView(context: Context) : View(context) {
                 } else
                     when (paneGesture.finish(event.x, event.y)) {
                         PaneGesture.Result.TAP ->
-                            if (!suppressScrollTap)
-                                finishTap(event.x, event.y, showKeyboard = !fromMouse)
+                            if (!suppressScrollTap) {
+                                val openedControls =
+                                    interactive &&
+                                        !fromMouse &&
+                                        pressedLink == null &&
+                                        onPaneControlsTap?.invoke(event.x, event.y) == true
+                                if (!openedControls)
+                                    finishTap(event.x, event.y, showKeyboard = !fromMouse)
+                            }
                         PaneGesture.Result.NEXT -> onPaneSwipe(1)
                         PaneGesture.Result.PREVIOUS -> onPaneSwipe(-1)
                         PaneGesture.Result.NONE -> Unit
@@ -1517,16 +1597,21 @@ class TerminalView(context: Context) : View(context) {
                                 .add(0, 0x524505, 4, "Copy output")
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                         }
-                        if (selectionLink != null) {
+                        selectionLink?.let { link ->
+                            val isFile = TerminalLinks.filePath(link.url) != null
+                            val openLabel =
+                                if (isFile) context.getString(R.string.download_file)
+                                else "Open link"
                             menu
-                                .add(0, 0x524501, 2, "Open link")
+                                .add(0, 0x524501, 2, openLabel)
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                             menu
                                 .add(0, 0x524502, 3, "Copy link address")
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                            menu
-                                .add(0, 0x524503, 4, context.getString(R.string.share_link))
-                                .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                            if (!isFile)
+                                menu
+                                    .add(0, 0x524503, 4, context.getString(R.string.share_link))
+                                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
                         }
                         return true
                     }
@@ -1646,9 +1731,7 @@ class TerminalView(context: Context) : View(context) {
 
     override fun performClick(): Boolean {
         super.performClick()
-        if (interactive) {
-            if (controlled) keyboard() else onActivate(true)
-        }
+        if (!interactive) onFocusTap?.invoke() else if (controlled) keyboard() else onActivate(true)
         return true
     }
 

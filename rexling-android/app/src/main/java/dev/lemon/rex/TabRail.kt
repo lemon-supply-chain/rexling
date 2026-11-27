@@ -1,20 +1,35 @@
 package dev.lemon.rex
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,20 +39,27 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
+import kotlin.math.roundToInt
 
 internal enum class TabBarPosition(@androidx.annotation.StringRes val labelRes: Int) {
     BOTTOM(R.string.tab_position_bottom),
@@ -49,6 +71,12 @@ internal enum class TabRailStyle(@androidx.annotation.StringRes val labelRes: In
     ICONS(R.string.tab_rail_style_icons),
     TITLES(R.string.tab_rail_style_titles),
 }
+
+internal fun tabRailWidth(style: TabRailStyle, windowWidthDp: Int = 0) =
+    when (style) {
+        TabRailStyle.ICONS -> 52.dp
+        TabRailStyle.TITLES -> (windowWidthDp / 4f).dp.coerceIn(172.dp, 240.dp)
+    }
 
 /**
  * Where the tab bar sits, and how a side rail draws its tabs. Kept separately for folded and
@@ -84,12 +112,12 @@ internal data class TabBarLayout(
  */
 internal enum class TabWidthClass(
     @androidx.annotation.StringRes val titleRes: Int,
-    @androidx.annotation.StringRes val detailRes: Int,
+    @androidx.annotation.StringRes val rangeRes: Int,
     val key: String,
 ) {
-    NARROW(R.string.tab_width_narrow, R.string.tab_width_narrow_detail, "tab_layout_narrow"),
-    MEDIUM(R.string.tab_width_medium, R.string.tab_width_medium_detail, "tab_layout_medium"),
-    WIDE(R.string.tab_width_wide, R.string.tab_width_wide_detail, "tab_layout_wide");
+    NARROW(R.string.tab_width_narrow, R.string.tab_width_narrow_range, "tab_layout_narrow"),
+    MEDIUM(R.string.tab_width_medium, R.string.tab_width_medium_range, "tab_layout_medium"),
+    WIDE(R.string.tab_width_wide, R.string.tab_width_wide_range, "tab_layout_wide");
 
     companion object {
         fun of(widthDp: Int): TabWidthClass =
@@ -110,6 +138,17 @@ internal fun currentTabWidth(): Pair<TabWidthClass, Int> {
     val width = LocalConfiguration.current.screenWidthDp
     return TabWidthClass.of(width) to width
 }
+
+internal data class TabRailSessions(
+    val targets: List<SessionTarget>,
+    val current: String,
+    val onSelect: (String) -> Unit,
+)
+
+private val sidebarTextSize = 11.sp
+private val sidebarLineHeight = 14.sp
+private val sidebarTabIconInset = 10.5.dp
+private const val sidebarTransitionMillis = 180
 
 /**
  * A vertical tab list beside the terminal; [actions] (switcher, Activity, keyboard) sit at its
@@ -136,9 +175,12 @@ internal fun TerminalTabRail(
     animateWorking: Boolean = true,
     onStyle: (TabRailStyle) -> Unit = {},
     extendUnderNav: Boolean = false,
-    island: Boolean = false,
-    islandBottom: androidx.compose.ui.unit.Dp = 8.dp,
+    onNewTab: (() -> Unit)? = null,
+    windowWidthDp: Int = 0,
+    sessions: TabRailSessions? = null,
+    headerOverlap: () -> Int = { 0 },
     floating: Boolean = false,
+    swipeBackdrop: PaneSwipeBackdrop? = null,
     hazeState: HazeState? = null,
     handle: (@Composable () -> Unit)? = null,
     onFanToggle: ((String) -> Unit)? = null,
@@ -150,32 +192,58 @@ internal fun TerminalTabRail(
     actions: @Composable () -> Unit,
 ) {
     val titles = style == TabRailStyle.TITLES
-    // Swipe across the rail toward the terminal to show titles, back toward the screen edge to hide
-    // them.
+    val wideSessions = sessions.takeIf {
+        !floating && titles && TabWidthClass.of(windowWidthDp) == TabWidthClass.WIDE
+    }
+    val portrait = currentPaneOrientation() == PaneOrientation.PORTRAIT
+    val tabsAtTop = wideSessions != null && !portrait
+    var showSessions by rememberSaveable(wideSessions != null) { mutableStateOf(false) }
+    val switcherTransition = updateTransition(wideSessions != null, label = "Sidebar switcher")
+    // In portrait the viewport already animates. Let its bottom-aligned tabs follow
+    // that motion directly, without adding a second placement spring.
+    val tabsFollowSwitcher =
+        portrait &&
+            (switcherTransition.isRunning ||
+                switcherTransition.currentState != switcherTransition.targetState)
+    val collapsedWidth = if (floating) 48.dp else tabRailWidth(TabRailStyle.ICONS)
     // Resizes are debounced, so the animated width sends the pane only its final size.
-    // Beside the multi-pane layout the rail is a floating card like the panes: rounded, inset, and
-    // ending level with them; slightly narrower so the terminal keeps about the same width.
     val width by
         androidx.compose.animation.core.animateDpAsState(
-            if (floating || island) (if (titles) 144.dp else 48.dp)
-            else if (titles) 152.dp else 52.dp,
-            androidx.compose.animation.core.tween(180),
+            if (titles) tabRailWidth(TabRailStyle.TITLES, windowWidthDp) else collapsedWidth,
+            tween(sidebarTransitionMillis),
             label = "Tab rail width",
         )
-    val outward = if (side == TabBarPosition.LEFT) 1f else -1f
-    val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 32.dp.toPx() }
-    var swipe by remember { mutableFloatStateOf(0f) }
-    // Gesture navigation treats edge swipes as Back. Android lets an app opt out for at most 200dp
-    // of
-    // each edge, so claim the rail's lowest 200dp (its buttons and nearest tabs); the toggle below
-    // always works.
-    val exclusion = with(androidx.compose.ui.platform.LocalDensity.current) { 200.dp.toPx() }
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val tabAlignment =
+        animateFloatAsState(
+            if (tabsAtTop) 0f else 1f,
+            spring(dampingRatio = .82f, stiffness = Spring.StiffnessMediumLow),
+            label = "Tab rail alignment",
+        )
+    val tabSpacing = 4.dp
+    // Animate the free space above the tabs as a group. This also works when
+    // collapsing from Sessions, where there are no existing tab items to move.
+    val tabArrangement =
+        remember(tabAlignment) {
+            Arrangement.spacedBy(
+                tabSpacing,
+                Alignment.Vertical { size, space ->
+                    ((space - size) * tabAlignment.value).roundToInt()
+                },
+            )
+        }
     val scheme = MaterialTheme.colorScheme
+    val divider = scheme.outlineVariant.copy(alpha = .65f)
     val list = rememberLazyListState()
     var menuId by remember(reorderKey) { mutableStateOf<String?>(null) }
     val ids = windows.map { it.id }
     val index = ids.indexOf(selectedId)
+    val newTabItems = if (titles || onNewTab == null) 0 else 1
+    val newTabClearance =
+        if (newTabItems == 0) 0
+        else
+            with(androidx.compose.ui.platform.LocalDensity.current) {
+                36.dp.roundToPx() + tabSpacing.roundToPx()
+            }
     val currentOnMenuOpenChange by rememberUpdatedState(onMenuOpenChange)
     LaunchedEffect(ids) { menuId = null }
     LaunchedEffect(floating, menuId) {
@@ -183,34 +251,101 @@ internal fun TerminalTabRail(
         currentOnMenuOpenChange(floating && menuId != null)
     }
     DisposableEffect(floating) { onDispose { if (floating) currentOnMenuOpenChange(false) } }
-    LaunchedEffect(selectedId, reorderKey, index) {
-        if (index >= 0) list.animateScrollToItem(index)
+    LaunchedEffect(selectedId, reorderKey, index, newTabItems, newTabClearance, showSessions) {
+        if (index >= 0 && !showSessions)
+            list.animateScrollToItem(index + newTabItems, scrollOffset = -newTabClearance)
     }
-    val islandShape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val pageSwitcher: @Composable () -> Unit = {
+        val edge = if (portrait) Alignment.Bottom else Alignment.Top
+        switcherTransition.AnimatedVisibility(
+            visible = { it },
+            enter =
+                expandVertically(tween(sidebarTransitionMillis), expandFrom = edge) +
+                    fadeIn(tween(120, delayMillis = 32)),
+            exit =
+                shrinkVertically(tween(sidebarTransitionMillis), shrinkTowards = edge) +
+                    fadeOut(tween(110)),
+        ) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .background(scheme.surfaceVariant.copy(alpha = .45f), RoundedCornerShape(12.dp))
+                    .padding(2.dp)
+                    .selectableGroup(),
+            ) {
+                for (sessionsTab in listOf(false, true)) {
+                    val active = showSessions == sessionsTab
+                    Box(
+                        Modifier.weight(1f)
+                            .heightIn(min = 36.dp)
+                            .background(
+                                if (active) scheme.primaryContainer else Color.Transparent,
+                                RoundedCornerShape(9.dp),
+                            )
+                            .selectable(
+                                active,
+                                enabled = wideSessions != null,
+                                role = Role.Tab,
+                                onClick = { showSessions = sessionsTab },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            stringResource(
+                                if (sessionsTab) R.string.sessions else R.string.section_tabs,
+                            ),
+                            fontSize = sidebarTextSize,
+                            lineHeight = sidebarLineHeight,
+                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                            color =
+                                if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
     // A floating rail is a rounded card that hugs its tabs, so it has no fixed corner size.
     val pillShape = RexTokens.shape.tabCell
     val styleToggleDescription =
         stringResource(if (titles) R.string.show_icons_only else R.string.show_tab_titles)
     val tabsDescription = stringResource(R.string.a11y_tabs)
+    val glassVisible by
+        remember(swipeBackdrop) { derivedStateOf { (swipeBackdrop?.reveal?.invoke() ?: 0f) > 0f } }
+    val glass =
+        if (!floating && glassVisible && hazeState != null)
+            Modifier.paneFrost(hazeState, RectangleShape, edge = false, opacity = .55f)
+        else Modifier
     BoxWithConstraints(
         Modifier.then(if (floating) Modifier else Modifier.fillMaxHeight())
-            .then(
-                if (island)
-                    Modifier.padding(
-                        start = if (side == TabBarPosition.LEFT) 8.dp else 0.dp,
-                        end = if (side == TabBarPosition.RIGHT) 8.dp else 0.dp,
-                        top = 8.dp,
-                        bottom = islandBottom,
-                    )
-                else Modifier,
-            )
             .width(width)
             // A floating rail is an overlay that hugs its tabs, so it never claims layout space.
             .then(if (floating) Modifier.wrapContentHeight() else Modifier)
-            .then(if (floating || island) Modifier else Modifier.background(scheme.surface))
+            .then(
+                if (floating) Modifier
+                else
+                    Modifier.zIndex(1f)
+                        .onSizeChanged { swipeBackdrop?.railWidth = it.width }
+                        .then(glass)
+                        .drawWithContent {
+                            val opacity = 1f - (swipeBackdrop?.reveal?.invoke() ?: 0f)
+                            drawRect(scheme.surface.copy(alpha = opacity))
+                            drawContent()
+                            val stroke = .5.dp.toPx()
+                            val x =
+                                if (side == TabBarPosition.LEFT) size.width - stroke / 2
+                                else stroke / 2
+                            drawLine(
+                                divider,
+                                Offset(x, 0f),
+                                Offset(x, size.height),
+                                strokeWidth = stroke,
+                            )
+                        },
+            )
             // Reaches the screen edge under the gesture handle; its buttons stay above it.
             .then(
-                if (extendUnderNav && !floating && !island)
+                if (extendUnderNav && !floating)
                     Modifier.windowInsetsPadding(
                         WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
                     )
@@ -223,8 +358,12 @@ internal fun TerminalTabRail(
         // seeded with their tallest arrangement so the first frame already fits.
         var chromePx by
             remember(density) { mutableIntStateOf(with(density) { 161.dp.roundToPx() }) }
+        val tabRowHeight = if (titles) 44.dp else 48.dp
         val listHeight =
-            (windows.size * 48).dp + ((windows.size - 1).coerceAtLeast(0) * 4).dp + 4.dp
+            (windows.size * tabRowHeight.value).dp +
+                ((windows.size - 1).coerceAtLeast(0) * 4).dp +
+                4.dp +
+                (if (!titles && onNewTab != null) 40.dp else 0.dp)
         val grip = if (handle != null) FloatingTabBarHandle else 0.dp
         val pillHeight =
             if (floating)
@@ -236,20 +375,27 @@ internal fun TerminalTabRail(
             Modifier.fillMaxWidth()
                 .height(pillHeight)
                 .then(
-                    when {
-                        floating ->
-                            Modifier.shadow(3.dp, pillShape, clip = false)
-                                .then(
-                                    if (hazeState == null)
-                                        Modifier.clip(pillShape).background(scheme.surface)
-                                    else Modifier.paneFrost(hazeState, pillShape),
-                                )
-                        island ->
-                            Modifier.clip(islandShape)
-                                .background(scheme.surface)
-                                .border(1.5.dp, scheme.outline.copy(alpha = .25f), islandShape)
-                        else -> Modifier
-                    },
+                    if (wideSessions != null)
+                        Modifier.layout { measurable, constraints ->
+                            // Keep the expanded sidebar's scrollable lists below the compact
+                            // header.
+                            val inset = headerOverlap().coerceIn(0, constraints.maxHeight)
+                            val content = measurable.measure(constraints.offset(vertical = -inset))
+                            layout(content.width, content.height + inset) {
+                                content.placeRelative(0, inset)
+                            }
+                        }
+                    else Modifier,
+                )
+                .then(
+                    if (floating)
+                        Modifier.shadow(3.dp, pillShape, clip = false)
+                            .then(
+                                if (hazeState == null)
+                                    Modifier.clip(pillShape).background(scheme.surface)
+                                else Modifier.paneFrost(hazeState, pillShape),
+                            )
+                    else Modifier,
                 )
                 .then(
                     if (floating)
@@ -257,299 +403,410 @@ internal fun TerminalTabRail(
                             .testTag("Floating tab rail")
                     else Modifier,
                 )
-                .systemGestureExclusion { coordinates ->
-                    val height = coordinates.size.height.toFloat()
-                    androidx.compose.ui.geometry.Rect(
-                        0f,
-                        (height - exclusion).coerceAtLeast(0f),
-                        coordinates.size.width.toFloat(),
-                        height,
-                    )
-                }
-                .draggable(
-                    androidx.compose.foundation.gestures.rememberDraggableState { swipe += it },
-                    androidx.compose.foundation.gestures.Orientation.Horizontal,
-                    onDragStarted = { swipe = 0f },
-                    onDragStopped = {
-                        val next =
-                            when {
-                                swipe * outward > threshold -> TabRailStyle.TITLES
-                                swipe * outward < -threshold -> TabRailStyle.ICONS
-                                else -> style
-                            }
-                        swipe = 0f
-                        if (next != style) {
-                            haptic.performHapticFeedback(
-                                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                            )
-                            if (floating) onFanDismiss()
-                            onStyle(next)
-                        }
-                    },
-                )
-                .semantics {
-                    customActions =
-                        listOf(
-                            CustomAccessibilityAction(styleToggleDescription) {
-                                onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
-                                true
-                            },
-                        )
-                }
                 .padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // A floating rail carries its grip in the same column, above the tabs.
             handle?.invoke()
-            LazyColumn(
-                Modifier.weight(1f).fillMaxWidth().semantics {
-                    contentDescription = tabsDescription
-                },
-                state = list,
-                contentPadding =
-                    PaddingValues(horizontal = if (titles) 4.dp else 2.dp, vertical = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
-            ) {
-                itemsIndexed(windows, key = { _, w -> w.id }) { i, w ->
-                    fun moveBy(delta: Int): Boolean {
-                        val target = i + delta
-                        if (target !in windows.indices) return false
-                        val reordered =
-                            ids.toMutableList().apply {
-                                removeAt(i)
-                                add(target, w.id)
+            if (!portrait) pageSwitcher()
+            if (showSessions && wideSessions != null) {
+                TabRailSessionList(
+                    wideSessions,
+                    Modifier.weight(1f).fillMaxWidth(),
+                    alignment = if (tabsAtTop) Alignment.Top else Alignment.Bottom,
+                ) { key ->
+                    showSessions = false
+                    wideSessions.onSelect(key)
+                }
+            } else
+                LazyColumn(
+                    Modifier.weight(1f).fillMaxWidth().semantics {
+                        contentDescription = tabsDescription
+                    },
+                    state = list,
+                    contentPadding = PaddingValues(vertical = 2.dp),
+                    verticalArrangement = tabArrangement,
+                ) {
+                    // Lay out the button with the tabs so their placement can animate as the rail
+                    // resizes.
+                    if (!titles && onNewTab != null)
+                        stickyHeader(key = 0) {
+                            val placement =
+                                if (tabsFollowSwitcher) Modifier
+                                else Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .then(placement)
+                                    .then(
+                                        if (floating) Modifier
+                                        else Modifier.background(scheme.surface),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                ChromeButton(
+                                    ChromeIcon.ADD,
+                                    stringResource(R.string.label_new_tab),
+                                    enabled = enabled,
+                                    onClick = onNewTab,
+                                )
                             }
-                        return onMove(w.id, reordered.getOrNull(target + 1))
-                    }
-                    val active = w.id == selectedId
-                    val programs = panePrograms(w)
-                    val pane = selectedPane(w)
-                    val program = programs.getOrNull(pane) ?: ProgramIdentity.Loading
-                    val title =
-                        program.tabTitle(
-                            w.label,
-                            w.blocks.getOrNull(pane)?.label.orEmpty(),
-                            i + 1,
-                            paneTitle(w, pane),
-                        )
-                    val unread = tabAttention(w)
-                    val progress = paneProgress(w)
-                    val busy = paneWorking(w) || progress?.busy == true
-                    val indicator = terminalProgressColor(progress)
-                    val tabDescription =
-                        stringResource(
-                            if (busy && progress == null) R.string.a11y_tab_working
-                            else R.string.a11y_tab,
-                            title,
-                            program.label,
-                        )
-                    val unreadDescription =
-                        pluralStringResource(R.plurals.a11y_unread_items, unread, unread)
-                    val moveUpLabel = stringResource(R.string.move_up)
-                    val moveDownLabel = stringResource(R.string.move_down)
-                    val tabOptionsLabel = stringResource(R.string.tab_options)
-                    Box(Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)) {
-                        if (floating && active) {
-                            DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
                         }
-                        val workPhase =
-                            rememberWorkingPhase(
-                                animateWorking &&
-                                    active &&
-                                    if (progress != null) progress.busy && progress.percent == null
-                                    else busy,
+                    itemsIndexed(windows, key = { _, w -> w.id }) { i, w ->
+                        fun moveBy(delta: Int): Boolean {
+                            val target = i + delta
+                            if (target !in windows.indices) return false
+                            val reordered =
+                                ids.toMutableList().apply {
+                                    removeAt(i)
+                                    add(target, w.id)
+                                }
+                            return onMove(w.id, reordered.getOrNull(target + 1))
+                        }
+                        val active = w.id == selectedId
+                        val programs = panePrograms(w)
+                        val pane = selectedPane(w)
+                        val program = programs.getOrNull(pane) ?: ProgramIdentity.Loading
+                        val title =
+                            program.tabTitle(
+                                w.label,
+                                w.blocks.getOrNull(pane)?.label.orEmpty(),
+                                i + 1,
+                                paneTitle(w, pane),
                             )
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .height(48.dp)
-                                .then(
-                                    if (floating && active)
-                                        Modifier.onGloballyPositioned {
-                                            onFanAnchorBounds(it.boundsInRoot())
+                        val unread = tabAttention(w)
+                        val progress = paneProgress(w)
+                        val busy = paneWorking(w) || progress?.busy == true
+                        val indicator = terminalProgressColor(progress)
+                        val breathe =
+                            active &&
+                                animateWorking &&
+                                if (progress != null) progress.busy && progress.percent == null
+                                else busy
+                        val workPhase = rememberWorkingPhase(breathe)
+                        val tabDescription =
+                            stringResource(
+                                if (busy && progress == null) R.string.a11y_tab_working
+                                else R.string.a11y_tab,
+                                title,
+                                program.label,
+                            )
+                        val unreadDescription =
+                            pluralStringResource(R.plurals.a11y_unread_items, unread, unread)
+                        val moveUpLabel = stringResource(R.string.move_up)
+                        val moveDownLabel = stringResource(R.string.move_down)
+                        val tabOptionsLabel = stringResource(R.string.tab_options)
+                        val placement =
+                            if (tabsFollowSwitcher) Modifier
+                            else Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                        Box(placement) {
+                            if (floating && active) {
+                                DisposableEffect(w.id) { onDispose { onFanAnchorGone(w.id) } }
+                            }
+                            val layoutDirection =
+                                androidx.compose.ui.platform.LocalLayoutDirection.current
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .height(tabRowHeight)
+                                    .then(
+                                        if (floating && active)
+                                            Modifier.onGloballyPositioned {
+                                                onFanAnchorBounds(it.boundsInRoot())
+                                            }
+                                        else Modifier,
+                                    )
+                                    .background(
+                                        if (active) scheme.surfaceVariant else Color.Transparent,
+                                    )
+                                    .drawWithContent {
+                                        drawContent()
+                                        if (active) {
+                                            val bar = Size(3.dp.toPx(), 22.dp.toPx())
+                                            val inset = 5.dp.toPx()
+                                            val x =
+                                                if (layoutDirection == LayoutDirection.Ltr) inset
+                                                else size.width - inset - bar.width
+                                            val origin = Offset(x, (size.height - bar.height) / 2)
+                                            val brightness =
+                                                if (breathe) workingBarBrightness(workPhase.value)
+                                                else 1f
+                                            drawTabMarker(
+                                                indicator,
+                                                origin,
+                                                bar,
+                                                progress?.percent,
+                                                brightness,
+                                                vertical = true,
+                                            )
                                         }
-                                    else Modifier,
-                                )
-                                .background(
-                                    if (active) scheme.surfaceVariant else Color.Transparent,
-                                )
-                                .drawWithContent {
-                                    drawContent()
-                                    // The bottom indicator bar is only drawn on the active tab.
-                                    if (active) {
-                                        val origin = Offset(0f, size.height - 2.dp.toPx())
-                                        val bar = Size(size.width, 2.dp.toPx())
-                                        if (progress != null) {
-                                            drawWorkingBar(
-                                                indicator.copy(alpha = .18f),
-                                                origin,
-                                                bar,
-                                            )
-                                            val fill =
-                                                progress.percent?.let {
-                                                    bar.copy(width = bar.width * it / 100f)
-                                                } ?: bar
-                                            drawWorkingBar(
-                                                indicator,
-                                                origin,
-                                                fill,
-                                                phase =
-                                                    if (
-                                                        progress.busy &&
-                                                            progress.percent == null &&
-                                                            animateWorking
+                                    }
+                                    .semantics(mergeDescendants = true) {
+                                        contentDescription =
+                                            tabDescription +
+                                                (progress?.let { ", ${it.description}" } ?: "")
+                                    }
+                                    .semantics {
+                                        selected = active
+                                        if (unread > 0) stateDescription = unreadDescription
+                                        if (enabled)
+                                            customActions = buildList {
+                                                if (i > 0)
+                                                    add(
+                                                        CustomAccessibilityAction(moveUpLabel) {
+                                                            moveBy(-1)
+                                                        },
                                                     )
-                                                        workPhase.value
-                                                    else null,
-                                            )
-                                        } else
-                                            drawWorkingBar(
-                                                indicator,
-                                                origin,
-                                                bar,
-                                                phase =
-                                                    if (busy && animateWorking) workPhase.value
-                                                    else null,
-                                            )
+                                                if (i < windows.lastIndex)
+                                                    add(
+                                                        CustomAccessibilityAction(moveDownLabel) {
+                                                            moveBy(1)
+                                                        },
+                                                    )
+                                            }
+                                    }
+                                    .combinedClickable(
+                                        enabled = enabled,
+                                        role = Role.Tab,
+                                        onLongClickLabel = tabOptionsLabel,
+                                        onLongClick = {
+                                            if (floating) onFanDismiss()
+                                            menuId = w.id
+                                        },
+                                        onClick = {
+                                            if (
+                                                floating &&
+                                                    active &&
+                                                    w.blocks.size > 1 &&
+                                                    onFanToggle != null
+                                            ) {
+                                                onFanToggle(w.id)
+                                            } else {
+                                                if (floating) onFanDismiss()
+                                                onSelect(w.id)
+                                            }
+                                        },
+                                    )
+                                    .padding(
+                                        start = sidebarTabIconInset,
+                                        end = if (titles) 10.dp else 0.dp,
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Box(
+                                    Modifier.semantics { testTag = "Tab program icon ${w.id}" },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    ProgramStack(programs, pane, fixedSlot = true)
+                                    if (unread > 0) {
+                                        val iconInset =
+                                            (36.dp - programStackPaintedWidth(programs.size)) / 2
+                                        Box(
+                                            Modifier.align(Alignment.TopEnd)
+                                                .offset(x = 4.dp - iconInset, y = (-2).dp)
+                                                .size(10.dp)
+                                                .border(
+                                                    1.5.dp,
+                                                    if (active) scheme.surfaceVariant
+                                                    else scheme.surface,
+                                                    CircleShape,
+                                                )
+                                                .background(scheme.primary, CircleShape)
+                                                .semantics { testTag = "Tab unread dot ${w.id}" },
+                                        )
                                     }
                                 }
-                                .semantics(mergeDescendants = true) {
-                                    contentDescription =
-                                        tabDescription +
-                                            (progress?.let { ", ${it.description}" } ?: "")
-                                }
-                                .semantics {
-                                    selected = active
-                                    if (unread > 0) stateDescription = unreadDescription
-                                    if (enabled)
-                                        customActions = buildList {
-                                            if (i > 0)
-                                                add(
-                                                    CustomAccessibilityAction(moveUpLabel) {
-                                                        moveBy(-1)
-                                                    },
-                                                )
-                                            if (i < windows.lastIndex)
-                                                add(
-                                                    CustomAccessibilityAction(moveDownLabel) {
-                                                        moveBy(1)
-                                                    },
-                                                )
-                                        }
-                                }
-                                .combinedClickable(
-                                    enabled = enabled,
-                                    role = Role.Tab,
-                                    onLongClickLabel = tabOptionsLabel,
-                                    onLongClick = {
-                                        if (floating) onFanDismiss()
-                                        menuId = w.id
-                                    },
-                                    onClick = {
-                                        if (
-                                            floating &&
-                                                active &&
-                                                w.blocks.size > 1 &&
-                                                onFanToggle != null
-                                        ) {
-                                            onFanToggle(w.id)
-                                        } else {
-                                            if (floating) onFanDismiss()
-                                            onSelect(w.id)
-                                        }
-                                    },
-                                )
-                                .padding(horizontal = if (titles) 6.dp else 0.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement =
-                                if (titles) Arrangement.spacedBy(4.dp) else Arrangement.Center,
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                ProgramStack(programs, pane, fixedSlot = true)
-                                if (unread > 0 || busy)
-                                    Box(
-                                        Modifier.align(Alignment.TopEnd)
-                                            .offset(x = 2.dp, y = (-2).dp)
-                                            .size(8.dp)
-                                            .border(1.5.dp, scheme.background, CircleShape)
-                                            .background(
-                                                if (unread > 0) scheme.primary else indicator,
-                                                CircleShape,
-                                            )
-                                            .semantics {
-                                                testTag =
-                                                    if (unread > 0) "Tab unread dot ${w.id}"
-                                                    else "Tab working dot ${w.id}"
-                                            },
+                                if (titles)
+                                    Text(
+                                        title,
+                                        Modifier.weight(1f),
+                                        fontSize = sidebarTextSize,
+                                        lineHeight = sidebarLineHeight,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight =
+                                            if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                        color =
+                                            if (active) scheme.onSurface
+                                            else scheme.onSurfaceVariant,
                                     )
                             }
-                            if (titles)
-                                Text(
-                                    title,
-                                    Modifier.weight(1f),
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color =
-                                        if (active) scheme.onSurface else scheme.onSurfaceVariant,
+                            DropdownMenu(
+                                menuId == w.id,
+                                { menuId = null },
+                                containerColor = scheme.surface,
+                                tonalElevation = 0.dp,
+                            ) {
+                                TerminalMenuItem(
+                                    moveUpLabel,
+                                    ChromeIcon.UP,
+                                    enabled = enabled && i > 0,
+                                    onClick = {
+                                        menuId = null
+                                        moveBy(-1)
+                                    },
                                 )
-                        }
-                        DropdownMenu(
-                            menuId == w.id,
-                            { menuId = null },
-                            containerColor = scheme.surface,
-                            tonalElevation = 0.dp,
-                        ) {
-                            TerminalMenuItem(
-                                moveUpLabel,
-                                ChromeIcon.UP,
-                                enabled = enabled && i > 0,
-                                onClick = {
-                                    menuId = null
-                                    moveBy(-1)
-                                },
-                            )
-                            TerminalMenuItem(
-                                moveDownLabel,
-                                ChromeIcon.DOWN,
-                                enabled = enabled && i < windows.lastIndex,
-                                onClick = {
-                                    menuId = null
-                                    moveBy(1)
-                                },
-                            )
-                            TerminalMenuItem(
-                                stringResource(R.string.close_tab),
-                                ChromeIcon.CLOSE,
-                                enabled = enabled,
-                                onClick = {
-                                    menuId = null
-                                    onClose(w)
-                                },
-                            )
+                                TerminalMenuItem(
+                                    moveDownLabel,
+                                    ChromeIcon.DOWN,
+                                    enabled = enabled && i < windows.lastIndex,
+                                    onClick = {
+                                        menuId = null
+                                        moveBy(1)
+                                    },
+                                )
+                                TerminalMenuItem(
+                                    stringResource(R.string.close_tab),
+                                    ChromeIcon.CLOSE,
+                                    enabled = enabled,
+                                    onClick = {
+                                        menuId = null
+                                        onClose(w)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
-            }
+            if (portrait) pageSwitcher()
+            val footerNewTab =
+                if (titles && onNewTab != null) SidebarNewTab(enabled, onNewTab) else null
             Column(
                 Modifier.fillMaxWidth().onSizeChanged { chromePx = it.height },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Points the way the rail will go: toward the terminal to show titles, toward the
-                // edge to hide them.
-                val towardTerminal = if (side == TabBarPosition.LEFT) -90f else 90f
-                ChromeButton(
-                    ChromeIcon.CHEVRON,
-                    styleToggleDescription,
-                    modifier =
-                        Modifier.graphicsLayer {
-                            rotationZ = if (titles) -towardTerminal else towardTerminal
-                        },
-                ) {
-                    onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
+                HorizontalDivider(
+                    Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                    thickness = .5.dp,
+                    color = divider,
+                )
+                val atStart = side == TabBarPosition.LEFT
+                val atLeftEdge = atStart == (LocalLayoutDirection.current == LayoutDirection.Ltr)
+                val towardTerminal = if (atLeftEdge) -90f else 90f
+                val toggleWidth = 36.dp
+                val toggleInset = (collapsedWidth - toggleWidth) / 2
+                val toggle: @Composable () -> Unit = {
+                    ChromeButton(
+                        ChromeIcon.CHEVRON,
+                        styleToggleDescription,
+                        modifier =
+                            Modifier.size(toggleWidth).graphicsLayer {
+                                rotationZ = if (titles) -towardTerminal else towardTerminal
+                            },
+                    ) {
+                        onStyle(if (titles) TabRailStyle.ICONS else TabRailStyle.TITLES)
+                    }
                 }
-                Box(Modifier.padding(top = 4.dp)) { actions() }
+                if (!titles) Box(Modifier.padding(bottom = 4.dp)) { actions() }
+                // Center the toggle in the outer icon slot in either style.
+                val actionsInset = if (titles) 6.dp else 0.dp
+                Row(
+                    Modifier.fillMaxWidth()
+                        .height(activityButtonDiameter)
+                        .padding(
+                            start = if (atStart) toggleInset else actionsInset,
+                            end = if (atStart) actionsInset else toggleInset,
+                        ),
+                    horizontalArrangement =
+                        when {
+                            titles -> Arrangement.Start
+                            atStart -> Arrangement.Start
+                            else -> Arrangement.End
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (atStart) toggle()
+                    if (titles)
+                        Box(
+                            Modifier.weight(1f),
+                            contentAlignment =
+                                if (atStart) Alignment.CenterEnd else Alignment.CenterStart,
+                        ) {
+                            CompositionLocalProvider(LocalSidebarNewTab provides footerNewTab) {
+                                actions()
+                            }
+                        }
+                    if (!atStart) toggle()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TabRailSessionList(
+    sessions: TabRailSessions,
+    modifier: Modifier,
+    alignment: Alignment.Vertical,
+    onSelect: (String) -> Unit,
+) {
+    val groups =
+        remember(sessions.targets, sessions.current) {
+            SessionCatalog.groups(sessions.targets, sessions.current, "")
+        }
+    val scheme = MaterialTheme.colorScheme
+    val description = stringResource(R.string.a11y_sessions_by_server)
+    LazyColumn(
+        modifier.semantics { contentDescription = description },
+        contentPadding = PaddingValues(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp, alignment),
+    ) {
+        if (groups.isEmpty())
+            item {
+                Text(
+                    stringResource(R.string.no_sessions_available),
+                    Modifier.padding(8.dp),
+                    fontSize = sidebarTextSize,
+                    lineHeight = sidebarLineHeight,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+        for (group in groups) {
+            item(key = "server:${group.server.id}") {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ServerGlyph(group.server.icon, Modifier.size(16.dp))
+                    Text(
+                        group.server.label,
+                        Modifier.weight(1f),
+                        fontSize = sidebarTextSize,
+                        lineHeight = sidebarLineHeight,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            items(group.sessions, key = { it.key }) { target ->
+                val active = target.key == sessions.current
+                Row(
+                    Modifier.fillMaxWidth()
+                        .heightIn(min = 44.dp)
+                        .background(
+                            if (active) scheme.surfaceVariant else Color.Transparent,
+                            RoundedCornerShape(10.dp),
+                        )
+                        .clickable(role = Role.Button, onClick = { onSelect(target.key) })
+                        .semantics { selected = active }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        target.session.label,
+                        Modifier.weight(1f),
+                        fontSize = sidebarTextSize,
+                        lineHeight = sidebarLineHeight,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (active) ChromeSymbol(ChromeIcon.CHECK, Modifier.size(16.dp), scheme.primary)
+                }
             }
         }
     }

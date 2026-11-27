@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 
@@ -49,6 +50,8 @@ internal fun TerminalActionsDrawer(
     onClosePane: (() -> Unit)?,
     onDismiss: () -> Unit,
     hazeState: HazeState? = null,
+    showProgramResume: Boolean = false,
+    programResume: ProgramResumeStatus? = null,
 ) {
     fun dispatch(action: () -> Unit) {
         onDismiss()
@@ -80,18 +83,23 @@ internal fun TerminalActionsDrawer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(Modifier.weight(1f)) {
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         status,
+                        Modifier.weight(1f, fill = false).alignByBaseline(),
                         style = SettingsType.row,
                         color = if (controlled) colors.primary else colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     dimensions?.let { (columns, rows) ->
                         Text(
                             "$columns × $rows",
+                            Modifier.alignByBaseline(),
                             style = SettingsType.detail,
                             fontFamily = MonoUi,
                             color = colors.onSurfaceVariant,
+                            maxLines = 1,
                         )
                     }
                 }
@@ -137,6 +145,10 @@ internal fun TerminalActionsDrawer(
             }
             SettingsCard {
                 Column(Modifier.fillMaxWidth()) {
+                    if (showProgramResume) {
+                        ProgramResumeRow(programResume)
+                        if (actions.isNotEmpty()) SettingsDivider()
+                    }
                     actions.forEachIndexed { index, action ->
                         if (index > 0) SettingsDivider()
                         TerminalDrawerRow(action) { dispatch(action.run) }
@@ -157,6 +169,55 @@ internal fun TerminalActionsDrawer(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProgramResumeRow(status: ProgramResumeStatus?) {
+    val colors = MaterialTheme.colorScheme
+    val text =
+        when (status?.state) {
+            "ready" -> stringResource(R.string.program_resume_ready)
+            "blocked" -> stringResource(R.string.program_resume_blocked)
+            "none" -> stringResource(R.string.program_resume_none)
+            "notSelected" -> stringResource(R.string.program_resume_not_selected)
+            "unavailable" -> stringResource(R.string.program_resume_unavailable)
+            else -> stringResource(R.string.checking)
+        }
+    val reason =
+        if (status?.state == "blocked")
+            when (status.reason) {
+                "no_rule" -> stringResource(R.string.program_resume_reason_no_rule)
+                "dir_not_allowed" -> stringResource(R.string.program_resume_reason_dir_not_allowed)
+                "flag_not_listed" -> stringResource(R.string.program_resume_reason_flag_not_listed)
+                "flag_value",
+                "flags_differ" -> stringResource(R.string.program_resume_reason_flag_value)
+                "program_differs" -> stringResource(R.string.program_resume_reason_program_differs)
+                "wrapped" -> stringResource(R.string.program_resume_reason_wrapped)
+                "launch_unreadable" ->
+                    stringResource(R.string.program_resume_reason_launch_unreadable)
+                "config_incomplete" ->
+                    stringResource(R.string.program_resume_reason_config_incomplete)
+                else -> stringResource(R.string.program_resume_reason_untrusted)
+            }
+        else null
+    val detail =
+        listOfNotNull(status?.program?.takeIf { it.isNotBlank() }, text, reason).joinToString(" · ")
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        val ready = status?.state == "ready"
+        ChromeSymbol(
+            if (ready) ChromeIcon.CHECK else ChromeIcon.REFRESH,
+            Modifier.size(20.dp),
+            if (ready) colors.primary else colors.onSurfaceVariant,
+        )
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.program_resume_title), style = SettingsType.row)
+            Text(detail, style = SettingsType.detail, color = colors.onSurfaceVariant)
         }
     }
 }

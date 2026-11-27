@@ -7,9 +7,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -197,11 +200,16 @@ private fun ThemeSwatch(theme: AppTheme) {
 
 @Composable
 internal fun FontSizeDialog(
-    size: Int,
-    onSize: (Int) -> Unit,
+    sizes: Map<TabWidthClass, Float>,
+    current: TabWidthClass,
+    onSize: (TabWidthClass, Float) -> Unit,
     hazeState: dev.chrisbanes.haze.HazeState? = null,
     onClose: () -> Unit,
 ) {
+    var editing by rememberSaveable { mutableStateOf<TabWidthClass?>(null) }
+    val profile = editing ?: current
+    val size = sizes.getValue(profile)
+    val sizeNumber = if (size == size.toInt().toFloat()) "${size.toInt()}" else "$size"
     val decreaseFont = stringResource(R.string.a11y_decrease_font_size)
     val increaseFont = stringResource(R.string.a11y_increase_font_size)
     val fontSizeLabel = stringResource(R.string.a11y_font_size)
@@ -210,37 +218,57 @@ internal fun FontSizeDialog(
         stringResource(R.string.font_size),
         onClose,
         hazeState,
+        subtitle =
+            stringResource(R.string.font_size_window_format, stringResource(current.titleRes)),
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 12.dp),
+            Modifier.fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            PreferenceSegments(TabWidthClass.entries, profile, { stringResource(it.titleRes) }) {
+                editing = it
+            }
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 IconButton(
-                    onClick = { onSize(size - 1) },
-                    enabled = size > 8,
+                    onClick = { onSize(profile, size - TerminalFontSizeStep) },
+                    enabled = size > TerminalFontSizes.start,
                     modifier = Modifier.semantics { contentDescription = decreaseFont },
                 ) {
                     Text("−", fontSize = 24.sp)
                 }
-                Text("$size sp", fontFamily = MonoUi, fontSize = 16.sp)
+                Text(
+                    stringResource(R.string.font_size_sp_format, sizeNumber),
+                    fontFamily = MonoUi,
+                    fontSize = 16.sp,
+                )
                 IconButton(
-                    onClick = { onSize(size + 1) },
-                    enabled = size < 20,
+                    onClick = { onSize(profile, size + TerminalFontSizeStep) },
+                    enabled = size < TerminalFontSizes.endInclusive,
                     modifier = Modifier.semantics { contentDescription = increaseFont },
                 ) {
                     Text("+", fontSize = 24.sp)
                 }
             }
             Slider(
-                value = size.toFloat(),
-                onValueChange = { onSize(it.roundToInt()) },
-                valueRange = 8f..20f,
-                steps = 11,
+                value = size,
+                onValueChange = {
+                    onSize(
+                        profile,
+                        (it / TerminalFontSizeStep).roundToInt() * TerminalFontSizeStep,
+                    )
+                },
+                valueRange = TerminalFontSizes,
+                steps =
+                    ((TerminalFontSizes.endInclusive - TerminalFontSizes.start) /
+                            TerminalFontSizeStep)
+                        .toInt() - 1,
                 modifier = Modifier.semantics { contentDescription = fontSizeLabel },
             )
             Text("Aa 0123 / ~", fontFamily = MonoUi, fontSize = size.sp)

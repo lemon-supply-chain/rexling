@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
+internal val TerminalFontSizes = 8f..20f
+internal const val TerminalFontSizeStep = .5f
+
 class RexModel @JvmOverloads constructor(application: Application, preferenceName: String = "rex") :
     AndroidViewModel(application) {
     internal var activityVisible by mutableStateOf(false)
@@ -91,7 +94,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
                     ActivityFocusPolicy.unread(client.state.value.activity, client::isActivitySeen)
                 else 0
             }
-        activitySources = servers.mapNotNull { server ->
+        activitySources = activeProfiles.mapNotNull { server ->
             connections[server.id]?.state?.value?.let { state ->
                 if (state.phase in listOf("disconnected", "preview")) null
                 else
@@ -131,7 +134,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
 
     internal fun openActivity(target: ActivityTarget) {
         val profile =
-            servers.firstOrNull {
+            activeProfiles.firstOrNull {
                 it.id == target.server.id && it.endpoint == target.server.endpoint
             } ?: return
         val source =
@@ -154,6 +157,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     private var serverSwitchSerial = 0L
     internal var pendingImageTarget: ImageTarget? = null
     internal val images = ImageUploads(application, viewModelScope)
+    internal val downloads = FileDownloads(application, viewModelScope)
 
     internal fun imageTarget(): ImageTarget? {
         val client = activeClient
@@ -222,14 +226,6 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putBoolean(CodexAttentionPolicy.ENABLED, enabled) }
         connections.values.forEach { it.refreshActivityPolicy() }
         updateActivity()
-    }
-
-    internal var compactTopBar by mutableStateOf(preferences.getBoolean("compact_top_bar", false))
-        private set
-
-    internal fun changeCompactTopBar(enabled: Boolean) {
-        compactTopBar = enabled
-        preferences.edit { putBoolean("compact_top_bar", enabled) }
     }
 
     internal var frostedEffectsEnabled by
@@ -308,6 +304,15 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putString("keep_screen_awake", value.name) }
     }
 
+    internal var immersiveStatusBar by
+        mutableStateOf(preferences.getBoolean("immersive_status_bar", false))
+        private set
+
+    internal fun changeImmersiveStatusBar(value: Boolean) {
+        immersiveStatusBar = value
+        preferences.edit { putBoolean("immersive_status_bar", value) }
+    }
+
     internal var toolbarKeys by
         mutableStateOf(ToolbarLayout.decode(preferences.getString("keyboard_toolbar", null)))
         private set
@@ -326,8 +331,25 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putBoolean("keyboard_suggestions", enabled) }
     }
 
-    var fontSize by mutableIntStateOf(preferences.getInt("font_size", 10).coerceIn(8, 20))
+    internal var fontSizes by
+        mutableStateOf(
+            TabWidthClass.entries.associateWith { profile ->
+                val key = fontSizeKey(profile)
+                val previous = preferences.getInt(key, preferences.getInt("font_size", 10))
+                // SharedPreferences stores integers and floats as different types.
+                preferences.getFloat("${key}_sp", previous.toFloat()).coerceIn(TerminalFontSizes)
+            },
+        )
         private set
+
+    private fun fontSizeKey(profile: TabWidthClass) = "font_size_${profile.name.lowercase()}"
+
+    internal fun changeFontSize(profile: TabWidthClass, size: Float) {
+        val clamped = size.coerceIn(TerminalFontSizes)
+        if (fontSizes[profile] == clamped) return
+        fontSizes = fontSizes + (profile to clamped)
+        preferences.edit { putFloat("${fontSizeKey(profile)}_sp", clamped) }
+    }
 
     internal fun theme(dark: Boolean): AppTheme {
         val id = if (dark) darkTheme else lightTheme
@@ -339,11 +361,6 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         val theme = themes.firstOrNull { it.id == id } ?: return
         if (theme.terminal.dark) darkTheme = id else lightTheme = id
         preferences.edit { putString(if (theme.terminal.dark) "dark_theme" else "light_theme", id) }
-    }
-
-    fun changeFontSize(size: Int) {
-        fontSize = size.coerceIn(8, 20)
-        preferences.edit { putInt("font_size", fontSize) }
     }
 
     var appearance by
@@ -385,6 +402,35 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         preferences.edit { putBoolean("minimize_floating_panes", value) }
     }
 
+    internal var floatingDockPosition by
+        mutableStateOf(
+            Offset(
+                preferences
+                    .getFloat("floating_dock_x", 1f)
+                    .takeIf { it.isFinite() }
+                    ?.coerceIn(
+                        0f,
+                        1f,
+                    ) ?: 1f,
+                preferences
+                    .getFloat("floating_dock_y", 1f)
+                    .takeIf { it.isFinite() }
+                    ?.coerceIn(
+                        0f,
+                        1f,
+                    ) ?: 1f,
+            ),
+        )
+        private set
+
+    internal fun moveFloatingDock(value: Offset) {
+        floatingDockPosition = value
+        preferences.edit {
+            putFloat("floating_dock_x", value.x)
+            putFloat("floating_dock_y", value.y)
+        }
+    }
+
     internal var controlItems by
         mutableStateOf(
             ControlShortcutConfig.restore(preferences.getString("control_shortcut_items", null)),
@@ -408,6 +454,31 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     internal fun changeToolbarWithKeyboardOnly(value: Boolean) {
         toolbarWithKeyboardOnly = value
         preferences.edit { putBoolean("keyboard_toolbar_auto_hide", value) }
+    }
+
+    internal var toolbarSystemColors by
+        mutableStateOf(preferences.getBoolean("keyboard_toolbar_system_colors", false))
+        private set
+
+    internal fun changeToolbarSystemColors(value: Boolean) {
+        toolbarSystemColors = value
+        preferences.edit { putBoolean("keyboard_toolbar_system_colors", value) }
+    }
+
+    internal var compactHeaderMode by
+        mutableStateOf(
+            preferences.getString("compact_header_mode", null)?.let { saved ->
+                CompactHeaderMode.entries.firstOrNull { it.name == saved }
+            }
+                ?: if (preferences.getBoolean("compact_header_with_keyboard", false))
+                    CompactHeaderMode.WITH_KEYBOARD
+                else CompactHeaderMode.NEVER,
+        )
+        private set
+
+    internal fun changeCompactHeaderMode(value: CompactHeaderMode) {
+        compactHeaderMode = value
+        preferences.edit { putString("compact_header_mode", value.name) }
     }
 
     internal var arrowJoystickEnabled by
@@ -478,14 +549,21 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         }
     }
 
-    /** Unfolded and full screen, show a tab's tiled panes side by side instead of one at a time. */
-    internal var multiPaneUnfolded by
-        mutableStateOf(preferences.getBoolean("multi_pane_unfolded", false))
+    /** Full-screen large layouts inherit the previous choice until configured per orientation. */
+    internal var paneLayouts by
+        mutableStateOf(
+            PaneOrientation.entries.associateWith { orientation ->
+                preferences.getBoolean(
+                    orientation.preferenceKey,
+                    preferences.getBoolean("multi_pane_unfolded", false),
+                )
+            },
+        )
         private set
 
-    internal fun changeMultiPaneUnfolded(value: Boolean) {
-        multiPaneUnfolded = value
-        preferences.edit { putBoolean("multi_pane_unfolded", value) }
+    internal fun changePaneLayout(orientation: PaneOrientation, multiple: Boolean) {
+        paneLayouts = paneLayouts + (orientation to multiple)
+        preferences.edit { putBoolean(orientation.preferenceKey, multiple) }
     }
 
     internal var enterSubmits by
@@ -742,11 +820,20 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
                 }
             }
         }
+    internal var showcaseActive by mutableStateOf(false)
+        private set
+
+    private val activeProfiles: List<ServerProfile>
+        get() {
+            val showcase = if (showcaseActive) DebugShowcase.profile() else null
+            return if (showcase != null) servers + showcase else servers
+        }
+
     internal var activeClient by mutableStateOf(connection(activeServer))
         private set
 
     val activeServer: ServerProfile
-        get() = servers.firstOrNull { it.id == activeServerId } ?: ServerProfile.Empty
+        get() = activeProfiles.firstOrNull { it.id == activeServerId } ?: ServerProfile.Empty
 
     internal val activeConnectionRequested: Boolean
         get() = activeServerId in desired
@@ -779,7 +866,7 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
                 observers[profile.id] = viewModelScope.launch {
                     client.chromeState.collect { state ->
                         val wasConnected = serverStatuses[profile.id]?.connected == true
-                        val next = ServerStatus(state.phase, state.error)
+                        val next = ServerStatus(state.phase, state.error, state.serverVersion)
                         if (serverStatuses[profile.id] != next)
                             serverStatuses = serverStatuses + (profile.id to next)
 
@@ -829,12 +916,13 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         }
 
     private fun updateSessionTargets() {
-        val next = SessionCatalog.collect(servers, connections.mapValues { it.value.state.value })
+        val next =
+            SessionCatalog.collect(activeProfiles, connections.mapValues { it.value.state.value })
         if (next != sessionTargets) sessionTargets = next
     }
 
     private fun updatePaneCatalog() {
-        paneCatalogSources = servers.mapNotNull { server ->
+        paneCatalogSources = activeProfiles.mapNotNull { server ->
             val state = connections[server.id]?.chromeState?.value ?: return@mapNotNull null
             if (state.connected) PaneCatalog.collect(server, state) else null
         }
@@ -959,16 +1047,78 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
     private fun persist() {
         updateSessionTargets()
         if (paneCatalogVisible) updatePaneCatalog()
+        val persistedActive =
+            activeServerId.takeUnless(DebugShowcase::isProfile)
+                ?: servers.firstOrNull()?.id.orEmpty()
         preferences.edit {
             putString("servers", SavedServers.encode(servers))
-            putString("active_server", activeServerId)
+            putString("active_server", persistedActive)
             putStringSet("connected_servers", desired)
         }
         if (foreground && BackgroundAlerts.foreground.value)
             BackgroundAlerts.reconcile(getApplication())
     }
 
+    fun startShowcase() {
+        val profile = DebugShowcase.profile() ?: return
+        showcaseActive = true
+        val client = connection(profile)
+        if (activeServerId != profile.id) {
+            rememberLastSession()
+            serverSwitchSerial++
+            activeClient.releaseControl()
+            activeClient.visible = false
+            client.visible = true
+            activeServerId = profile.id
+            activeClient = client
+        }
+        client.startShowcase()
+        updateSessionTargets()
+        if (paneCatalogVisible) updatePaneCatalog()
+        updateActivity()
+    }
+
+    fun stopShowcase(switchFallback: Boolean = true) {
+        if (!showcaseActive) return
+        showcaseActive = false
+        val id = DebugShowcase.profile()?.id
+        if (id != null) {
+            observers.remove(id)?.cancel()
+            connections.remove(id)?.let {
+                it.releaseControl()
+                it.disconnect()
+                it.close()
+            }
+            serverStatuses = serverStatuses - id
+        }
+        if (switchFallback && id != null && activeServerId == id) {
+            serverSwitchSerial++
+            activeServerId = servers.firstOrNull()?.id.orEmpty()
+            activeClient = connection(activeServer)
+            activeClient.visible = true
+        }
+        updateSessionTargets()
+        if (paneCatalogVisible) updatePaneCatalog()
+        updateActivity()
+    }
+
     fun connectServer(id: String, select: Boolean = true) {
+        if (DebugShowcase.isProfile(id)) {
+            if (!showcaseActive) return
+            val profile = DebugShowcase.profile() ?: return
+            val client = connection(profile)
+            if (select && activeServerId != id) {
+                rememberLastSession()
+                serverSwitchSerial++
+                activeClient.releaseControl()
+                activeClient.visible = false
+                client.visible = true
+                activeServerId = id
+                activeClient = client
+            }
+            return
+        }
+        if (select && showcaseActive) stopShowcase(switchFallback = false)
         val profile = servers.firstOrNull { it.id == id } ?: return
         val client = connection(profile)
         if (select && activeServerId != id) {
@@ -1061,6 +1211,10 @@ class RexModel @JvmOverloads constructor(application: Application, preferenceNam
         ?.message
 
     fun disconnectServer(id: String) {
+        if (DebugShowcase.isProfile(id)) {
+            stopShowcase()
+            return
+        }
         desired = desired - id
         persist()
         connections[id]?.let {

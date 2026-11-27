@@ -118,7 +118,7 @@ internal fun NeovimShortcutsSheet(
             { options = false },
             hazeState,
             onBack = { options = false },
-            swipeToDismiss = false,
+            fixed = true,
             backDescription = stringResource(R.string.back_to_neovim_shortcuts),
         ) {
             Column(
@@ -171,7 +171,7 @@ internal fun NeovimShortcutsSheet(
         onClose,
         hazeState,
         onBack = if (current != null) ({ groupId = null }) else null,
-        swipeToDismiss = false,
+        fixed = true,
         backDescription = stringResource(R.string.back_to_neovim_shortcuts),
     ) {
         Column(

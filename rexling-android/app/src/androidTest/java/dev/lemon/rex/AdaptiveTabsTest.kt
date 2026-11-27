@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -26,6 +29,7 @@ class AdaptiveTabsTest {
     private val count = mutableIntStateOf(4)
     private val selected = mutableStateOf("0")
     private val width = mutableFloatStateOf(360f)
+    private val appWidth = mutableIntStateOf(360)
     private val names =
         mutableStateOf(
             listOf(
@@ -43,34 +47,51 @@ class AdaptiveTabsTest {
     private val programs =
         listOf("codex", "claude", "fish", "nvim").map { ProgramIdentity.resolve(listOf(it)) }
 
-    private fun show(dark: Boolean = false, programOrder: List<ProgramIdentity> = programs) {
+    private fun show(
+        dark: Boolean = false,
+        programOrder: List<ProgramIdentity> = programs,
+        working: Boolean = false,
+        progress: TerminalProgress? = null,
+        onNewTab: (() -> Unit)? = null,
+    ) {
         ui.setContent {
-            RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1]) {
-                Box(
-                    Modifier.width(width.floatValue.dp)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .testTag("Test dock"),
-                ) {
-                    TerminalTabs(
-                        List(count.intValue) {
-                            WindowItem(
-                                it.toString(),
-                                names.value[it],
-                                listOf(BlockItem("pane-$it", "Terminal")),
-                            )
-                        },
-                        selected.value,
-                        true,
-                        onSelect = { selected.value = it },
-                        panePrograms = { tab ->
-                            val i = tab.id.toInt()
-                            List(if (i == 0 && stacked.value) 3 else 1) { offset ->
-                                programOrder[(i + offset) % programOrder.size]
-                            }
-                        },
-                        selectedPane = { 0 },
-                        actions = { TerminalActions(true, true, {}, {}) },
-                    )
+            val deviceConfiguration = LocalConfiguration.current
+            val windowWidth = appWidth.intValue
+            val configuration =
+                remember(deviceConfiguration, windowWidth) {
+                    Configuration(deviceConfiguration).apply { screenWidthDp = windowWidth }
+                }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1], motionEnabled = true) {
+                    Box(
+                        Modifier.width(width.floatValue.dp)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .testTag("Test dock"),
+                    ) {
+                        TerminalTabs(
+                            List(count.intValue) {
+                                WindowItem(
+                                    it.toString(),
+                                    names.value[it],
+                                    listOf(BlockItem("pane-$it", "Terminal")),
+                                )
+                            },
+                            selected.value,
+                            true,
+                            onSelect = { selected.value = it },
+                            panePrograms = { tab ->
+                                val i = tab.id.toInt()
+                                List(if (i == 0 && stacked.value) 3 else 1) { offset ->
+                                    programOrder[(i + offset) % programOrder.size]
+                                }
+                            },
+                            selectedPane = { 0 },
+                            paneWorking = { working },
+                            paneProgress = { if (it.id == "0") progress else null },
+                            onNewTab = onNewTab,
+                            actions = { TerminalActions(true, true, {}, {}) },
+                        )
+                    }
                 }
             }
         }
@@ -96,6 +117,35 @@ class AdaptiveTabsTest {
             "$tab outside $strip",
             tab.left >= strip.left - .5f && tab.right <= strip.right + .5f,
         )
+    }
+
+    @Test
+    fun newTabButtonLeadsTheBottomTabsAtMediumAndWideWidths() {
+        count.intValue = 2
+        appWidth.intValue = 439
+        var created = 0
+        show(onNewTab = { created++ })
+        val newTab = ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
+        newTab.assertDoesNotExist()
+        ui.runOnIdle { appWidth.intValue = 440 }
+        newTab.assertIsDisplayed()
+        val buttonBounds = newTab.fetchSemanticsNode().boundsInRoot
+        val tabBounds = bounds(0)
+        val markerHeight = with(ui.density) { 3.dp.roundToPx() }
+        assertTrue(buttonBounds.right <= tabBounds.left)
+        assertEquals(
+            (tabBounds.top + tabBounds.bottom - markerHeight) / 2f,
+            buttonBounds.center.y,
+            1f,
+        )
+        newTab.performClick()
+        ui.runOnIdle {
+            assertEquals(1, created)
+            appWidth.intValue = 760
+        }
+        newTab.assertIsDisplayed()
+        ui.runOnIdle { appWidth.intValue = 439 }
+        newTab.assertDoesNotExist()
     }
 
     @Test
@@ -162,6 +212,39 @@ class AdaptiveTabsTest {
         val before = ui.onNodeWithText(names.value[0]).fetchSemanticsNode().boundsInRoot
         ui.runOnIdle { stacked.value = true }
         assertEquals(before, ui.onNodeWithText(names.value[0]).fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test
+    fun bottomTabIconAndTitleAreCenteredAboveTheMarker() {
+        count.intValue = 2
+        show()
+        val tab = bounds(0)
+        val icon =
+            ui.onNodeWithTag("Tab program icon 0", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val title =
+            ui.onNodeWithText(names.value[0], useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertEquals(tab.center.x, (icon.left + title.right) / 2f, 1f)
+        assertEquals(icon.center.y, title.center.y, 1f)
+        val markerSpace = with(ui.density) { 8.dp.roundToPx() }
+        assertEquals((tab.top + tab.bottom - markerSpace) / 2f, icon.center.y, 1f)
+        for (isStacked in listOf(false, true)) {
+            ui.runOnIdle { stacked.value = isStacked }
+            val pixels = tab(0).captureToImage().toPixelMap()
+            val y = pixels.height - with(ui.density) { 6.5.dp.roundToPx() }
+            val markerColor = pixels[pixels.width / 2, y]
+            val markerColumns = (0 until pixels.width).filter { pixels[it, y] == markerColor }
+            val leadingIconPadding = with(ui.density) { (if (isStacked) 3.5.dp else 7.dp).toPx() }
+            val contentCenter = (icon.left + leadingIconPadding + title.right) / 2f - tab.left
+            assertEquals(
+                contentCenter,
+                (markerColumns.first() + markerColumns.last() + 1) / 2f,
+                1.5f,
+            )
+        }
     }
 
     @Test
@@ -246,6 +329,49 @@ class AdaptiveTabsTest {
         ui.onNodeWithText(names.value[2]).assertDoesNotExist()
         repeat(3) { assertInside(it) }
         capture("accordion-left")
+    }
+
+    @Test
+    fun theBottomWorkingMarkerIsInsetRoundedAndPulsesUniformly() {
+        count.intValue = 2
+        show(working = true, progress = TerminalProgress("indeterminate", null))
+        val leadingInset = with(ui.density) { 12.dp.roundToPx() }
+        val centerOffset = with(ui.density) { 6.5.dp.roundToPx() }
+        val topOffset = with(ui.density) { 8.dp.roundToPx() }
+        fun sample(): androidx.compose.ui.graphics.Color {
+            val pixels = tab(0).captureToImage().toPixelMap()
+            val y = pixels.height - centerOffset
+            val center = pixels[pixels.width / 2, y]
+            assertEquals(center, pixels[pixels.width / 4, y])
+            assertEquals(center, pixels[pixels.width * 3 / 4, y])
+            assertNotEquals("There should be space beside the marker", center, pixels[0, y])
+            assertNotEquals(
+                "The corner should be rounded",
+                center,
+                pixels[leadingInset, pixels.height - topOffset],
+            )
+            return center
+        }
+        val first = sample()
+        ui.waitUntil(2500) { sample() != first }
+        tab(1).performClick().assertIsSelected()
+        val inactive = tab(0).captureToImage().toPixelMap()
+        val y = inactive.height - centerOffset
+        assertEquals(
+            "The previous tab should lose its marker even with ongoing progress",
+            inactive[0, y],
+            inactive[inactive.width / 2, y],
+        )
+    }
+
+    @Test
+    fun theBottomTabBarDrawsAnEdgeToEdgeTopDivider() {
+        show()
+        val pixels = ui.onNodeWithTag("Test dock").captureToImage().toPixelMap()
+        val border = pixels[pixels.width / 2, 0]
+        assertEquals(border, pixels[0, 0])
+        assertEquals(border, pixels[pixels.width - 1, 0])
+        assertNotEquals(border, pixels[0, 5])
     }
 
     private fun capture(name: String) {

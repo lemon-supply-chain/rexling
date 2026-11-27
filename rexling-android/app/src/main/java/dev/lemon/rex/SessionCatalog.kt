@@ -10,7 +10,7 @@ internal data class SessionTarget(
         get() = sessionKey(server.id, session.id)
 
     val stripItem: SessionItem
-        get() = SessionItem(key, "${session.label} · ${server.label}")
+        get() = SessionItem(key, "${server.label} · ${session.label}")
 }
 
 internal fun sessionKey(serverId: String, sessionId: String): String =

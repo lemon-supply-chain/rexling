@@ -332,7 +332,7 @@ class TerminalMouseTest {
     }
 
     @Test
-    fun hiddenClaudeCursorCanOpenKeyboardWithoutChangingMouseClicksOrOtherEditors() {
+    fun hiddenPiCursorCanOpenKeyboardWithoutChangingMouseClicksOrOtherEditors() {
         instrumentation.runOnMainSync {
             val metrics = TerminalFonts(instrumentation.targetContext).configure(Paint(), 10f)
             var cursorTaps = 0
@@ -351,7 +351,8 @@ class TerminalMouseTest {
             assertNull(view.keyboardFocus)
             tap(8, 0)
             assertEquals(0, cursorTaps)
-            view.allowHiddenCursorInput = true
+            view.allowHiddenCursorInput =
+                ProgramProfile.resolve(ProgramIdentity.resolve(listOf("pi"))).hiddenCursorInput
             assertNotNull(view.keyboardFocus)
             tap(7, 100)
             assertEquals(0, cursorTaps)
@@ -365,6 +366,46 @@ class TerminalMouseTest {
             view.allowHiddenCursorInput = false
             view.screen = view.screen!!.copy(scroll = TerminalScroll(12, 0, 12))
             assertNull(view.keyboardFocus)
+        }
+    }
+
+    @Test
+    fun cornerControlsConsumeTheTapAndKeepSwipesAndScrolling() {
+        instrumentation.runOnMainSync {
+            var reveals = 0
+            var clicks = 0
+            var wheels = 0
+            var swipes = 0
+            val view =
+                view().apply {
+                    onPaneControlsTap = { x, y ->
+                        if (x > width - 80 && y < 80) {
+                            reveals++
+                            true
+                        } else false
+                    }
+                    onMouseClick = { _, _, _, _ -> clicks++ }
+                    onWheel = { lines, _, _, _, _ -> wheels += lines }
+                    onPaneDragEnd = { _, _ -> swipes++ }
+                }
+            val corner = view.width - 20f
+            event(view, MotionEvent.ACTION_DOWN, corner, 20f, 0)
+            event(view, MotionEvent.ACTION_UP, corner, 20f, 30)
+            assertEquals(1, reveals)
+            assertEquals(0, clicks)
+            event(view, MotionEvent.ACTION_DOWN, 5f, 5f, 100)
+            event(view, MotionEvent.ACTION_UP, 5f, 5f, 130)
+            assertEquals(1, clicks)
+            event(view, MotionEvent.ACTION_DOWN, corner, 20f, 200)
+            event(view, MotionEvent.ACTION_MOVE, corner - 350f, 20f, 300)
+            event(view, MotionEvent.ACTION_UP, corner - 350f, 20f, 400)
+            event(view, MotionEvent.ACTION_DOWN, corner, 20f, 500)
+            event(view, MotionEvent.ACTION_MOVE, corner, 320f, 600)
+            event(view, MotionEvent.ACTION_UP, corner, 320f, 700)
+            assertEquals(1, reveals)
+            assertEquals(1, clicks)
+            assertEquals(1, swipes)
+            assertTrue(wheels < 0)
         }
     }
 }

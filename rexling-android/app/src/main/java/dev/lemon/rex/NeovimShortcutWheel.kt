@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
@@ -578,25 +579,35 @@ private fun NeovimShortcutWheel(
     // Light themes lift the ring off the page with a soft shadow drawn in this margin; dark themes
     // keep the margin empty and separate the ring by its brighter surface and translucent stroke.
     Box(
-        Modifier.padding(wheelShadowMargin).drawBehind {
-            if (!colors.shadow) return@drawBehind
-            val opacity = (reveal.value * 3f).coerceIn(0f, 1f)
-            val outer = size.minDimension / 2 - wheelShadowMargin.toPx() - 1.dp.toPx()
-            val reach = wheelShadowMargin.toPx()
-            val centre = center + Offset(0f, 1.5.dp.toPx())
-            drawCircle(
-                Brush.radialGradient(
-                    0f to Color.Transparent,
-                    (outer - 2.dp.toPx()) / (outer + reach) to
-                        Color.Black.copy(alpha = .14f * opacity),
-                    1f to Color.Transparent,
-                    center = centre,
-                    radius = outer + reach,
-                ),
-                outer + reach,
-                centre,
-            )
-        },
+        Modifier.drawBehind {
+                if (!colors.shadow) return@drawBehind
+                val opacity =
+                    if (effect == NeovimShortcutEffect.FAN_OUT)
+                        ((reveal.value - .55f) / .45f).coerceIn(0f, 1f)
+                    else (reveal.value * 3f).coerceIn(0f, 1f)
+                if (opacity <= 0f) return@drawBehind
+                val outer =
+                    (size.minDimension / 2 - wheelShadowMargin.toPx() - 1.dp.toPx()) *
+                        wheelScale(effect, reveal.value)
+                if (outer <= 0f) return@drawBehind
+                val reach = wheelShadowMargin.toPx()
+                val centre = center + Offset(0f, 1.5.dp.toPx())
+                val innerCutout = Path().apply { addOval(Rect(center, outer)) }
+                clipPath(innerCutout, ClipOp.Difference) {
+                    drawCircle(
+                        Brush.radialGradient(
+                            (outer / (outer + reach)).coerceIn(0f, 1f) to
+                                Color.Black.copy(alpha = .14f * opacity),
+                            1f to Color.Transparent,
+                            center = centre,
+                            radius = outer + reach,
+                        ),
+                        outer + reach,
+                        centre,
+                    )
+                }
+            }
+            .padding(wheelShadowMargin),
     ) {
         Box(
             Modifier.size(width)
@@ -738,6 +749,8 @@ private fun NeovimShortcutWheel(
                                     edge = false,
                                     tint = colors.sector,
                                     invalidator = invalidator,
+                                    opacity =
+                                        if (colors.dark) null else RexTokens.frost.drawerOpacity,
                                 ),
                         )
                     }

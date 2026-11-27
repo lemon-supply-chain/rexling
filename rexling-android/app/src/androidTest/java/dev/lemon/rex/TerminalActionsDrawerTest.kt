@@ -1,6 +1,8 @@
 package dev.lemon.rex
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -89,7 +91,24 @@ class TerminalActionsDrawerTest {
         }
 
         ui.onNodeWithText("nvim").assertIsDisplayed()
-        ui.onNodeWithText("74 × 45").assertIsDisplayed()
+        val status =
+            ui.onNodeWithText("Viewing terminal")
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .layoutInfo
+                .coordinates
+        val dimensions =
+            ui.onNodeWithText("74 × 45")
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .layoutInfo
+                .coordinates
+        assertEquals(
+            status.positionInRoot().y + status[FirstBaseline],
+            dimensions.positionInRoot().y + dimensions[FirstBaseline],
+            1f,
+        )
+        assertTrue(status.positionInRoot().x + status.size.width <= dimensions.positionInRoot().x)
         ui.onNodeWithText(appString(R.string.paste)).assertIsNotEnabled()
         ui.onNodeWithText(appString(R.string.attach_file)).assertIsDisplayed().assertIsNotEnabled()
         val theme =

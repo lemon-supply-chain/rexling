@@ -36,6 +36,10 @@ internal fun paneIndicatorMarks(index: Int, count: Int, offset: Float): List<Pan
     }
 }
 
+private val paneIndicatorMarkHeight = 5.dp
+internal val paneIndicatorStripHeight = 28.dp
+internal val paneIndicatorBottomInset = (paneIndicatorStripHeight - paneIndicatorMarkHeight) / 2
+
 /** Progress is read in the draw phase; terminal views do not remeasure for the indicator. */
 @Composable
 internal fun PanePositionIndicator(
@@ -51,7 +55,7 @@ internal fun PanePositionIndicator(
     Canvas(modifier.width(trackWidth.dp).height(14.dp)) {
         val marks = paneIndicatorMarks(index, count, offset())
         val scale = 1.dp.toPx()
-        val h = 5.dp.toPx()
+        val h = paneIndicatorMarkHeight.toPx()
         val y = (size.height - h) / 2f
         var x = 0f
         val edges = ArrayList<Pair<Float, Float>>(marks.size)

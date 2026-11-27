@@ -47,7 +47,7 @@ android {
         applicationId = "dev.lemon.rex"
         minSdk = 28
         targetSdk = 37
-        versionCode = 171
+        versionCode = 179
         versionName = dateVersion
         buildConfigField("String", "GIT_REVISION", "\"$revision\"")
         buildConfigField("boolean", "LOCAL_CHANGES", modified.toString())
@@ -90,6 +90,10 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
+    }
+    sourceSets {
+        getByName("optimized") { kotlin.directories.add("src/release/java") }
+        getByName("profile") { kotlin.directories.add("src/release/java") }
     }
 }
 

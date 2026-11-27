@@ -77,8 +77,7 @@ internal fun SessionRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     target.session.label,
-                    style = SettingsType.row,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    style = SettingsType.paneTitle,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -91,7 +90,7 @@ internal fun SessionRow(
                             it.panes,
                         )
                     } ?: stringResource(R.string.details_not_loaded)),
-                    style = SettingsType.detail,
+                    style = SettingsType.paneDetail,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -103,14 +102,14 @@ internal fun SessionRow(
                     Text(
                         stringResource(R.string.session_current),
                         color = MaterialTheme.colorScheme.primary,
-                        style = SettingsType.detail,
+                        style = SettingsType.paneDetail,
                         fontWeight = FontWeight.SemiBold,
                     )
                 last ->
                     Text(
                         stringResource(R.string.session_previous),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = SettingsType.detail,
+                        style = SettingsType.paneDetail,
                     )
             }
         }

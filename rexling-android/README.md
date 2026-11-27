@@ -35,8 +35,9 @@ signing separately before publishing. SDK paths and caches remain ignored.
   cycle across hosts, wrapping in either direction, or long-press to return to the last session. In the session
   list, open a row’s **⋮ → Rename session** to change its name on the server.
 - Swipe the content card to switch panes, looping from last to first or first to last. The bottom tabs remember their pane;
-  pane options switch, create or close panes/tabs. Destructive close actions
-  require confirmation and end the programs in that resource.
+  pane options switch, create or close panes/tabs. Closing a tab or pane
+  requires confirmation. On Rex servers with Undo Close (API revision 23 or newer),
+  tap **Undo** shortly after closing to restore the terminal and its running programs.
 - A newly selected ready pane is automatically claimed once and resized to the
   phone. Switching away/backgrounding releases it. Manual Take/Release live in
   **⋮**. Another owner's dimensions appear in a contextual takeover notice.

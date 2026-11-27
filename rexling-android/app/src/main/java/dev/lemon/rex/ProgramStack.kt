@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import android.content.res.AssetManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,8 +15,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -24,7 +36,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+
+internal fun programStackPaintedWidth(count: Int, framed: Boolean = false): Dp {
+    val backTiles = count.coerceIn(1, 3) - 1
+    return if (backTiles == 0) {
+        if (framed) 34.dp else 22.dp
+    } else {
+        (if (framed) 32.dp else 21.dp) + (if (framed) 6.dp else 4.dp) * backTiles
+    }
+}
 
 @Composable
 internal fun ProgramStack(
@@ -51,10 +75,7 @@ internal fun ProgramStack(
     val frontY = if (framed) 4.dp else 3.5.dp
     val step = if (framed) 6.dp else 4.dp
     val slotWidth = (if (framed) 40.dp else 28.dp) + step * if (fixedSlot) 2 else others.size
-    val paintedWidth =
-        if (others.isEmpty()) {
-            if (framed) 34.dp else 22.dp
-        } else (if (framed) 32.dp else 21.dp) + step * others.size
+    val paintedWidth = programStackPaintedWidth(items.size, framed)
     val start = if (fixedSlot) (slotWidth - paintedWidth) / 2 else 0.dp
     val paneCount = pluralStringResource(R.plurals.pane_count, items.size, items.size)
     Box(
@@ -176,3 +197,77 @@ private val countdownColors = listOf(Color(0xff242220), Color.Black, Color.Black
 private fun neutralColors(dark: Boolean): List<Color> =
     if (dark) listOf(0xff65788f, 0xff3f5067, 0xff253347).map(::Color)
     else listOf(0xffffffff, 0xfff0f3f7, 0xffd3dbe6).map(::Color)
+
+/**
+ * Rounded contour approximating the card tile's outer rim in 61x48 artboard coordinates so
+ * elevation shadows match the rendered card silhouette on API 28+.
+ */
+internal val ProgramTileShadowShape: Shape =
+    object : Shape {
+        override fun createOutline(
+            size: Size,
+            layoutDirection: LayoutDirection,
+            density: Density,
+        ): Outline {
+            if (size.width <= 0f || size.height <= 0f) {
+                return Outline.Rectangle(Rect.Zero)
+            }
+            val sx = size.width / SkeuomorphicCardChrome.ARTBOARD_WIDTH
+            val sy = size.height / SkeuomorphicCardChrome.ARTBOARD_HEIGHT
+            val insetX = SkeuomorphicCardChrome.OUTER_RIM_INSET * sx
+            val insetY = SkeuomorphicCardChrome.OUTER_RIM_INSET * sy
+            val left = insetX
+            val top = insetY
+            val right = (size.width - insetX).coerceAtLeast(left)
+            val bottom = (size.height - insetY).coerceAtLeast(top)
+            return Outline.Rounded(
+                RoundRect(
+                    left = left,
+                    top = top,
+                    right = right,
+                    bottom = bottom,
+                    cornerRadius =
+                        CornerRadius(
+                            SkeuomorphicCardChrome.OUTER_RIM_CORNER_RADIUS * sx,
+                            SkeuomorphicCardChrome.OUTER_RIM_CORNER_RADIUS * sy,
+                        ),
+                ),
+            )
+        }
+    }
+
+/**
+ * Strokes the exact scaled squircle plate contour from [SkeuomorphicCardChrome.scaledPlatePath]
+ * over the tile content, falling back to an inset rounded rectangle if the catalog plate is
+ * unavailable.
+ */
+internal fun Modifier.programTileBorder(
+    assets: AssetManager,
+    color: Color,
+    width: Dp,
+    fallbackCornerRadius: Dp = 7.dp,
+): Modifier = drawWithCache {
+    val strokePx = width.toPx()
+    val stroke = Stroke(width = strokePx, join = StrokeJoin.Round, cap = StrokeCap.Round)
+    val platePath =
+        SkeuomorphicCardChrome.scaledPlatePath(assets, size.width, size.height)?.asComposePath()
+    val fallbackRadiusPx = fallbackCornerRadius.toPx()
+    onDrawWithContent {
+        drawContent()
+        if (size.width <= 0f || size.height <= 0f) return@onDrawWithContent
+        if (platePath != null) {
+            drawPath(path = platePath, color = color, style = stroke)
+        } else {
+            val half = strokePx / 2f
+            val w = (size.width - strokePx).coerceAtLeast(0f)
+            val h = (size.height - strokePx).coerceAtLeast(0f)
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(half, half),
+                size = Size(w, h),
+                cornerRadius = CornerRadius((fallbackRadiusPx - half).coerceAtLeast(0f)),
+                style = stroke,
+            )
+        }
+    }
+}

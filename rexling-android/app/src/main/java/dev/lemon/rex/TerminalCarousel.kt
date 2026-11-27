@@ -17,8 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.chrisbanes.haze.HazeState
@@ -34,7 +35,13 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+internal val TerminalPaneCornerRadius = 21.dp
 internal val LocalKeyboardSuggestions = staticCompositionLocalOf { false }
+
+internal class PaneSwipeBackdrop(val side: TabBarPosition) {
+    var railWidth by mutableIntStateOf(0)
+    var reveal by mutableStateOf<() -> Float>({ 0f })
+}
 
 @Composable
 internal fun TerminalCarousel(
@@ -79,6 +86,10 @@ internal fun TerminalCarousel(
     extendsUnderNavigation: Boolean = false,
     navigationClearance: Dp = 0.dp,
     bottomOverlayInset: Dp = 0.dp,
+    headerHeightSaved: () -> Int = { 0 },
+    headerOverlap: () -> Int = { 0 },
+    floatingMotion: FloatingPaneMotion? = null,
+    swipeBackdrop: PaneSwipeBackdrop? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val switchLayout =
@@ -132,11 +143,19 @@ internal fun TerminalCarousel(
             toast = false
         }
     }
-    BoxWithConstraints(modifier.clipToBounds()) {
+    BoxWithConstraints(if (swipeBackdrop == null) modifier.clipToBounds() else modifier) {
         val cardWidth = maxWidth.coerceAtLeast(80.dp)
         val cardLeft = 0.dp
         val stride = with(LocalDensity.current) { (cardWidth + 8.dp).toPx() }
         val leftPx = with(LocalDensity.current) { cardLeft.toPx() }
+        val revealDistance = with(LocalDensity.current) { 24.dp.toPx() }
+        DisposableEffect(swipeBackdrop, stride, revealDistance) {
+            swipeBackdrop?.reveal = {
+                val distance = abs(drag)
+                (minOf(distance, abs(stride - distance)) / revealDistance).coerceIn(0f, 1f)
+            }
+            onDispose { swipeBackdrop?.reveal = { 0f } }
+        }
         val candidate by
             remember(stride, blocks) {
                 derivedStateOf {
@@ -203,7 +222,45 @@ internal fun TerminalCarousel(
         }
         val retained = imeHandoff.retainFor(pages.map { it.first })
         val mountedPages = pages + listOfNotNull(retained?.let { it.pane to 4 })
-        Box(Modifier.fillMaxSize().frostSource(haze, showSwitch || captureBackdrop)) {
+        val motion = dragging || settling
+        val railExtension =
+            if (motion && swipeBackdrop != null)
+                Modifier.layout { measurable, constraints ->
+                    // Give the haze source room behind the rail and report the original viewport
+                    // width.
+                    val inset = swipeBackdrop.railWidth
+                    val backdrop = measurable.measure(constraints.offset(horizontal = inset))
+                    layout(constraints.maxWidth, backdrop.height) {
+                        backdrop.placeRelative(
+                            if (swipeBackdrop.side == TabBarPosition.LEFT) -inset else 0,
+                            0,
+                        )
+                    }
+                }
+            else Modifier
+        val pageInset =
+            if (motion && swipeBackdrop != null)
+                Modifier.layout { measurable, constraints ->
+                    val inset = swipeBackdrop.railWidth
+                    val page = measurable.measure(constraints.offset(horizontal = -inset))
+                    layout(page.width + inset, page.height) {
+                        page.placeRelative(
+                            if (swipeBackdrop.side == TabBarPosition.LEFT) inset else 0,
+                            0,
+                        )
+                    }
+                }
+            else Modifier
+        Box(
+            Modifier.fillMaxSize()
+                .then(railExtension)
+                .frostSource(
+                    haze,
+                    showSwitch || captureBackdrop || (motion && swipeBackdrop != null),
+                )
+                .clipToBounds()
+                .then(pageInset),
+        ) {
             for ((block, offset) in mountedPages) {
                 val retiring = retained?.pane?.id == block.id
                 val center = offset == 0 && !retiring
@@ -211,8 +268,16 @@ internal fun TerminalCarousel(
                     if (retiring) retained!!.frame else liveScreen.takeIf { block.id == liveBlock }
                 val pageOffset = offset * stride
                 key(block.id) {
-                    DisposableEffect(block.id) { onDispose { imeHandoff.remove(block.id) } }
+                    DisposableEffect(block.id, floatingMotion) {
+                        onDispose {
+                            imeHandoff.remove(block.id)
+                            floatingMotion?.forget(block.id)
+                        }
+                    }
+                    val trackFloating =
+                        center && paneLayout.any { it.id == block.id && it.floating }
                     var keyboardFocus by remember { mutableStateOf<TerminalKeyboardFocus?>(null) }
+                    val keyboardPan = remember { TerminalImePanState() }
                     Box(
                         Modifier.width(cardWidth)
                             .fillMaxHeight()
@@ -221,9 +286,14 @@ internal fun TerminalCarousel(
                                 translationX = kotlin.math.round(leftPx + position)
                                 alpha = if (retiring) 0f else 1f
                             }
+                            .then(
+                                if (trackFloating)
+                                    Modifier.floatingPaneViewport(block.id, floatingMotion)
+                                else Modifier,
+                            )
                             .clip(
                                 if (squareCorners) RoundedCornerShape(0.dp)
-                                else RoundedCornerShape(21.dp),
+                                else RoundedCornerShape(TerminalPaneCornerRadius),
                             )
                             .background(Color(palette.background))
                             .paneScrim(backdrop) {
@@ -252,11 +322,16 @@ internal fun TerminalCarousel(
                                                     profile.imeAnchor,
                                                     extendsUnderNavigation = extendsUnderNavigation,
                                                     keyboardChrome = keyboardChrome,
+                                                    headerHeightSaved = headerHeightSaved,
+                                                    headerOverlap = headerOverlap,
+                                                    pan = keyboardPan,
                                                 ) {
                                                     keyboardFocus
                                                 }
                                                 .clipToBounds(),
                                         update = { view ->
+                                            if (trackFloating)
+                                                floatingMotion?.trackView(block.id, view)
                                             view.keepAwakeMode =
                                                 if (center) keepAwake else KeepScreenAwake.SYSTEM
                                             imeHandoff.mount(block, view)
@@ -265,6 +340,10 @@ internal fun TerminalCarousel(
                                             }
                                             view.onKeyboardFocus = { keyboardFocus = it }
                                             keyboardFocus = view.keyboardFocus
+                                            view.keyboardPan = keyboardPan.takeIf {
+                                                center && block.id == liveBlock
+                                            }
+                                            if (view.keyboardPan == null) keyboardPan.followCursor()
                                             view.onDimensions =
                                                 if (center && block.id == liveBlock) onDimensions
                                                 else { _, _ -> }
@@ -359,8 +438,8 @@ internal fun TerminalCarousel(
                                     }
                             }
                             if (center && (frame?.scroll?.below ?: 0) > 0) {
-                                Text(
-                                    stringResource(R.string.label_latest),
+                                ScrollToLatestButton(
+                                    haze,
                                     Modifier.align(Alignment.BottomEnd)
                                         .padding(
                                             end = 12.dp,
@@ -370,13 +449,8 @@ internal fun TerminalCarousel(
                                                 else 10.dp) +
                                                     bottomControlsInset +
                                                     bottomOverlayInset,
-                                        )
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(MaterialTheme.colorScheme.surface)
-                                        .clickable(role = Role.Button, onClick = onBottom)
-                                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.primary,
+                                        ),
+                                    onClick = onBottom,
                                 )
                             }
                         }
@@ -387,8 +461,9 @@ internal fun TerminalCarousel(
         if (blocks.size > 1) {
             Box(
                 Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = bottomOverlayInset)
                     .fillMaxWidth()
-                    .height(28.dp)
+                    .height(paneIndicatorStripHeight)
                     .clickable(role = Role.Button, onClick = onPanes)
                     .semantics {
                         contentDescription =

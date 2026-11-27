@@ -1,6 +1,7 @@
 package dev.lemon.rex
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
@@ -37,18 +39,23 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -138,7 +145,7 @@ class TabStackFanTest {
     }
 
     @Test
-    fun singleTapStackExpandsOppositeSideAndDoubleTapSelectsCard() {
+    fun swipeAndStackTapPageWhileSingleTapSelectsPrimaryCard() {
         var picked = ""
         ui.setContent {
             RexTheme(false, ThemeCatalog.defaults[1]) {
@@ -172,13 +179,6 @@ class TabStackFanTest {
         assertTrue(o3.left < b2.right)
         save("Fan bottom fixture", "tab-stack-fan-bottom-up.png")
 
-        // Single tap on a non-stacked card does not select or close.
-        card1.performTouchInput { click() }
-        ui.mainClock.advanceTimeBy(250)
-        ui.waitForIdle()
-        assertEquals("", picked)
-        ui.onNodeWithTag("Tab stack fan").assertIsDisplayed()
-
         // Tapping inside the safe zone (from the fan's top + margin down to the tab bar's bottom
         // edge) does not dismiss the fan.
         val scrim = ui.onNodeWithTag("Tab stack fan scrim")
@@ -191,10 +191,8 @@ class TabStackFanTest {
         ui.waitForIdle()
         ui.onNodeWithTag("Tab stack fan").assertIsDisplayed()
 
-        // Single tap on the right-most stacked slot keeps 3 fanned cards (2, 3, 4) and stacks 0, 1
-        // on the left.
-        card2.performTouchInput { click() }
-        ui.mainClock.advanceTimeBy(250)
+        // Swiping left on the fan pages forward to cards 2, 3, 4 and stacks 0, 1 on the left.
+        card1.performTouchInput { swipeLeft() }
         ui.waitForIdle()
 
         val card2Moved = ui.onNodeWithTag("Tab fan card pane-2").assertIsDisplayed()
@@ -213,15 +211,23 @@ class TabStackFanTest {
         assertTrue(l0.right > b2Moved.left)
         save("Fan bottom fixture", "tab-stack-fan-paged-left-stack.png")
 
-        // Single tap on the left-most stacked slot returns to the first 3 cards.
-        card2Moved.performTouchInput { click() }
-        ui.mainClock.advanceTimeBy(250)
+        // Swiping right returns to the first 3 cards.
+        card3.performTouchInput { swipeRight() }
         ui.waitForIdle()
         ui.onNodeWithTag("Tab fan card pane-0").assertIsDisplayed()
         ui.onNodeWithTag("Tab fan overflow pane-3").assertIsDisplayed()
 
-        // Double tap selects the card (even when stacked!) and closes the fan.
-        ui.onNodeWithTag("Tab fan card pane-2").performTouchInput { doubleClick() }
+        // Single tapping the exposed trailing stack pad pages forward; leading stack pad pages
+        // back.
+        ui.onNodeWithTag("Tab fan trailing hit").performTouchInput { click() }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Tab fan card pane-4").assertIsDisplayed()
+        ui.onNodeWithTag("Tab fan leading hit").performTouchInput { click() }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Tab fan card pane-0").assertIsDisplayed()
+
+        // Single tap immediately selects even an outer stacked primary card and closes the fan.
+        ui.onNodeWithTag("Tab fan card pane-2").performTouchInput { click() }
         ui.waitForIdle()
         assertEquals("pane-2", picked)
         ui.onNodeWithTag("Tab stack fan").assertDoesNotExist()
@@ -367,10 +373,8 @@ class TabStackFanTest {
         assertTrue(o3.bottom > b2.top)
         save("Fan rail fixture", "tab-stack-fan-rail-right.png")
 
-        // Single tap on the top-most stacked card keeps 3 fanned cards (2, 3, 4) and stacks 0, 1 at
-        // the bottom.
-        ui.onNodeWithTag("Tab fan card pane-2").performTouchInput { click() }
-        ui.mainClock.advanceTimeBy(250)
+        // Swiping down on the vertical fan pages to cards (2, 3, 4) and stacks 0, 1 at the bottom.
+        ui.onNodeWithTag("Tab fan card pane-1").performTouchInput { swipeDown() }
         ui.waitForIdle()
         val b2Moved = ui.onNodeWithTag("Tab fan card pane-2").fetchSemanticsNode().boundsInRoot
         ui.onNodeWithTag("Tab fan card pane-3").assertIsDisplayed()
@@ -378,6 +382,10 @@ class TabStackFanTest {
         val l0 = ui.onNodeWithTag("Tab fan leading pane-0").fetchSemanticsNode().boundsInRoot
         assertTrue(l0.center.y > b2Moved.center.y)
         assertTrue(l0.top < b2Moved.bottom)
+
+        ui.onNodeWithTag("Tab fan card pane-3").performTouchInput { swipeUp() }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Tab fan card pane-0").assertIsDisplayed()
 
         ui.onNodeWithTag("Tab stack fan scrim").performTouchInput { click() }
         ui.waitForIdle()
@@ -397,17 +405,14 @@ class TabStackFanTest {
         tab.performClick()
         ui.waitForIdle()
 
-        // Page 0 -> 3 -> 6 -> 9 by tapping the visible trailing primary/stack hit target in root
-        // space.
+        // Page 0 -> 3 -> 6 -> 9 by swiping left across the fan.
         val expectedPages = listOf(0, 3, 6, 9)
         for (idx in 0 until expectedPages.lastIndex) {
             val start = expectedPages[idx]
-            val outerTag = "Tab fan card pane-${start + 2}"
+            val middleTag = "Tab fan card pane-${start + 1}"
             ui.onNodeWithTag("Tab fan card pane-$start").assertIsDisplayed()
-            ui.onNodeWithTag(outerTag).assertIsDisplayed()
-            val outerCenter = ui.onNodeWithTag(outerTag).fetchSemanticsNode().boundsInRoot.center
-            ui.onNodeWithTag("Tab stack fan").performTouchInput { click(outerCenter) }
-            ui.mainClock.advanceTimeBy(250)
+            ui.onNodeWithTag(middleTag).assertIsDisplayed()
+            ui.onNodeWithTag(middleTag).performTouchInput { swipeLeft() }
             ui.waitForIdle()
         }
 
@@ -415,12 +420,9 @@ class TabStackFanTest {
         ui.onNodeWithTag("Tab fan card pane-10").assertIsDisplayed()
         ui.onNodeWithTag("Tab fan card pane-11").assertIsDisplayed()
 
-        // Page 9 -> 6 -> 3 -> 0 by tapping the leading outer card.
+        // Page 9 -> 6 -> 3 -> 0 by swiping right across the fan.
         for (start in listOf(9, 6, 3)) {
-            val leadTag = "Tab fan card pane-$start"
-            val leadCenter = ui.onNodeWithTag(leadTag).fetchSemanticsNode().boundsInRoot.center
-            ui.onNodeWithTag("Tab stack fan").performTouchInput { click(leadCenter) }
-            ui.mainClock.advanceTimeBy(250)
+            ui.onNodeWithTag("Tab fan card pane-${start + 1}").performTouchInput { swipeRight() }
             ui.waitForIdle()
         }
 
@@ -528,7 +530,7 @@ class TabStackFanTest {
         ui.onNode(androidx.compose.ui.test.isSelected()).performClick()
         ui.waitForIdle()
         ui.onNodeWithTag("Tab fan card pane-1").assertIsDisplayed()
-        ui.onNodeWithTag("Tab fan card pane-3").performTouchInput { doubleClick() }
+        ui.onNodeWithTag("Tab fan card pane-3").performTouchInput { click() }
         ui.waitForIdle()
         assertEquals("pane-3", selectedPane)
         ui.onNodeWithTag("Tab stack fan").assertDoesNotExist()
@@ -835,11 +837,9 @@ class TabStackFanTest {
         ui.waitForIdle()
 
         // Page forward twice to reach the end (windowStart = 5 for 8 items -> cards 5, 6, 7).
-        ui.onNodeWithTag("Tab fan card pane-2").performTouchInput { click() }
-        ui.mainClock.advanceTimeBy(250)
+        ui.onNodeWithTag("Tab fan card pane-1").performTouchInput { swipeLeft() }
         ui.waitForIdle()
-        ui.onNodeWithTag("Tab fan card pane-4").performTouchInput { click() }
-        ui.mainClock.advanceTimeBy(250)
+        ui.onNodeWithTag("Tab fan card pane-4").performTouchInput { swipeLeft() }
         ui.waitForIdle()
         ui.onNodeWithTag("Tab fan card pane-5").assertIsDisplayed()
 
@@ -848,9 +848,8 @@ class TabStackFanTest {
         ui.waitForIdle()
         ui.onNodeWithTag("Tab fan card pane-2").assertIsDisplayed()
 
-        // Single-tapping the leading outer card pages straight back to 0, 1, 2.
-        ui.onNodeWithTag("Tab fan card pane-2").performTouchInput { click() }
-        ui.mainClock.advanceTimeBy(250)
+        // Swiping right pages straight back to 0, 1, 2.
+        ui.onNodeWithTag("Tab fan card pane-3").performTouchInput { swipeRight() }
         ui.waitForIdle()
         ui.onNodeWithTag("Tab fan card pane-0").assertIsDisplayed()
         ui.onNodeWithTag("Tab fan card pane-1").assertIsDisplayed()
@@ -957,5 +956,133 @@ class TabStackFanTest {
         } finally {
             ui.mainClock.autoAdvance = true
         }
+    }
+
+    @Test
+    fun selectedFanCardBorderFollowsPlateSquircleContour() {
+        val threeItems =
+            items(3).mapIndexed { index, item ->
+                item.copy(selected = index == 1, working = index == 1)
+            }
+        var dark by mutableStateOf(false)
+        var borderArgb = 0
+        ui.setContent {
+            RexTheme(dark, ThemeCatalog.defaults[if (dark) 0 else 1]) {
+                borderArgb = fanSelectionBorderColor(MaterialTheme.colorScheme).toArgb()
+                var fanned by remember { mutableStateOf(false) }
+                var anchorBounds by remember { mutableStateOf(Rect.Zero) }
+                var barBounds by remember { mutableStateOf(Rect.Zero) }
+
+                Box(
+                    Modifier.size(411.dp, 640.dp)
+                        .background(MaterialTheme.colorScheme.background)
+                        .testTag("Selected border fixture"),
+                ) {
+                    TabStackFan(
+                        visible = fanned,
+                        items = threeItems,
+                        anchorBounds = anchorBounds,
+                        barBounds = barBounds,
+                        preferredAxis = Orientation.Horizontal,
+                        onSelect = { fanned = false },
+                        onDismiss = { fanned = false },
+                        bar = {
+                            FloatingTabBar(Offset(0.5f, 1f), {}) { handle ->
+                                Row(
+                                    Modifier.width(FloatingTabBarWidth)
+                                        .height(FloatingTabBarHeight)
+                                        .background(
+                                            MaterialTheme.colorScheme.surface,
+                                            RexTokens.shape.tabCell,
+                                        )
+                                        .onGloballyPositioned { barBounds = it.boundsInRoot() }
+                                        .padding(horizontal = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    handle()
+                                    Box(
+                                        Modifier.height(45.dp)
+                                            .width(88.dp)
+                                            .onGloballyPositioned {
+                                                anchorBounds = it.boundsInRoot()
+                                            }
+                                            .clickable { fanned = !fanned }
+                                            .testTag("Active stacked tab"),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        ProgramStack(
+                                            threeItems.map { it.program },
+                                            1,
+                                            fixedSlot = true,
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        val tab = ui.onNodeWithTag("Active stacked tab")
+        ui.awaitDisplayed(tab)
+        tab.performClick()
+        ui.waitForIdle()
+
+        fun assertSelectedBorder(mode: String) {
+            ui.waitForIdle()
+            val expectedArgb = borderArgb
+            val cardBitmap =
+                ui.onNodeWithTag("Tab fan card pane-1")
+                    .assertIsDisplayed()
+                    .captureToImage()
+                    .asAndroidBitmap()
+            save("Selected border fixture", "tab-stack-fan-selected-border-$mode.png")
+
+            val tileW = cardBitmap.width.toFloat()
+            val tileH = cardBitmap.height * (38f / 48f)
+            val tileTop = (cardBitmap.height - tileH) / 2f
+
+            fun matchesBorder(x: Int, y: Int, maxChannelDelta: Int): Boolean {
+                val pixel =
+                    cardBitmap.getPixel(
+                        x.coerceIn(0, cardBitmap.width - 1),
+                        y.coerceIn(0, cardBitmap.height - 1),
+                    )
+                if (Color.alpha(pixel) < 128) return false
+                return abs(Color.red(pixel) - Color.red(expectedArgb)) <= maxChannelDelta &&
+                    abs(Color.green(pixel) - Color.green(expectedArgb)) <= maxChannelDelta &&
+                    abs(Color.blue(pixel) - Color.blue(expectedArgb)) <= maxChannelDelta
+            }
+
+            // Top straight-edge midpoint on the plate contour (61x48 artboard).
+            val topEdgeX = (tileW * 0.5f).toInt()
+            val topEdgeY = (tileTop + tileH * (1.23f / 48f)).toInt()
+            assertTrue(
+                "$mode: top straight edge must carry selection stroke",
+                matchesBorder(topEdgeX, topEdgeY, maxChannelDelta = 25),
+            )
+
+            // Top-right squircle corner midpoint (55.756, 5.244) in the 61x48 artboard.
+            val squircleCornerX = (tileW * (55.756f / 61f)).toInt()
+            val squircleCornerY = (tileTop + tileH * (5.244f / 48f)).toInt()
+            assertTrue(
+                "$mode: squircle corner midpoint must carry selection stroke",
+                matchesBorder(squircleCornerX, squircleCornerY, maxChannelDelta = 25),
+            )
+
+            // Legacy RoundedCornerShape(9.dp) corner midpoint must remain clear of the stroke.
+            val legacyCornerX = (tileW * ((48f - 2.64f) / 48f)).toInt()
+            val legacyCornerY = (tileTop + tileH * (2.64f / 38f)).toInt()
+            assertFalse(
+                "$mode: legacy 9dp rounded corner must not draw detached selection stroke",
+                matchesBorder(legacyCornerX, legacyCornerY, maxChannelDelta = 40),
+            )
+            cardBitmap.recycle()
+        }
+
+        assertSelectedBorder("light")
+        ui.runOnIdle { dark = true }
+        assertSelectedBorder("dark")
     }
 }

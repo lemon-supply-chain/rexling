@@ -18,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -44,6 +46,8 @@ class MultiPaneMoveTest {
         val scope = CoroutineScope(Dispatchers.Main)
         val side = mutableStateOf(TabBarPosition.LEFT)
         val acknowledgedRatio = mutableFloatStateOf(.5f)
+        val singlePane = mutableStateOf(false)
+        val focusedPane = mutableStateOf("")
         val placements =
             listOf(
                 PanePlacement("left", 0f, 0f, .5f, 1f),
@@ -56,13 +60,23 @@ class MultiPaneMoveTest {
                 PaneSplitLine("rows", false, .5f, .5f, 0f, .5f, 1f, "upper", "lower"),
             )
         lateinit var client: RexConnection
+        var accent = Color.Unspecified
         ui.runOnUiThread { client = RexConnection(app, scope, "") }
         try {
             ui.setContent {
                 MaterialTheme {
                     val rail = side.value
+                    val primary = MaterialTheme.colorScheme.primary
+                    SideEffect { accent = primary }
                     val (serverPanes, serverSplits) =
-                        movedSplit(placements, splits, splits.first(), acknowledgedRatio.floatValue)
+                        if (singlePane.value) listOf(placements.first()) to emptyList()
+                        else
+                            movedSplit(
+                                placements,
+                                splits,
+                                splits.first(),
+                                acknowledgedRatio.floatValue,
+                            )
                     val sidebar: @androidx.compose.runtime.Composable () -> Unit = {
                         TerminalTabRail(
                             emptyList(),
@@ -73,7 +87,6 @@ class MultiPaneMoveTest {
                             { 0 },
                             rail,
                             TabRailStyle.ICONS,
-                            island = true,
                         ) {}
                     }
                     Row(Modifier.width(380.dp).height(360.dp)) {
@@ -84,7 +97,7 @@ class MultiPaneMoveTest {
                                 "session",
                                 "tab",
                                 serverPanes,
-                                focused = "",
+                                focused = focusedPane.value,
                                 liveBlock = "",
                                 controlled = false,
                                 programs = emptyMap(),
@@ -99,7 +112,6 @@ class MultiPaneMoveTest {
                                 extendsUnderNavigation = false,
                                 hazeState = remember { HazeState() },
                                 captureBackdrop = false,
-                                sideRail = rail,
                                 splits = serverSplits,
                             )
                         }
@@ -109,13 +121,8 @@ class MultiPaneMoveTest {
             }
             val paneBorder = with(ui.density) { 1.5.dp.roundToPx() }
             val gutter = with(ui.density) { 4.dp.toPx() }
-            val outer = with(ui.density) { 8.dp.toPx() }
-            for (rail in listOf(TabBarPosition.LEFT, TabBarPosition.RIGHT)) {
+            for (rail in listOf(TabBarPosition.BOTTOM, TabBarPosition.LEFT, TabBarPosition.RIGHT)) {
                 ui.runOnIdle { side.value = rail }
-                val tabs =
-                    ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
-                        .fetchSemanticsNode()
-                        .boundsInRoot
                 val workspace =
                     ui.onNodeWithTag("Tiled workspace").fetchSemanticsNode().boundsInRoot
                 val (left, upper, lower) =
@@ -124,11 +131,30 @@ class MultiPaneMoveTest {
                         .map { it.boundsInRoot }
                 assertEquals(gutter, upper.left - left.right - 2 * paneBorder, 2f)
                 assertEquals(gutter, lower.top - upper.bottom - 2 * paneBorder, 2f)
-                assertEquals(outer, left.top - workspace.top - paneBorder, 2f)
-                val sidebarGap =
-                    if (rail == TabBarPosition.LEFT) left.left - tabs.right
-                    else tabs.left - upper.right
-                assertEquals(gutter, sidebarGap - paneBorder, 2f)
+                assertEquals(gutter, left.top - workspace.top - paneBorder, 2f)
+                assertEquals(gutter, workspace.bottom - left.bottom - paneBorder, 2f)
+                assertEquals(gutter, left.left - workspace.left - paneBorder, 2f)
+                assertEquals(gutter, workspace.right - upper.right - paneBorder, 2f)
+                if (rail != TabBarPosition.BOTTOM) {
+                    val tabs =
+                        ui.onNodeWithContentDescription(appString(R.string.a11y_tabs))
+                            .fetchSemanticsNode()
+                            .boundsInRoot
+                    val sidebarGap =
+                        if (rail == TabBarPosition.LEFT) left.left - tabs.right
+                        else tabs.left - upper.right
+                    assertEquals(gutter, sidebarGap - paneBorder, 2f)
+                }
+                ui.runOnIdle { singlePane.value = true }
+                val single =
+                    ui.onNodeWithContentDescription(appString(R.string.a11y_focus_pane))
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                assertEquals(left.top, single.top, 1f)
+                assertEquals(left.bottom, single.bottom, 1f)
+                assertEquals(left.left, single.left, 1f)
+                assertEquals(upper.right, single.right, 1f)
+                ui.runOnIdle { singlePane.value = false }
             }
             val columns =
                 ui.onNodeWithContentDescription(appString(R.string.a11y_resize_panes_side_by_side))
@@ -143,7 +169,7 @@ class MultiPaneMoveTest {
             val first = columns.fetchSemanticsNode().boundsInRoot.center.x
             assertTrue(first > before)
             val workspace = ui.onNodeWithTag("Tiled workspace").fetchSemanticsNode().boundsInRoot
-            val firstRatio = .5f + (first - before) / (workspace.width - outer)
+            val firstRatio = .5f + (first - before) / (workspace.width - gutter)
             columns.performTouchInput {
                 down(center)
                 moveBy(Offset(28.dp.toPx(), 0f), delayMillis = 100)
@@ -156,6 +182,19 @@ class MultiPaneMoveTest {
             // acknowledged layout after the debounce; the local ratio must hold until then.
             columns.performTouchInput { up() }
             ui.waitForIdle()
+
+            fun paneOutline(): Color {
+                val pixels = ui.onNodeWithTag("Tiled workspace").captureToImage().toPixelMap()
+                val y = with(ui.density) { 2 * 2.dp.roundToPx() } + paneBorder / 2
+                return pixels[pixels.width / 4, y]
+            }
+            ui.runOnIdle { focusedPane.value = "left" }
+            assertEquals(accent, paneOutline())
+            ui.runOnIdle { singlePane.value = true }
+            assertTrue(paneOutline() != accent)
+            ui.onNodeWithContentDescription(appString(R.string.a11y_pane_actions)).performClick()
+            ui.onNodeWithContentDescription(appString(PaneSplit.RIGHT.labelRes)).assertIsDisplayed()
+            ui.onNodeWithContentDescription(appString(R.string.a11y_move_pane)).assertDoesNotExist()
         } finally {
             ui.runOnIdle {
                 client.close()

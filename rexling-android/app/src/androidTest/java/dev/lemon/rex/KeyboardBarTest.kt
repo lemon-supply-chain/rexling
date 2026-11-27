@@ -1,27 +1,41 @@
 package dev.lemon.rex
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -34,6 +48,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -127,19 +142,21 @@ class KeyboardBarTest {
         keyboard()
         ui.onNodeWithContentDescription("Shift").performTouchInput { click() }
         ui.onNodeWithContentDescription("Shift").assertIsSelected()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performScrollTo()
         joystick("left")
         ui.onNodeWithContentDescription("Shift").assertIsNotSelected()
         joystick("right")
-        ui.onNodeWithContentDescription("Shift").performTouchInput { click() }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_tab_key)).performTouchInput {
-            click()
-        }
+        ui.onNodeWithContentDescription("Shift").performScrollTo().performTouchInput { click() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_tab_key))
+            .performScrollTo()
+            .performTouchInput { click() }
         ui.runOnIdle { assertEquals(listOf("\u001b[1;2D", "\u001b[C", "\u001b[Z"), sent) }
     }
 
     @Test
     fun holdingShiftWhileSteeringTheJoystickModifiesEveryRepeat() {
         keyboard()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performScrollTo()
         ui.mainClock.autoAdvance = false
         val root = ui.onNodeWithTag("Keyboard test area")
         val origin = root.fetchSemanticsNode().boundsInRoot.topLeft
@@ -174,6 +191,7 @@ class KeyboardBarTest {
     @Test
     fun nativeHoldSlideRepeatsAndReleaseDoesNotActivateANeighboringButton() {
         keyboard()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performScrollTo()
         val bounds = nativeBounds(appString(R.string.a11y_arrow_keys))
         val down = SystemClock.uptimeMillis()
         ui.mainClock.autoAdvance = false
@@ -214,6 +232,7 @@ class KeyboardBarTest {
     @Test
     fun joystickPreviewDoesNotMoveTheDockAndUsesOneShotShift() {
         keyboard()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performScrollTo()
         val tabBefore =
             ui.onNodeWithContentDescription(appString(R.string.a11y_tab_key))
                 .fetchSemanticsNode()
@@ -274,6 +293,7 @@ class KeyboardBarTest {
             }
         }
         ui.waitForIdle()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performScrollTo()
         ui.mainClock.autoAdvance = false
         val arrow = ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
         arrow.performTouchInput {
@@ -336,42 +356,78 @@ class KeyboardBarTest {
             .performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_joystick))
             .assertDoesNotExist()
-        ui.onNodeWithContentDescription("Enter").assertIsNotEnabled().performTouchInput { click() }
+        ui.onNodeWithContentDescription("Enter")
+            .performScrollTo()
+            .assertIsNotEnabled()
+            .performTouchInput { click() }
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
     }
 
     @Test
     fun narrowPhoneKeepsEveryControlOnOneRowAndModifiersFullyVisible() {
         keyboard(width = 320.dp)
-        val labels =
+        val pinnedAndVisible =
             listOf(
+                appString(R.string.a11y_show_extra_keys),
                 "Escape",
                 appString(R.string.a11y_control),
                 "Alt",
                 "Shift",
-                appString(R.string.a11y_tab_key),
-                appString(R.string.a11y_arrow_keys),
-                "Enter",
                 appString(R.string.a11y_hide_keyboard),
             )
-        val bounds = labels.map { label ->
+        val bounds = pinnedAndVisible.map { label ->
             ui.onNodeWithContentDescription(label)
                 .assertIsDisplayed()
                 .fetchSemanticsNode()
                 .boundsInRoot
         }
-        bounds.forEach { assertEquals(bounds.first().center.y, it.center.y, 1f) }
-        bounds.zipWithNext().forEach { (a, b) ->
-            assertTrue("Groups and buttons must not overlap", a.right <= b.left)
+        val leadingDivider =
+            ui.onNodeWithTag("Keyboard bar leading divider")
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val trailingDivider =
+            ui.onNodeWithTag("Keyboard bar trailing divider")
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val allItems =
+            listOf(bounds[0], leadingDivider) +
+                bounds.subList(1, 5) +
+                listOf(trailingDivider, bounds[5])
+        allItems.forEach { assertEquals(bounds.first().center.y, it.center.y, 1f) }
+        allItems.zipWithNext().forEach { (a, b) ->
+            assertTrue("Groups, dividers and buttons must not overlap", a.right <= b.left)
         }
-        assertTrue(
-            "Reclaimed chevron space must keep keys at least 34 dp wide",
-            bounds[5].width >= with(ui.density) { 34.dp.toPx() } - 1f,
+        assertEquals(1f, leadingDivider.width, .5f)
+        assertEquals(
+            with(ui.density) { KeyboardBarDividerHeight.toPx() },
+            leadingDivider.height,
+            1f,
         )
-        val widths = bounds.take(7).map { it.width }
+        assertEquals(1f, trailingDivider.width, .5f)
+        val widths = bounds.subList(1, 5).map { it.width }
+        assertTrue(
+            "Middle keys must keep generous touch width",
+            widths.min() >= with(ui.density) { KeyboardBarMinKeyWidth.toPx() } - 1f,
+        )
         assertTrue("No key should lose pixels to clipping", widths.max() - widths.min() <= 1f)
-        ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
-            .assertIsNotDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_terminal_keys)).performTouchInput {
+            swipeLeft()
+        }
+        ui.onNodeWithContentDescription("Enter").assertIsDisplayed()
+        assertEquals(
+            bounds[0],
+            ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
+                .fetchSemanticsNode()
+                .boundsInRoot,
+        )
+        assertEquals(
+            bounds[5],
+            ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard))
+                .fetchSemanticsNode()
+                .boundsInRoot,
+        )
     }
 
     @Test
@@ -397,18 +453,62 @@ class KeyboardBarTest {
                 appString(R.string.a11y_tab_key),
                 appString(R.string.a11y_arrow_keys),
                 "Enter",
-            )) ui.onNodeWithContentDescription(label).assertIsNotEnabled().performTouchInput {
-            click()
-        }
+            )) ui.onNodeWithContentDescription(label)
+            .performScrollTo()
+            .assertIsNotEnabled()
+            .performTouchInput { click() }
         ui.runOnIdle { assertTrue("Readable icons must not enable terminal input", sent.isEmpty()) }
+    }
+
+    @Test
+    fun controlRowKeepsAllKeysWhenTheKeyboardToggleLivesInTheSidebar() {
+        ui.setContent {
+            MaterialTheme {
+                KeyboardBar(
+                    true,
+                    true,
+                    false,
+                    false,
+                    false,
+                    true,
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    { sent += it },
+                    onKeyboard = null,
+                )
+            }
+        }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
+            .assertIsDisplayed()
+        ui.onNodeWithTag("Keyboard bar leading divider").assertIsDisplayed()
+        ui.onNodeWithTag("Keyboard bar trailing divider").assertDoesNotExist()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard)).assertDoesNotExist()
+        for (label in
+            listOf(
+                "Escape",
+                appString(R.string.a11y_control),
+                "Alt",
+                "Shift",
+                appString(R.string.a11y_tab_key),
+                appString(R.string.a11y_arrow_keys),
+                "Enter",
+            )) {
+            ui.onNodeWithContentDescription(label).performScrollTo().assertIsDisplayed()
+        }
+        ui.onNodeWithContentDescription("Enter").performScrollTo().performClick()
+        ui.runOnIdle { assertEquals(listOf("enter"), sent) }
     }
 
     @Test
     fun navigationPendingKeepsTheEntireKeyRowCrispWhileInputIsDisabled() {
         val ready = mutableStateOf(true)
+        val showTopDivider = mutableStateOf(true)
         ui.setContent {
             MaterialTheme {
-                Box(Modifier.width(360.dp)) {
+                Box(Modifier.width(360.dp).testTag("Keyboard test area")) {
                     KeyboardBar(
                         ready.value,
                         ready.value,
@@ -423,14 +523,30 @@ class KeyboardBarTest {
                         {},
                         { sent += it },
                         readable = true,
+                        showTopDivider = showTopDivider.value,
                         onKeyboard = {},
                     )
                 }
             }
         }
-        val before = ui.onRoot().captureToImage().toPixelMap()
+        val before = ui.onNodeWithTag("Keyboard test area").captureToImage().toPixelMap()
+        assertEquals(
+            "The toolbar divider should reach the left edge",
+            before[before.width / 2, 0],
+            before[0, 0],
+        )
+        assertEquals(
+            "The toolbar divider should reach the right edge",
+            before[before.width / 2, 0],
+            before[before.width - 1, 0],
+        )
+        assertNotEquals(
+            "The divider should be distinct from the inset beneath it",
+            before[0, 0],
+            before[0, before.height / 2],
+        )
         ui.runOnIdle { ready.value = false }
-        val pending = ui.onRoot().captureToImage().toPixelMap()
+        val pending = ui.onNodeWithTag("Keyboard test area").captureToImage().toPixelMap()
         for (y in 0 until before.height) for (x in 0 until before.width) assertEquals(
             "Navigation must not fade the row at $x,$y",
             before[x, y],
@@ -441,61 +557,283 @@ class KeyboardBarTest {
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
         ui.runOnIdle { ready.value = true }
         ui.onNodeWithContentDescription("Escape").assertIsEnabled()
+        ui.runOnIdle { showTopDivider.value = false }
+        val seamless = ui.onNodeWithTag("Keyboard test area").captureToImage().toPixelMap()
+        assertEquals(before.height, seamless.height)
+        for (x in 0 until seamless.width) assertEquals(
+            seamless[0, seamless.height / 2],
+            seamless[x, 0],
+        )
     }
 
     @Test
-    fun swipeRightRevealsChevronBeforeEscapeAndClosingRestoresTheRow() {
-        keyboard()
-        val escapeBefore =
-            ui.onNodeWithContentDescription("Escape").fetchSemanticsNode().boundsInRoot
-        val keyboardBefore =
-            ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard))
+    fun toolbarColorTracksTheKeyboardInsetsInBothDirections() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        var enabled by mutableStateOf(false)
+        var keyboardBottom by mutableIntStateOf(0)
+        var keyboardSource by mutableIntStateOf(0)
+        var keyboardTarget by mutableIntStateOf(0)
+        var dark by mutableStateOf(false)
+        val appSurface = Color.Magenta
+        ui.setContent {
+            val configuration =
+                Configuration(LocalConfiguration.current).apply {
+                    uiMode =
+                        (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                            if (dark) Configuration.UI_MODE_NIGHT_YES
+                            else Configuration.UI_MODE_NIGHT_NO
+                }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                MaterialTheme(colorScheme = lightColorScheme(surface = appSurface)) {
+                    Column(
+                        Modifier.width(360.dp).background(MaterialTheme.colorScheme.surface),
+                    ) {
+                        Spacer(Modifier.size(12.dp).testTag("Outside keyboard toolbar"))
+                        Box(
+                            Modifier.testTag("Keyboard toolbar")
+                                .consumeWindowInsets(WindowInsets(bottom = keyboardBottom)),
+                        ) {
+                            KeyboardToolbarTheme(
+                                enabled,
+                                coverNavigation = true,
+                                ime = WindowInsets(bottom = keyboardBottom),
+                                source = WindowInsets(bottom = keyboardSource),
+                                target = WindowInsets(bottom = keyboardTarget),
+                                navigation = WindowInsets(bottom = 24),
+                            ) {
+                                KeyboardBar(
+                                    true,
+                                    true,
+                                    false,
+                                    false,
+                                    false,
+                                    keyboardBottom > 0,
+                                    {},
+                                    {},
+                                    {},
+                                    {},
+                                    {},
+                                    {},
+                                    showTopDivider = false,
+                                    onKeyboard = {},
+                                )
+                            }
+                        }
+                        Spacer(Modifier.size(12.dp).testTag("Below keyboard toolbar"))
+                    }
+                }
+            }
+        }
+        fun background(tag: String) = ui.onNodeWithTag(tag).captureToImage().toPixelMap()[0, 0]
+        fun toolbarPixels() = ui.onNodeWithTag("Keyboard toolbar").captureToImage().toPixelMap()
+        fun toolbarColor() = toolbarPixels()[0, 0]
+        ui.runOnIdle {
+            enabled = true
+            keyboardTarget = 320
+        }
+        assertEquals(appSurface, toolbarColor())
+        val light = dynamicLightColorScheme(context).surfaceContainer
+        val night = dynamicDarkColorScheme(context).surfaceContainer
+        val opening =
+            listOf(72, 160, 248).map { inset ->
+                ui.runOnIdle { keyboardBottom = inset }
+                val pixels = toolbarPixels()
+                assertEquals(pixels[0, 0], pixels[0, pixels.height - 1])
+                pixels[0, 0]
+            }
+        assertEquals(opening.size, opening.distinct().size)
+        assertTrue(opening.none { it == appSurface || it == light })
+        ui.runOnIdle { keyboardBottom = 320 }
+        assertEquals(light, toolbarColor())
+        ui.runOnIdle {
+            dark = true
+            keyboardSource = 320
+            keyboardTarget = 380
+        }
+        assertEquals(night, toolbarColor())
+        ui.runOnIdle { keyboardBottom = 380 }
+        assertEquals(night, toolbarColor())
+        val openHeight = ui.onNodeWithTag("Keyboard toolbar").captureToImage().height
+        assertEquals(appSurface, background("Outside keyboard toolbar"))
+        assertEquals(appSurface, background("Below keyboard toolbar"))
+        ui.runOnIdle {
+            keyboardSource = 380
+            keyboardTarget = 0
+        }
+        assertEquals(night, toolbarColor())
+        ui.runOnIdle { keyboardBottom = 195 }
+        val closing = toolbarColor()
+        assertNotEquals(night, closing)
+        assertNotEquals(appSurface, closing)
+        ui.runOnIdle { keyboardBottom = 12 }
+        val handoff = toolbarPixels()
+        assertEquals(openHeight + 12, handoff.height)
+        assertEquals(appSurface, handoff[0, 0])
+        assertEquals(handoff[0, 0], handoff[0, handoff.height - 1])
+        ui.runOnIdle { keyboardBottom = 0 }
+        val closed = toolbarPixels()
+        assertEquals(openHeight + 24, closed.height)
+        assertEquals(appSurface, closed[0, closed.height - 1])
+        assertEquals(appSurface, toolbarColor())
+        ui.runOnIdle {
+            enabled = false
+            keyboardBottom = 320
+            keyboardTarget = 320
+        }
+        assertEquals(appSurface, toolbarColor())
+    }
+
+    @Test
+    fun threeSegmentBarPinsFnAndKeyboardWithScrollableKeysAndDynamicFadingEdge() {
+        var keys by mutableStateOf(ToolbarLayout.defaults)
+        var surfaceColor = androidx.compose.ui.graphics.Color.Unspecified
+        var keyColor = androidx.compose.ui.graphics.Color.Unspecified
+        ui.setContent {
+            var shift by remember { mutableStateOf(ShiftKeyState()) }
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                surfaceColor = MaterialTheme.colorScheme.surface
+                keyColor = MaterialTheme.colorScheme.surfaceVariant
+                Box(
+                    Modifier.width(360.dp)
+                        .background(surfaceColor)
+                        .statusBarsPadding()
+                        .testTag("Keyboard test area"),
+                ) {
+                    KeyboardBar(
+                        true,
+                        true,
+                        false,
+                        false,
+                        shift.active,
+                        true,
+                        {},
+                        {},
+                        { shift = ShiftKeyState(latched = !shift.active) },
+                        { shift = shift.press() },
+                        { shift = shift.release(it) },
+                        {
+                            sent += TerminalInput.key(it, shift = shift.active)
+                            shift = shift.consume()
+                        },
+                        toolbarKeys = keys,
+                        onKeyboard = { keyboardToggles++ },
+                    )
+                }
+            }
+        }
+        assertNotEquals(surfaceColor, keyColor)
+        val fnButton = ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
+        val fnBounds = fnButton.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val escapeBounds =
+            ui.onNodeWithContentDescription("Escape")
+                .assertIsDisplayed()
                 .fetchSemanticsNode()
                 .boundsInRoot
-        ui.onNodeWithContentDescription("Enter").performTouchInput { click() }
-        ui.runOnIdle { assertEquals(listOf("\r"), sent) }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
-            .assertIsNotDisplayed()
+        val keyboardBefore =
+            ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertTrue(fnBounds.right < escapeBounds.left)
+        ui.onNodeWithTag("Keyboard bar leading divider").assertIsDisplayed()
+        ui.onNodeWithTag("Keyboard bar trailing divider").assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
             .assertDoesNotExist()
-        ui.onNodeWithContentDescription(appString(R.string.a11y_terminal_keys)).performTouchInput {
-            swipeRight()
-        }
-        ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
-            .assertIsDisplayed()
-            .performTouchInput { click() }
+
+        // Tapping Fn directly expands and collapses extra keys without moving pinned controls.
+        fnButton.performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
             .assertIsDisplayed()
         ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F12"))
             .assertIsDisplayed()
-        val chevron =
-            ui.onNodeWithContentDescription(appString(R.string.a11y_hide_extra_keys))
-                .fetchSemanticsNode()
-                .boundsInRoot
-        val escape = ui.onNodeWithContentDescription("Escape").fetchSemanticsNode().boundsInRoot
-        assertTrue(chevron.right < escape.left)
         assertEquals(
             keyboardBefore,
             ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard))
                 .fetchSemanticsNode()
                 .boundsInRoot,
         )
-        capture("hidden-chevron-revealed", ui.onNodeWithTag("Keyboard test area"))
+        capture("three-segment-fn-open", ui.onNodeWithTag("Keyboard test area"))
         ui.onNodeWithContentDescription(appString(R.string.a11y_hide_extra_keys))
             .performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
             .assertDoesNotExist()
-        ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
-            .assertIsNotDisplayed()
-        assertEquals(
-            escapeBefore,
-            ui.onNodeWithContentDescription("Escape").fetchSemanticsNode().boundsInRoot,
+
+        fun colorMatches(
+            a: androidx.compose.ui.graphics.Color,
+            b: androidx.compose.ui.graphics.Color,
+        ): Boolean =
+            kotlin.math.abs(a.red - b.red) < .03f &&
+                kotlin.math.abs(a.green - b.green) < .03f &&
+                kotlin.math.abs(a.blue - b.blue) < .03f
+
+        // At scroll=0 on 360dp, left edge shows solid keyColor while right edge fades into
+        // surfaceColor.
+        val viewport = ui.onNodeWithTag("Terminal keys viewport")
+        val initialPixels = viewport.captureToImage().toPixelMap()
+        val midY = initialPixels.height / 2
+        val fadePx = with(ui.density) { KeyboardBarFadingEdgeWidth.toPx().toInt() }.coerceAtLeast(8)
+        assertTrue(
+            "Left start edge at scroll=0 must stay crisp keyColor",
+            colorMatches(initialPixels[2, midY], keyColor),
         )
+        assertTrue(
+            "Rightmost edge at scroll=0 must fade to surfaceColor",
+            colorMatches(initialPixels[initialPixels.width - 1, midY], surfaceColor),
+        )
+        assertTrue(
+            "Right overflow edge at scroll=0 must contain blended fade pixels",
+            (initialPixels.width - fadePx until initialPixels.width).any { x ->
+                val c = initialPixels[x, midY]
+                !colorMatches(c, keyColor) && !colorMatches(c, surfaceColor)
+            },
+        )
+
+        // Horizontal drag starting from Ctrl scrolls the key strip while keeping Ctrl unlatched.
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).performTouchInput {
+            down(center)
+            moveBy(androidx.compose.ui.geometry.Offset(-180f, 0f))
+            up()
+        }
+        ui.onNodeWithContentDescription("Enter").assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_control)).assertIsNotSelected()
+        assertEquals(
+            fnBounds,
+            ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
+                .fetchSemanticsNode()
+                .boundsInRoot,
+        )
+        assertEquals(
+            keyboardBefore,
+            ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard))
+                .fetchSemanticsNode()
+                .boundsInRoot,
+        )
+        val scrolledPixels = viewport.captureToImage().toPixelMap()
+        assertTrue(
+            "Scrolled left edge must blend toward surfaceColor when more keys exist to the left",
+            colorMatches(scrolledPixels[0, midY], surfaceColor),
+        )
+
+        // Fewer keys fit in 360dp without overflow and disable fading on both edges.
+        ui.runOnIdle { keys = ToolbarLayout.defaults.take(4) }
+        val widePixels = viewport.captureToImage().toPixelMap()
+        val wideMidY = widePixels.height / 2
+        assertTrue(
+            "Viewport without overflow must not fade the left edge",
+            colorMatches(widePixels[2, wideMidY], keyColor),
+        )
+        assertTrue(
+            "Viewport without overflow must not fade the right edge",
+            colorMatches(widePixels[widePixels.width - 3, wideMidY], keyColor),
+        )
+        ui.runOnIdle { keys = ToolbarLayout.defaults }
+        ui.onNodeWithContentDescription("Enter").performScrollTo().performTouchInput { click() }
         ui.runOnIdle {
             assertEquals(listOf("\r"), sent)
             assertEquals(0, keyboardToggles)
         }
-        capture("hidden-chevron-default", ui.onNodeWithTag("Keyboard test area"))
+        capture("three-segment-default", ui.onNodeWithTag("Keyboard test area"))
     }
 
     @Test
@@ -523,22 +861,21 @@ class KeyboardBarTest {
             }
         }
         val initial = ui.onNodeWithContentDescription("Escape").fetchSemanticsNode().boundsInRoot
-        ui.onNodeWithContentDescription(appString(R.string.a11y_terminal_keys)).performTouchInput {
-            swipeRight()
-        }
-        // This test isolates the visibility reset; physical reveal/taps are covered above.
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
             .assertIsDisplayed()
-            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+            .performTouchInput { click() }
         ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
             .assertIsDisplayed()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_terminal_keys)).performTouchInput {
+            swipeLeft(startX = centerX, endX = left)
+        }
         ui.onNodeWithContentDescription(appString(R.string.a11y_hide_keyboard)).performTouchInput {
             click()
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_function_key, "F1"))
             .assertDoesNotExist()
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
-            .assertIsNotDisplayed()
+            .assertIsDisplayed()
         assertEquals(
             initial,
             ui.onNodeWithContentDescription("Escape").fetchSemanticsNode().boundsInRoot,
@@ -547,7 +884,7 @@ class KeyboardBarTest {
             click()
         }
         ui.onNodeWithContentDescription(appString(R.string.a11y_show_extra_keys))
-            .assertIsNotDisplayed()
+            .assertIsDisplayed()
         ui.runOnIdle { assertTrue(sent.isEmpty()) }
     }
 
@@ -765,6 +1102,7 @@ class KeyboardBarTest {
                     area.top - logicalArea.top,
                 )
             // Compare the drawn anchor rather than expanded accessibility touch bounds.
+            ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performScrollTo()
             val logicalAnchor =
                 ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys))
                     .fetchSemanticsNode()
@@ -857,6 +1195,7 @@ class KeyboardBarTest {
     @Test
     fun nativeSingleTapClosesPopupAndOutsideKeysLeaveItOpen() {
         keyboard()
+        ui.onNodeWithContentDescription(appString(R.string.a11y_arrow_keys)).performScrollTo()
         val bounds = nativeBounds(appString(R.string.a11y_arrow_keys))
         fun doubleTap() {
             repeat(2) { index ->
@@ -913,6 +1252,65 @@ class KeyboardBarTest {
             moveTo(center + delta)
             up()
         }
+    }
+
+    @Test
+    fun bottomBarClipsTopCornersToMatchRoundedTerminalAndSquareWhenFlush() {
+        var roundedTop by mutableStateOf(true)
+        var background = Color.Unspecified
+        var surface = Color.Unspecified
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                background = MaterialTheme.colorScheme.background
+                surface = MaterialTheme.colorScheme.surface
+                Box(
+                    Modifier.width(360.dp)
+                        .background(background)
+                        .testTag("Bottom bar corner frame"),
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .padding(top = workspaceBottomBarTopGap(roundedTop))
+                            .clip(workspaceBottomBarShape(roundedTop))
+                            .background(surface),
+                    ) {
+                        KeyboardToolbarTheme(enabled = false, coverNavigation = false) {
+                            KeyboardBar(
+                                true,
+                                true,
+                                false,
+                                false,
+                                false,
+                                false,
+                                {},
+                                {},
+                                {},
+                                {},
+                                {},
+                                {},
+                                showTopDivider = false,
+                                onKeyboard = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        assertNotEquals(background, surface)
+        val gapPx = with(ui.density) { WorkspaceBottomBarRoundedGap.roundToPx() }
+        val rounded = ui.onNodeWithTag("Bottom bar corner frame").captureToImage().toPixelMap()
+        assertEquals(background, rounded[rounded.width / 2, 0])
+        assertEquals(background, rounded[rounded.width / 2, gapPx - 1])
+        val cornerRow = gapPx + 1
+        assertEquals(background, rounded[1, cornerRow])
+        assertEquals(background, rounded[rounded.width - 2, cornerRow])
+        assertEquals(surface, rounded[rounded.width / 2, cornerRow])
+
+        ui.runOnIdle { roundedTop = false }
+        val square = ui.onNodeWithTag("Bottom bar corner frame").captureToImage().toPixelMap()
+        assertEquals(surface, square[1, 0])
+        assertEquals(surface, square[square.width / 2, 0])
+        assertEquals(surface, square[square.width - 2, 0])
     }
 
     private fun capture(name: String, node: SemanticsNodeInteraction) {

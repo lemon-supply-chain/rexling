@@ -3,6 +3,7 @@ package dev.lemon.rex
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -140,20 +141,41 @@ class KeyboardToolbarTest {
     }
 
     @Test
-    fun fixedPanelKeepsInsideTapsAndStillAllowsBackAndOutsideDismissal() {
+    fun fixedPanelOnlyDismissesFromTheHandleOrCloseButton() {
         var dismissals = 0
+        var open by mutableStateOf(true)
         ui.setContent {
             RexTheme(false, ThemeCatalog.defaults[1]) {
-                KeyboardToolbarSheet(ToolbarLayout.defaults, {}, { dismissals++ })
+                if (open)
+                    KeyboardToolbarSheet(
+                        ToolbarLayout.defaults,
+                        {},
+                        {
+                            dismissals++
+                            open = false
+                        },
+                    )
             }
         }
         ui.onNodeWithText(appString(R.string.your_toolbar_format, 7, 7)).performClick()
         ui.runOnIdle { assertEquals(0, dismissals) }
         androidx.test.espresso.Espresso.pressBack()
-        ui.runOnIdle { assertEquals(1, dismissals) }
+        ui.runOnIdle { assertEquals(0, dismissals) }
         ui.onNodeWithText(appString(R.string.keyboard_toolbar)).performTouchInput {
             click(androidx.compose.ui.geometry.Offset(center.x, -100f))
         }
+        ui.runOnIdle { assertEquals(0, dismissals) }
+        val pull = with(ui.density) { 88.dp.toPx() }
+        ui.onNodeWithContentDescription(appString(R.string.a11y_drawer_handle)).performTouchInput {
+            swipe(center, center + androidx.compose.ui.geometry.Offset(0f, pull))
+        }
+        ui.waitUntil(5000) { dismissals == 1 }
+        ui.runOnIdle {
+            assertEquals(1, dismissals)
+            open = true
+        }
+        ui.onNodeWithContentDescription(appString(R.string.close_keyboard_toolbar)).performClick()
+        ui.waitUntil(5000) { dismissals == 2 }
         ui.runOnIdle { assertEquals(2, dismissals) }
     }
 

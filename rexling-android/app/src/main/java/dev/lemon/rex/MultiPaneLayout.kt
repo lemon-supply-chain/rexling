@@ -1,5 +1,6 @@
 package dev.lemon.rex
 
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -39,8 +40,11 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +53,20 @@ import androidx.compose.ui.zIndex
 import androidx.core.app.MultiWindowModeChangedInfo
 import androidx.core.util.Consumer
 import dev.chrisbanes.haze.HazeState
+
+internal enum class PaneOrientation(
+    @androidx.annotation.StringRes val titleRes: Int,
+    val preferenceKey: String,
+) {
+    PORTRAIT(R.string.pane_orientation_portrait, "multi_pane_unfolded_portrait"),
+    LANDSCAPE(R.string.pane_orientation_landscape, "multi_pane_unfolded_landscape"),
+}
+
+@Composable
+internal fun currentPaneOrientation(): PaneOrientation =
+    if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        PaneOrientation.LANDSCAPE
+    else PaneOrientation.PORTRAIT
 
 internal enum class PaneDropPosition {
     CENTER,
@@ -109,12 +127,13 @@ internal fun MultiPaneLayout(
     hazeState: HazeState,
     captureBackdrop: Boolean,
     bottomPaddingDp: Int = 6,
-    bottomMargin: Boolean = true,
-    sideRail: TabBarPosition = TabBarPosition.BOTTOM,
+    navigationClearance: Dp = 0.dp,
     splits: List<PaneSplitLine> = emptyList(),
     zoomed: String = "",
     ime: WindowInsets = WindowInsets.ime,
     navigation: WindowInsets = WindowInsets.navigationBars,
+    headerHeightSaved: () -> Int = { 0 },
+    headerOverlap: () -> Int = { 0 },
     paneActionsEnabled: Boolean = true,
     floatingPanes: List<PanePlacement> = emptyList(),
     allowFloat: Boolean = false,
@@ -133,6 +152,7 @@ internal fun MultiPaneLayout(
     onDrop: (String, String, PaneDropPosition) -> Unit = { source, target, position ->
         client.dropPane(session, window, source, target, position, placements.map { it.id })
     },
+    floatingMotion: FloatingPaneMotion? = null,
 ) {
     val palette = LocalTerminalPalette.current
     val scheme = MaterialTheme.colorScheme
@@ -214,6 +234,7 @@ internal fun MultiPaneLayout(
     val shownSplits = if (zoomedPane != null || zoomedFloat != null) emptyList() else laidOutSplits
     val imeHandoff = remember { TerminalImeHandoff(PanePlacement::id) }
     val shownPanes = shownTiles + shownFloating
+    val showFocusOutline = shownPanes.size > 1
     val outgoingEditor = imeHandoff.retainFor(shownPanes)
     val mountedPanes = shownPanes + listOfNotNull(outgoingEditor?.pane)
     // Keep the controls visible for as long as the move handle is held.
@@ -247,21 +268,13 @@ internal fun MultiPaneLayout(
     // and
     // a thin accent outline on the focused one.
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
-    val gap = 4.dp
-    val paneInset = gap / 2
-    val edgeInset = 8.dp - paneInset
-    // The workspace reserves the navigation clearance when the bottom row has no extra margin.
+    val paneInset = 2.dp
     BoxWithConstraints(
         Modifier.fillMaxSize()
             .clipToBounds()
             .frostSource(hazeState, captureBackdrop)
             .background(scheme.background)
-            .padding(
-                start = if (sideRail == TabBarPosition.LEFT) paneInset else edgeInset,
-                end = if (sideRail == TabBarPosition.RIGHT) paneInset else edgeInset,
-                top = edgeInset,
-                bottom = if (bottomMargin) edgeInset else 0.dp,
-            ),
+            .padding(paneInset),
     ) {
         val visibleHeight = maxHeight
         val canAdjustFloat =
@@ -299,7 +312,9 @@ internal fun MultiPaneLayout(
             for ((layer, panes) in floatingLayers) key(layer) {
                 val bounds =
                     if (layer == selectedFloat?.layer) layerBounds else panes.first().layerBounds
-                if (bounds != null)
+                val restoringSinglePane =
+                    floatingMotion?.restoring?.let { it == panes.singleOrNull()?.id } == true
+                if (bounds != null && !restoringSinglePane)
                     Box(
                         Modifier.offset(maxWidth * bounds.x, visibleHeight * bounds.y)
                             .size(maxWidth * bounds.width, visibleHeight * bounds.height)
@@ -309,7 +324,12 @@ internal fun MultiPaneLayout(
                     )
             }
         for (pane in mountedPanes) key(pane.id) {
-            DisposableEffect(pane.id) { onDispose { imeHandoff.remove(pane.id) } }
+            DisposableEffect(pane.id, floatingMotion) {
+                onDispose {
+                    imeHandoff.remove(pane.id)
+                    floatingMotion?.forget(pane.id)
+                }
+            }
             val retiring = outgoingEditor?.pane?.id == pane.id
             val floating = pane.floating
             val inset = if (floating && floatingLayers[pane.layer]?.size == 1) 0.dp else paneInset
@@ -321,13 +341,7 @@ internal fun MultiPaneLayout(
             val active = !retiring && pane.id == focused
             val dropPosition = move?.drop?.takeIf { it.target == pane.id }?.position
             val moveSource = move?.source == pane.id
-            val lastRow = !bottomMargin && pane.y + pane.height >= top + spanY - .001f
-            val trim =
-                when {
-                    floating -> inset * 2
-                    lastRow -> paneInset
-                    else -> gap
-                }
+            val trim = inset * 2
             Box(
                 Modifier.offset(x + inset, y + inset)
                     .size(
@@ -335,11 +349,20 @@ internal fun MultiPaneLayout(
                         (height - trim).coerceAtLeast(0.dp),
                     )
                     .then(
+                        if (floating && !retiring)
+                            Modifier.floatingPaneViewport(pane.id, floatingMotion)
+                        else Modifier,
+                    )
+                    .then(
                         if (retiring) Modifier.alpha(0f)
                         else if (floating)
                             Modifier.zIndex(layerZ(pane.layer) + 1f)
                                 .then(
-                                    if (pane.layerBounds == null && zoomedFloat == null)
+                                    if (
+                                        (pane.layerBounds == null ||
+                                            floatingMotion?.restoring == pane.id) &&
+                                            zoomedFloat == null
+                                    )
                                         Modifier.shadow(16.dp, shape, clip = false)
                                     else Modifier,
                                 )
@@ -380,7 +403,7 @@ internal fun MultiPaneLayout(
                     .border(
                         1.5.dp,
                         when {
-                            moveSource || active -> scheme.primary
+                            showFocusOutline && (moveSource || active) -> scheme.primary
                             else -> scheme.outline.copy(alpha = .25f)
                         },
                         shape,
@@ -393,6 +416,10 @@ internal fun MultiPaneLayout(
                         derivedStateOf(referentialEqualityPolicy()) { client.paneFrames[pane.id] }
                     }
                 var keyboardFocus by remember { mutableStateOf<TerminalKeyboardFocus?>(null) }
+                val keyboardPan = remember(live) { TerminalImePanState() }
+                val focusPane: (() -> Unit)? =
+                    if (!active && !retiring) ({ onFocus(pane.id, sizes[pane.id]) }) else null
+                val focusDescription = stringResource(R.string.a11y_focus_pane)
                 val reportSize by
                     rememberUpdatedState<(Int, Int) -> Unit> { columns, rows ->
                         sizes[pane.id] = columns to rows
@@ -411,25 +438,52 @@ internal fun MultiPaneLayout(
                 AndroidView(
                     factory = { TerminalView(it) },
                     modifier =
-                        Modifier.fillMaxSize().clipToBounds().stableTerminalViewport(
-                            panToCursor = live,
-                            coverage = {
-                                val cover =
-                                    keyboardCoverage(
-                                        ime,
-                                        navigation,
-                                        keyboardChrome,
-                                        extendsUnderNavigation,
-                                    )
-                                val fullHeight = visibleHeight + cover.toDp()
-                                (fullHeight * heightFraction - trim)
-                                    .coerceAtLeast(0.dp)
-                                    .roundToPx() - (height - trim).coerceAtLeast(0.dp).roundToPx()
+                        Modifier.fillMaxSize()
+                            .clipToBounds()
+                            .then(
+                                if (focusPane != null)
+                                    Modifier.semantics {
+                                        contentDescription = focusDescription
+                                        role = Role.Button
+                                        onClick {
+                                            focusPane()
+                                            true
+                                        }
+                                    }
+                                else Modifier,
+                            )
+                            .stableTerminalViewport(
+                                panToCursor = live,
+                                coverage = {
+                                    // The parent releases its navigation clearance as imePadding
+                                    // consumes
+                                    // the inset.
+                                    val reclaimed =
+                                        minOf(navigationClearance.roundToPx(), ime.getBottom(this))
+                                    val cover =
+                                        (keyboardCoverage(
+                                                ime,
+                                                navigation,
+                                                keyboardChrome,
+                                                extendsUnderNavigation,
+                                                headerHeightSaved,
+                                            ) - reclaimed)
+                                            .coerceAtLeast(0)
+                                    val fullHeight = visibleHeight + cover.toDp()
+                                    (fullHeight * heightFraction - trim)
+                                        .coerceAtLeast(0.dp)
+                                        .roundToPx() -
+                                        (height - trim).coerceAtLeast(0.dp).roundToPx()
+                                },
+                                topOcclusion = {
+                                    headerOverlap() - (paneInset + y + inset + 1.5.dp).roundToPx()
+                                },
+                                pan = keyboardPan,
+                            ) {
+                                keyboardFocus.takeIf { live }
                             },
-                        ) {
-                            keyboardFocus.takeIf { live }
-                        },
                     update = { view ->
+                        if (floating && !retiring) floatingMotion?.trackView(pane.id, view)
                         imeHandoff.mount(pane, view)
                         view.onInputConnectionReady = { if (live) imeHandoff.served(pane.id, view) }
                         view.importantForAccessibility =
@@ -439,6 +493,7 @@ internal fun MultiPaneLayout(
                         view.textSp = fontSize
                         view.setTerminalPaddingDp(12, 8, if (floating) 8 else bottomPaddingDp)
                         view.interactive = live
+                        view.onFocusTap = focusPane
                         view.keepAwakeMode = if (live) keepAwake else KeepScreenAwake.SYSTEM
                         val profile = ProgramProfile.resolve(programs[pane.id])
                         view.keyboardSuggestions =
@@ -451,11 +506,30 @@ internal fun MultiPaneLayout(
                         view.onDimensions = dimensions
                         view.onKeyboardFocus = if (live) ({ keyboardFocus = it }) else null
                         keyboardFocus = if (live) view.keyboardFocus else null
+                        view.keyboardPan = keyboardPan.takeIf { live }
                         view.onInput = client::type
                         view.onActivate = client::takeControl
                         view.onMouseClick = client::click
-                        view.onWheel = client::wheel
-                        view.onScroll = client::scroll
+                        view.onWheel = { lines, col, row, cw, ch ->
+                            if (!live)
+                                client.wheelMirror(
+                                    session,
+                                    window,
+                                    pane.id,
+                                    lines,
+                                    col,
+                                    row,
+                                    cw,
+                                    ch,
+                                )
+                            else if (client.state.value.selectedBlock == pane.id)
+                                client.wheel(lines, col, row, cw, ch)
+                        }
+                        view.onScroll = { lines ->
+                            if (!live) client.scrollMirror(session, window, pane.id, lines)
+                            else if (client.state.value.selectedBlock == pane.id)
+                                client.scroll(lines)
+                        }
                         view.mouseTarget = client::keyTarget
                         view.imageInputTarget = client::imageInputTarget
                         view.onImage = onImage
@@ -468,18 +542,6 @@ internal fun MultiPaneLayout(
                 )
                 if (retiring) return@Box
                 if (!active) {
-                    val focusDescription = stringResource(R.string.a11y_focus_pane)
-                    Box(
-                        Modifier.matchParentSize()
-                            .semantics { contentDescription = focusDescription }
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                role = Role.Button,
-                            ) {
-                                onFocus(pane.id, sizes[pane.id])
-                            },
-                    )
                     if (pane.id in waiting || (paneFrame == null && pane.id != liveBlock))
                         Text(
                             stringResource(
@@ -492,19 +554,22 @@ internal fun MultiPaneLayout(
                             color = scheme.onSurfaceVariant,
                             fontSize = 11.sp,
                         )
+                    else if ((paneFrame?.scroll?.below ?: 0) > 0) {
+                        ScrollToLatestButton(
+                            hazeState,
+                            Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                            onClick = {
+                                client.scrollMirror(session, window, pane.id, 0, bottom = true)
+                            },
+                        )
+                    }
                 } else {
                     val display by client.displayLayout.collectAsState()
                     if (live && display.below) {
-                        Text(
-                            stringResource(R.string.label_latest),
-                            Modifier.align(Alignment.BottomEnd)
-                                .padding(10.dp)
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                                .background(scheme.surface)
-                                .clickable(role = Role.Button, onClick = client::scrollToBottom)
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                            fontSize = 11.sp,
-                            color = scheme.primary,
+                        ScrollToLatestButton(
+                            hazeState,
+                            Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                            onClick = client::scrollToBottom,
                         )
                     } else if (paneFrame == null && (!live || !display.hasScreen)) {
                         Text(
@@ -573,7 +638,9 @@ internal fun MultiPaneLayout(
                             onFinish = { finishFloatAdjustment() },
                             onCancel = { cancelFloatAdjustment() },
                         )
-                    } else if (!floating && !isZoomed && paneActionsEnabled) {
+                    } else if (
+                        !floating && !isZoomed && paneActionsEnabled && shownTiles.size > 1
+                    ) {
                         val handleCoordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
                         val otherPanes = shownTiles.filter { it.id != pane.id }
                         val targetActions = otherPanes.map { other ->
@@ -774,16 +841,16 @@ internal fun MultiPaneLayout(
 }
 
 @Composable
-private fun PaneCornerActions(
+internal fun PaneCornerActions(
     modifier: Modifier,
-    zoomed: Boolean,
-    paneWidth: androidx.compose.ui.unit.Dp,
+    zoomed: Boolean = false,
+    paneWidth: androidx.compose.ui.unit.Dp? = null,
     enabled: Boolean,
     onSplit: (PaneSplit) -> Unit,
-    onZoom: () -> Unit,
-    onFloat: (() -> Unit)?,
-    onDock: (() -> Unit)?,
-    onMinimize: (() -> Unit)?,
+    onZoom: (() -> Unit)? = null,
+    onFloat: (() -> Unit)? = null,
+    onDock: (() -> Unit)? = null,
+    onMinimize: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
 ) {
     val actions = buildList {
@@ -817,13 +884,17 @@ private fun PaneCornerActions(
                 )
             }
         }
-        add(
-            PaneCornerAction(
-                if (zoomed) ChromeIcon.UNZOOM else ChromeIcon.ZOOM,
-                stringResource(if (zoomed) R.string.restore_pane_layout else R.string.zoom_pane),
-                onZoom,
-            ),
-        )
+        onZoom?.let {
+            add(
+                PaneCornerAction(
+                    if (zoomed) ChromeIcon.UNZOOM else ChromeIcon.ZOOM,
+                    stringResource(
+                        if (zoomed) R.string.restore_pane_layout else R.string.zoom_pane,
+                    ),
+                    it,
+                ),
+            )
+        }
         onMinimize?.let {
             add(
                 PaneCornerAction(
@@ -833,8 +904,17 @@ private fun PaneCornerActions(
                 ),
             )
         }
+        onClose?.let {
+            add(
+                PaneCornerAction(
+                    ChromeIcon.CLOSE,
+                    stringResource(R.string.close_pane),
+                    it,
+                ),
+            )
+        }
     }
-    if (!zoomed && paneWidth < 60.dp + 36.dp * actions.size) {
+    if (!zoomed && paneWidth != null && paneWidth < 60.dp + 36.dp * actions.size) {
         // Leave room for the move handle on narrow tiles.
         var expanded by remember { mutableStateOf(false) }
         Box(modifier) {
@@ -974,7 +1054,6 @@ internal fun multiPaneTiles(
     val placements = window?.layout.orEmpty().filter { it.width > 0f && it.height > 0f }
     val tiled = placements.filterNot { it.floating }
     val hasOverlay = allowFloatingOverlay && placements.any { it.floating }
-    val minimum = if (hasOverlay) 1 else 2
     val focusable = if (hasOverlay) placements.filterNot { it.minimized } else tiled
-    return tiled.takeIf { it.size in minimum..4 && focusable.any { pane -> pane.id == focused } }
+    return tiled.takeIf { it.size in 1..4 && focusable.any { pane -> pane.id == focused } }
 }

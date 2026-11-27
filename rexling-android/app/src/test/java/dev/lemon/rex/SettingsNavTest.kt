@@ -98,4 +98,29 @@ class SettingsNavTest {
         SettingsNav.close(stack)
         assertTrue(stack.isEmpty())
     }
+
+    @Test
+    fun closingByIndexAndRouteOnlyPopsTheMatchingTopEntry() {
+        val stack = mutableListOf<SettingsRoute>()
+        SettingsNav.open(stack, SettingsRoute.Preferences)
+        SettingsNav.open(stack, SettingsRoute.Appearance)
+
+        SettingsNav.close(stack, 0, SettingsRoute.Preferences)
+        assertEquals(
+            listOf<SettingsRoute>(SettingsRoute.Preferences, SettingsRoute.Appearance),
+            stack,
+        )
+
+        SettingsNav.close(stack, 1, SettingsRoute.About)
+        assertEquals(
+            listOf<SettingsRoute>(SettingsRoute.Preferences, SettingsRoute.Appearance),
+            stack,
+        )
+
+        SettingsNav.close(stack, 1, SettingsRoute.Appearance)
+        assertEquals(listOf<SettingsRoute>(SettingsRoute.Preferences), stack)
+
+        SettingsNav.close(stack, 1, SettingsRoute.Appearance)
+        assertEquals(listOf<SettingsRoute>(SettingsRoute.Preferences), stack)
+    }
 }

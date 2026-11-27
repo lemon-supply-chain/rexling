@@ -115,16 +115,9 @@ internal fun TabPaneSwitcher(
         )
     }
     val drawerSurface = Modifier.drawerFrost(hazeState, BottomSheetDefaults.ExpandedShape)
+    val closeSwitcherDescription = stringResource(R.string.a11y_close_tab_and_pane_switcher)
     if (dock == null)
-        ModalBottomSheet(
-            onDismissRequest = onClose,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 0.dp,
-            dragHandle = null,
-            contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Top) },
-        ) {
+        DrawerSheet(onClose) { dismiss ->
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 Column(
                     drawerSurface
@@ -134,14 +127,15 @@ internal fun TabPaneSwitcher(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
                         ),
                 ) {
-                    DrawerHandle()
+                    DrawerHandle(dismiss)
                     Column(Modifier.fillMaxWidth().weight(1f).padding(bottom = 4.dp)) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Row(
-                                Modifier.fillMaxWidth()
+                                Modifier.weight(1f)
                                     .height(48.dp)
                                     .background(
                                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f),
@@ -182,7 +176,7 @@ internal fun TabPaneSwitcher(
                                         ) {
                                             Text(
                                                 label,
-                                                style = SettingsType.row,
+                                                style = SettingsType.paneTitle,
                                                 color =
                                                     if (active)
                                                         MaterialTheme.colorScheme.onPrimaryContainer
@@ -191,18 +185,27 @@ internal fun TabPaneSwitcher(
                                             Spacer(Modifier.width(6.dp))
                                             Text(
                                                 count.toString(),
-                                                style = SettingsType.detail,
+                                                style = SettingsType.paneDetail,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                     }
+                            }
+                            IconButton(
+                                onClick = dismiss,
+                                modifier =
+                                    Modifier.semantics {
+                                        contentDescription = closeSwitcherDescription
+                                    },
+                            ) {
+                                ChromeSymbol(ChromeIcon.CLOSE, Modifier.size(18.dp))
                             }
                         }
                         if (error.isNotBlank())
                             Text(
                                 error,
                                 Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                style = SettingsType.detail,
+                                style = SettingsType.paneDetail,
                                 color = MaterialTheme.colorScheme.error,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -328,7 +331,7 @@ internal fun TabPaneSwitcher(
                                                         if (showLayout)
                                                             stringResource(R.string.hide_map)
                                                         else stringResource(R.string.show_map),
-                                                        style = SettingsType.detail,
+                                                        style = SettingsType.paneDetail,
                                                     )
                                                 },
                                                 leadingIcon = {
@@ -691,10 +694,10 @@ private fun SwitcherEmpty(title: String, description: String) {
         Modifier.fillMaxWidth().padding(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(title, style = SettingsType.row)
+        Text(title, style = SettingsType.paneTitle)
         Text(
             description,
-            style = SettingsType.detail,
+            style = SettingsType.paneDetail,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -761,14 +764,14 @@ private fun SwitcherItem(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     title,
-                    style = SettingsType.row,
+                    style = SettingsType.paneTitle,
                     color = if (active) scheme.primary else scheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     subtitle,
-                    style = SettingsType.detail,
+                    style = SettingsType.paneDetail,
                     color = scheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -789,7 +792,7 @@ internal fun SwitcherAddButton(label: String, enabled: Boolean, onClick: () -> U
     ) {
         ChromeSymbol(ChromeIcon.ADD, Modifier.size(15.dp), LocalContentColor.current)
         Spacer(Modifier.width(4.dp))
-        Text(label, style = SettingsType.section, maxLines = 1)
+        Text(label, style = SettingsType.paneDetail, maxLines = 1)
     }
 }
 
@@ -810,13 +813,13 @@ private fun SwitcherSessionLabel(current: String, modifier: Modifier, onClick: (
     ) {
         Text(
             stringResource(R.string.session_label),
-            style = SettingsType.detail,
+            style = SettingsType.paneDetail,
             color = scheme.onSurfaceVariant,
         )
         Text(
             current.ifBlank { stringResource(R.string.none) },
             Modifier.weight(1f, fill = false),
-            style = SettingsType.section,
+            style = SettingsType.paneTitle,
             color = scheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

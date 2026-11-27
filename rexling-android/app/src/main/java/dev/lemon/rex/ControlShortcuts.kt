@@ -168,11 +168,13 @@ internal fun ControlDockKey(
                 var lastTap: Long? = null
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    down.consume()
+                    val closingPopup = visible
+                    // Consume only when closing the open shortcut popup so parent horizontal
+                    // toolbars can still intercept horizontal scroll drags from an idle Ctrl key.
+                    if (closingPopup) down.consume()
                     pressed = true
                     // Trigger taps bypass outside dismissal, so the release can close and clear
                     // Ctrl.
-                    val closingPopup = visible
                     val doubleTap =
                         gesture == ControlShortcutGesture.DOUBLE_TAP &&
                             lastTap?.let {
@@ -199,7 +201,6 @@ internal fun ControlDockKey(
                                 awaitPointerEvent().changes.firstOrNull { it.id == down.id }
                                     ?: break
                             if (change.isConsumed) break
-                            change.consume()
                             if (
                                 abs(change.position.x - down.position.x) >
                                     configuration.touchSlop ||
@@ -208,6 +209,9 @@ internal fun ControlDockKey(
                             ) {
                                 moved = true
                                 if (!opened) timer?.cancel()
+                            }
+                            if (opened || closingPopup || (!change.pressed && !moved)) {
+                                change.consume()
                             }
                             if (opened && visible)
                                 highlighted =
