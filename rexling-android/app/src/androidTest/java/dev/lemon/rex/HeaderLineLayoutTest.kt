@@ -493,4 +493,48 @@ class HeaderLineLayoutTest {
         ui.runOnIdle { dark = true }
         assertRainbowAndSave("dark")
     }
+
+    @Test
+    fun bottomDividerHidesAboveRoundedTerminalAndDrawsWhenSquare() {
+        var showBottomDivider by mutableStateOf(true)
+        var background = Color.Unspecified
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                background = MaterialTheme.colorScheme.background
+                Box(Modifier.width(360.dp).background(background).testTag("divider-header")) {
+                    SessionHeader(
+                        listOf(SessionItem("a", "Shipyard · Work")),
+                        "a",
+                        true,
+                        true,
+                        listOf(ProgramIdentity.Terminal),
+                        0,
+                        {},
+                        {},
+                        {},
+                        title = "Terminal",
+                        showBottomDivider = showBottomDivider,
+                        menu = {},
+                    )
+                }
+            }
+        }
+        val withDivider = ui.onNodeWithTag("divider-header").captureToImage().toPixelMap()
+        val y = withDivider.height - 1
+        assertNotEquals(
+            "Divider should draw across the bottom edge when enabled",
+            background,
+            withDivider[withDivider.width / 2, y],
+        )
+
+        ui.runOnIdle { showBottomDivider = false }
+        val withoutDivider = ui.onNodeWithTag("divider-header").captureToImage().toPixelMap()
+        for (x in listOf(0, withoutDivider.width / 2, withoutDivider.width - 1)) {
+            assertEquals(
+                "No bottom divider pixel expected at x=$x when hidden",
+                background,
+                withoutDivider[x, y],
+            )
+        }
+    }
 }

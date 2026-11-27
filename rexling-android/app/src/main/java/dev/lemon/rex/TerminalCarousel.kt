@@ -35,6 +35,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+internal val TerminalPaneCornerRadius = 21.dp
 internal val LocalKeyboardSuggestions = staticCompositionLocalOf { false }
 
 internal class PaneSwipeBackdrop(val side: TabBarPosition) {
@@ -292,7 +293,7 @@ internal fun TerminalCarousel(
                             )
                             .clip(
                                 if (squareCorners) RoundedCornerShape(0.dp)
-                                else RoundedCornerShape(21.dp),
+                                else RoundedCornerShape(TerminalPaneCornerRadius),
                             )
                             .background(Color(palette.background))
                             .paneScrim(backdrop) {

@@ -38,6 +38,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -858,6 +859,12 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                     alwaysCompact = compactHeaderMode == CompactHeaderMode.ALWAYS,
                     directory = state.directories[chosen].orEmpty(),
                     modifier = Modifier.zIndex(1f),
+                    showBottomDivider =
+                        sessionHeaderShowsBottomDivider(
+                            blocks.isNotEmpty(),
+                            squarePaneCorners,
+                            tiles != null,
+                        ),
                     menu = {
                         ChromeButton(ChromeIcon.MORE, stringResource(R.string.terminal_menu)) {
                             menu = true
@@ -1144,6 +1151,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                     if (isFloatingStrip) floatingTabMenuOpen = it
                                 },
                                 onNewTab = client::createTab,
+                                showTopDivider = squarePaneCorners,
                                 actions = { tabActions(false, false) },
                             )
                         }
@@ -1690,8 +1698,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                 client,
                                 state,
                                 changingSession,
-                                // Without a docked rail the bar keeps its rounded top.
                                 tabLayout.side && !floatingTabs,
+                                // Match rounded pane corners when the terminal is not flush.
+                                !squarePaneCorners,
                                 extendUnderNav,
                                 controlled,
                                 ready,
@@ -2380,6 +2389,25 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
     }
 }
 
+internal fun sessionHeaderShowsBottomDivider(
+    hasTerminalContent: Boolean,
+    squarePaneCorners: Boolean,
+    tiledPanes: Boolean,
+): Boolean = !hasTerminalContent || (squarePaneCorners && !tiledPanes)
+
+internal fun workspaceBottomBarShape(roundedTop: Boolean) =
+    if (roundedTop)
+        RoundedCornerShape(
+            topStart = TerminalPaneCornerRadius,
+            topEnd = TerminalPaneCornerRadius,
+        )
+    else androidx.compose.ui.graphics.RectangleShape
+
+internal val WorkspaceBottomBarRoundedGap = 4.dp
+
+internal fun workspaceBottomBarTopGap(roundedTop: Boolean): Dp =
+    if (roundedTop) WorkspaceBottomBarRoundedGap else 0.dp
+
 @Composable
 private fun WorkspaceBottomBar(
     model: RexModel,
@@ -2387,6 +2415,7 @@ private fun WorkspaceBottomBar(
     state: AppState,
     changingSession: Boolean,
     sideTabs: Boolean,
+    roundedTop: Boolean,
     extendUnderNav: Boolean,
     controlled: Boolean,
     ready: Boolean,
@@ -2401,6 +2430,8 @@ private fun WorkspaceBottomBar(
     val toolbarCoversNavigation = !model.toolbarWithKeyboardOnly && !extendUnderNav
     Column(
         Modifier.fillMaxWidth()
+            .padding(top = workspaceBottomBarTopGap(roundedTop))
+            .clip(workspaceBottomBarShape(roundedTop))
             .background(MaterialTheme.colorScheme.surface)
             .then(
                 if (extendUnderNav || toolbarCoversNavigation) Modifier

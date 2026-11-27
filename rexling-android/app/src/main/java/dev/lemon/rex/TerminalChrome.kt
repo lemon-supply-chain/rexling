@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,7 +40,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -63,6 +67,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -135,6 +140,7 @@ internal enum class ChromeIcon {
     STOP,
     MOVE,
     WAFFLE,
+    GRID_2X2,
     ZOOM,
     UNZOOM,
     CHEVRONS_DOWN,
@@ -235,6 +241,13 @@ internal fun ChromeSymbol(
                             Size(4f * u, 4f * u),
                             CornerRadius(1.2f * u),
                         )
+                    }
+                }
+            }
+            ChromeIcon.GRID_2X2 -> {
+                for (row in 0..1) {
+                    for (col in 0..1) {
+                        box(4f + col * 9.5f, 4f + row * 9.5f, 6.5f, 6.5f, 1.5f)
                     }
                 }
             }
@@ -735,6 +748,7 @@ internal fun SessionHeader(
     alwaysCompact: Boolean = false,
     directory: String = "",
     modifier: Modifier = Modifier,
+    showBottomDivider: Boolean = true,
     menu: @Composable () -> Unit,
 ) {
     val program = programs.getOrNull(paneIndex) ?: ProgramIdentity.Terminal
@@ -1128,12 +1142,23 @@ internal fun SessionHeader(
     }
     val divider = scheme.outlineVariant.copy(alpha = .65f)
     Box(
-        modifier.fillMaxWidth().drawWithContent {
-            drawContent()
-            val stroke = .5.dp.toPx()
-            val y = size.height - stroke / 2
-            drawLine(divider, Offset(0f, y), Offset(size.width, y), strokeWidth = stroke)
-        },
+        modifier
+            .fillMaxWidth()
+            .then(
+                if (showBottomDivider)
+                    Modifier.drawWithContent {
+                        drawContent()
+                        val stroke = .5.dp.toPx()
+                        val y = size.height - stroke / 2
+                        drawLine(
+                            divider,
+                            Offset(0f, y),
+                            Offset(size.width, y),
+                            strokeWidth = stroke,
+                        )
+                    }
+                else Modifier,
+            ),
     ) {
         when {
             expanded -> full()
@@ -1307,6 +1332,7 @@ internal fun TerminalTabs(
     onFanAnchorGone: (String) -> Unit = {},
     onMenuOpenChange: (Boolean) -> Unit = {},
     onNewTab: (() -> Unit)? = null,
+    showTopDivider: Boolean = true,
     actions: @Composable () -> Unit,
 ) {
     val newTab =
@@ -1348,16 +1374,20 @@ internal fun TerminalTabs(
         else
             Modifier.fillMaxWidth()
                 .height(barHeight)
-                .drawWithContent {
-                    drawContent()
-                    val stroke = .5.dp.toPx()
-                    drawLine(
-                        divider,
-                        Offset(0f, stroke / 2),
-                        Offset(size.width, stroke / 2),
-                        strokeWidth = stroke,
-                    )
-                }
+                .then(
+                    if (showTopDivider)
+                        Modifier.drawWithContent {
+                            drawContent()
+                            val stroke = .5.dp.toPx()
+                            drawLine(
+                                divider,
+                                Offset(0f, stroke / 2),
+                                Offset(size.width, stroke / 2),
+                                strokeWidth = stroke,
+                            )
+                        }
+                    else Modifier,
+                )
                 .padding(start = 11.dp, end = 6.dp)
     var revealed by remember(reorderKey) { mutableStateOf(false) }
     LaunchedEffect(reorderKey, contentReady) { if (contentReady) revealed = true }
@@ -1938,6 +1968,123 @@ internal fun TerminalKeyboardButton(
     }
 }
 
+internal val KeyboardBarKeyGap = 4.dp
+internal val KeyboardBarMinKeyWidth = 42.dp
+internal val KeyboardBarFadingEdgeWidth = 20.dp
+internal val KeyboardBarDividerHeight = 22.dp
+
+internal fun keyboardBarKeyWidth(
+    viewportWidth: Dp,
+    keyCount: Int,
+    minKeyWidth: Dp = KeyboardBarMinKeyWidth,
+    gap: Dp = KeyboardBarKeyGap,
+): Dp {
+    if (keyCount <= 0) return minKeyWidth
+    val even = (viewportWidth - gap * (keyCount - 1).coerceAtLeast(0)) / keyCount
+    return maxOf(minKeyWidth, even)
+}
+
+internal fun keyboardBarFadingEdgeStrengths(
+    scrollValue: Int,
+    maxScrollValue: Int,
+    fadeWidthPx: Float,
+): Pair<Float, Float> {
+    if (maxScrollValue <= 0 || fadeWidthPx <= 0f) return 0f to 0f
+    val start = (scrollValue / fadeWidthPx).coerceIn(0f, 1f)
+    val end = ((maxScrollValue - scrollValue) / fadeWidthPx).coerceIn(0f, 1f)
+    return start to end
+}
+
+private fun Modifier.horizontalFadingEdge(
+    scrollState: ScrollState,
+    fadeWidth: Dp = KeyboardBarFadingEdgeWidth,
+): Modifier =
+    this.graphicsLayer {
+            compositingStrategy =
+                if (scrollState.maxValue > 0) CompositingStrategy.Offscreen
+                else CompositingStrategy.Auto
+        }
+        .drawWithContent {
+            drawContent()
+            val fadePx = minOf(fadeWidth.toPx(), size.width / 2f)
+            val (startStrength, endStrength) =
+                keyboardBarFadingEdgeStrengths(scrollState.value, scrollState.maxValue, fadePx)
+            val rtl = layoutDirection == LayoutDirection.Rtl
+            val leftStrength = if (rtl) endStrength else startStrength
+            val rightStrength = if (rtl) startStrength else endStrength
+            if (leftStrength > 0f && fadePx > 0f) {
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors =
+                                listOf(Color.Black.copy(alpha = 1f - leftStrength), Color.Black),
+                            startX = 0f,
+                            endX = fadePx,
+                        ),
+                    topLeft = Offset.Zero,
+                    size = Size(fadePx, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            if (rightStrength > 0f && fadePx > 0f) {
+                val startX = size.width - fadePx
+                drawRect(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors =
+                                listOf(Color.Black, Color.Black.copy(alpha = 1f - rightStrength)),
+                            startX = startX,
+                            endX = size.width,
+                        ),
+                    topLeft = Offset(startX, 0f),
+                    size = Size(fadePx, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+        }
+
+@Composable
+private fun KeyboardBarVerticalDivider(tag: String) {
+    val thickness = with(LocalDensity.current) { 1f.toDp() }
+    Box(
+        Modifier.padding(horizontal = 4.dp)
+            .width(thickness)
+            .height(KeyboardBarDividerHeight)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f))
+            .testTag(tag),
+    )
+}
+
+@Composable
+private fun KeyboardFnButton(
+    enabled: Boolean,
+    readable: Boolean,
+    expanded: Boolean,
+    showDescription: String,
+    hideDescription: String,
+    stateDescription: String,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val ink =
+        if (expanded) tintOver(scheme.onPrimary, scheme.primary, if (readable) 1f else .38f)
+        else if (readable) scheme.onSurface else scheme.onSurfaceVariant
+    Box(
+        Modifier.size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (expanded) scheme.primary else Color.Transparent)
+            .semantics(mergeDescendants = true) {
+                contentDescription = if (expanded) hideDescription else showDescription
+                this.stateDescription = stateDescription
+                selected = expanded
+            }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        ChromeSymbol(ChromeIcon.GRID_2X2, color = ink)
+    }
+}
+
 @Composable
 internal fun KeyboardBar(
     controlled: Boolean,
@@ -1975,15 +2122,13 @@ internal fun KeyboardBar(
     val terminalKeysDescription = stringResource(R.string.a11y_terminal_keys)
     val pasteKeyDescription = stringResource(R.string.a11y_paste_key)
     val tabKeyDescription = stringResource(R.string.a11y_tab_key)
-    // The extra-key trigger lives just before Esc, outside the initial viewport.
-    val keyScroll = rememberScrollState(initial = Int.MAX_VALUE)
+    val keyScroll = rememberScrollState(initial = 0)
     LaunchedEffect(keyboardVisible) {
         if (!keyboardVisible) {
             expanded = false
-            keyScroll.scrollTo(keyScroll.maxValue)
+            keyScroll.scrollTo(0)
         }
     }
-    LaunchedEffect(expanded, toolbar) { if (!expanded) keyScroll.scrollTo(keyScroll.maxValue) }
     Column(Modifier.fillMaxWidth()) {
         Spacer(
             Modifier.fillMaxWidth()
@@ -2002,152 +2147,154 @@ internal fun KeyboardBar(
         )
         Row(
             Modifier.fillMaxWidth().height(45.dp).padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (toolbar.isEmpty())
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
-                    ChromeButton(
-                        ChromeIcon.CHEVRON,
-                        if (expanded) hideExtraKeys else showExtraKeys,
-                        enabled,
-                    ) {
-                        expanded = !expanded
-                    }
-                }
-            else
-                BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+            KeyboardFnButton(
+                enabled = enabled,
+                readable = readable,
+                expanded = expanded,
+                showDescription = showExtraKeys,
+                hideDescription = hideExtraKeys,
+                stateDescription = extraKeysState,
+            ) {
+                expanded = !expanded
+            }
+            if (toolbar.isEmpty()) {
+                Spacer(Modifier.weight(1f).fillMaxHeight())
+            } else {
+                KeyboardBarVerticalDivider("Keyboard bar leading divider")
+                BoxWithConstraints(
+                    Modifier.weight(1f)
+                        .fillMaxHeight()
+                        .horizontalFadingEdge(keyScroll)
+                        .testTag("Terminal keys viewport"),
+                ) {
                     val visibleWidth = maxWidth
-                    val keyWidth =
-                        (visibleWidth - 4.dp * (toolbar.size - 1).coerceAtLeast(0)) /
-                            toolbar.size.coerceAtLeast(1)
+                    val minGroupWidth =
+                        KeyboardBarMinKeyWidth * toolbar.size +
+                            KeyboardBarKeyGap * (toolbar.size - 1).coerceAtLeast(0)
+                    val fitsViewport = minGroupWidth <= visibleWidth
+                    LaunchedEffect(fitsViewport) {
+                        if (fitsViewport && keyScroll.value != 0) keyScroll.scrollTo(0)
+                    }
+
+                    @Composable
+                    fun renderKeys(keyModifier: () -> Modifier) {
+                        toolbar.forEach { item ->
+                            key(item.id) {
+                                val modifier = keyModifier()
+                                when (item) {
+                                    ToolbarKey.CONTROL ->
+                                        ControlDockKey(
+                                            controlled,
+                                            control,
+                                            readable,
+                                            modifier,
+                                            onControl,
+                                            onControlShortcut,
+                                            shortcutGesture,
+                                            controlItems,
+                                            inputKey,
+                                        )
+                                    ToolbarKey.ALT ->
+                                        DockKey(
+                                            "alt",
+                                            controlled,
+                                            alt,
+                                            description = "Alt",
+                                            modifier = modifier,
+                                            icon = ChromeIcon.ALT,
+                                            readable = readable,
+                                            onClick = onAlt,
+                                        )
+                                    ToolbarKey.SHIFT ->
+                                        ShiftDockKey(
+                                            controlled,
+                                            shift,
+                                            modifier,
+                                            onShift,
+                                            onShiftPress,
+                                            onShiftRelease,
+                                            readable = readable,
+                                        )
+                                    ToolbarKey.ARROWS ->
+                                        ArrowJoystickDockKey(
+                                            controlled,
+                                            modifier,
+                                            onKey,
+                                            readable,
+                                            inputKey,
+                                            keyboardVisible,
+                                            arrowJoystickEnabled,
+                                            onPrompt,
+                                        )
+                                    ToolbarKey.PASTE ->
+                                        DockKey(
+                                            "paste",
+                                            controlled && onPaste != null,
+                                            description = pasteKeyDescription,
+                                            modifier = modifier,
+                                            icon = ChromeIcon.PASTE,
+                                            readable = readable,
+                                        ) {
+                                            onPaste?.invoke()
+                                        }
+                                    else ->
+                                        DockKey(
+                                            item.label,
+                                            controlled,
+                                            description =
+                                                if (item == ToolbarKey.TAB) tabKeyDescription
+                                                else item.label,
+                                            modifier = modifier,
+                                            icon = item.icon,
+                                            readable = readable,
+                                            repeat =
+                                                item in
+                                                    listOf(
+                                                        ToolbarKey.BACKSPACE,
+                                                        ToolbarKey.DELETE,
+                                                        ToolbarKey.UP,
+                                                        ToolbarKey.DOWN,
+                                                        ToolbarKey.LEFT,
+                                                        ToolbarKey.RIGHT,
+                                                    ),
+                                            inputKey = inputKey,
+                                        ) {
+                                            if (item.controlLetter.isNotBlank())
+                                                onControlShortcut(item.controlLetter)
+                                            else onKey(item.terminal)
+                                        }
+                                }
+                            }
+                        }
+                    }
+
                     Row(
                         Modifier.fillMaxSize()
                             .systemGestureExclusion()
                             .horizontalScroll(keyScroll)
                             .semantics { contentDescription = terminalKeysDescription },
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(KeyboardBarKeyGap),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            Modifier.width(keyWidth)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(11.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .semantics {
-                                    contentDescription =
-                                        if (expanded) hideExtraKeys else showExtraKeys
-                                    stateDescription = extraKeysState
-                                }
-                                .clickable(enabled = enabled, role = Role.Button) {
-                                    expanded = !expanded
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ChromeSymbol(
-                                ChromeIcon.CHEVRON,
-                                Modifier.size(16.dp).graphicsLayer {
-                                    rotationZ = if (expanded) 180f else 0f
-                                },
-                            )
-                        }
-                        // Give the visible group an exact viewport width so pixel rounding
-                        // cannot clip Esc when the hidden trigger is scrolled away.
-                        Row(
-                            Modifier.width(visibleWidth).fillMaxHeight(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            toolbar.forEach { item ->
-                                key(item.id) {
-                                    when (item) {
-                                        ToolbarKey.CONTROL ->
-                                            ControlDockKey(
-                                                controlled,
-                                                control,
-                                                readable,
-                                                Modifier.weight(1f),
-                                                onControl,
-                                                onControlShortcut,
-                                                shortcutGesture,
-                                                controlItems,
-                                                inputKey,
-                                            )
-                                        ToolbarKey.ALT ->
-                                            DockKey(
-                                                "alt",
-                                                controlled,
-                                                alt,
-                                                description = "Alt",
-                                                modifier = Modifier.weight(1f),
-                                                icon = ChromeIcon.ALT,
-                                                readable = readable,
-                                                onClick = onAlt,
-                                            )
-                                        ToolbarKey.SHIFT ->
-                                            ShiftDockKey(
-                                                controlled,
-                                                shift,
-                                                Modifier.weight(1f),
-                                                onShift,
-                                                onShiftPress,
-                                                onShiftRelease,
-                                                readable = readable,
-                                            )
-                                        ToolbarKey.ARROWS ->
-                                            ArrowJoystickDockKey(
-                                                controlled,
-                                                Modifier.weight(1f),
-                                                onKey,
-                                                readable,
-                                                inputKey,
-                                                keyboardVisible,
-                                                arrowJoystickEnabled,
-                                                onPrompt,
-                                            )
-                                        ToolbarKey.PASTE ->
-                                            DockKey(
-                                                "paste",
-                                                controlled && onPaste != null,
-                                                description = pasteKeyDescription,
-                                                modifier = Modifier.weight(1f),
-                                                icon = ChromeIcon.PASTE,
-                                                readable = readable,
-                                            ) {
-                                                onPaste?.invoke()
-                                            }
-                                        else ->
-                                            DockKey(
-                                                item.label,
-                                                controlled,
-                                                description =
-                                                    if (item == ToolbarKey.TAB) tabKeyDescription
-                                                    else item.label,
-                                                modifier = Modifier.weight(1f),
-                                                icon = item.icon,
-                                                readable = readable,
-                                                repeat =
-                                                    item in
-                                                        listOf(
-                                                            ToolbarKey.BACKSPACE,
-                                                            ToolbarKey.DELETE,
-                                                            ToolbarKey.UP,
-                                                            ToolbarKey.DOWN,
-                                                            ToolbarKey.LEFT,
-                                                            ToolbarKey.RIGHT,
-                                                        ),
-                                                inputKey = inputKey,
-                                            ) {
-                                                if (item.controlLetter.isNotBlank())
-                                                    onControlShortcut(item.controlLetter)
-                                                else onKey(item.terminal)
-                                            }
-                                    }
-                                }
+                        if (fitsViewport) {
+                            Row(
+                                Modifier.width(visibleWidth).fillMaxHeight(),
+                                horizontalArrangement = Arrangement.spacedBy(KeyboardBarKeyGap),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                renderKeys { Modifier.weight(1f) }
                             }
+                        } else {
+                            renderKeys { Modifier.width(KeyboardBarMinKeyWidth) }
                         }
                     }
                 }
+                if (onKeyboard != null) {
+                    KeyboardBarVerticalDivider("Keyboard bar trailing divider")
+                }
+            }
             if (onKeyboard != null)
                 TerminalKeyboardButton(
                     controlled,
@@ -2296,7 +2443,6 @@ private fun ShiftDockKey(
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    down.consume()
                     press()
                     var cancelled = true
                     try {
@@ -2305,11 +2451,11 @@ private fun ShiftDockKey(
                                 awaitPointerEvent().changes.firstOrNull { it.id == down.id }
                                     ?: break
                             if (change.isConsumed) break
-                            change.consume()
                             if (!change.pressed) {
                                 cancelled =
                                     change.position.x !in 0f..size.width.toFloat() ||
                                         change.position.y !in 0f..size.height.toFloat()
+                                if (!cancelled) change.consume()
                                 break
                             }
                         }
