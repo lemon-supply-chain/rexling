@@ -3,6 +3,7 @@ package dev.lemon.rex
 import android.app.Application
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
@@ -33,6 +34,9 @@ internal class RexConnection(
         application.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
             as android.content.ClipboardManager
     var hasSemanticPrompts by mutableStateOf(false)
+        private set
+
+    internal var inputInteractionCount by mutableIntStateOf(0)
         private set
 
     private val clipboardDelivery = TerminalClipboardDelivery { text ->
@@ -1674,6 +1678,7 @@ internal class RexConnection(
         )
             return
         boundView?.get()?.keyboardPan?.followCursor()
+        inputInteractionCount++
         val input = TerminalInput.modified(text, controlModifier, altModifier, shiftModifier)
         controlModifier = false
         altModifier = false
@@ -1691,7 +1696,8 @@ internal class RexConnection(
 
     fun scrollPrompt(direction: Int) {
         val current = state.value
-        if (visible && foreground && !navigationRequest.pending && current.screen != null)
+        if (visible && foreground && !navigationRequest.pending && current.screen != null) {
+            inputInteractionCount++
             command(
                 "scroll_prompt",
                 "session" to current.selectedSession,
@@ -1700,16 +1706,21 @@ internal class RexConnection(
                 "connectionEpoch" to current.connectionEpoch,
                 "direction" to direction.coerceIn(-1, 1),
             )
+        }
     }
 
     fun scroll(lines: Int) {
-        if (!navigationRequest.pending && state.value.screen != null)
+        if (!navigationRequest.pending && state.value.screen != null) {
+            inputInteractionCount++
             command("scroll", "block" to state.value.selectedBlock, "lines" to lines)
+        }
     }
 
     fun scrollToBottom() {
-        if (!navigationRequest.pending && state.value.screen != null)
+        if (!navigationRequest.pending && state.value.screen != null) {
+            inputInteractionCount++
             command("scroll", "block" to state.value.selectedBlock, "bottom" to true)
+        }
     }
 
     internal fun scrollMirror(
@@ -1720,6 +1731,7 @@ internal class RexConnection(
         bottom: Boolean = false,
     ) {
         val current = mirrorScrollTarget(session, window, block) ?: return
+        inputInteractionCount++
         command(
             "scroll",
             "mirror" to true,
@@ -1736,7 +1748,8 @@ internal class RexConnection(
     fun key(name: String) = type(TerminalInput.key(name))
 
     fun paste(text: String) {
-        if (visible && state.value.controlled && !navigationRequest.pending)
+        if (visible && state.value.controlled && !navigationRequest.pending) {
+            inputInteractionCount++
             command(
                 "paste",
                 "text" to text,
@@ -1745,6 +1758,7 @@ internal class RexConnection(
                 "navigationId" to state.value.navigationId,
                 "connectionEpoch" to state.value.connectionEpoch,
             )
+        }
     }
 
     fun resize(columns: Int, rows: Int, cellWidthPx: Int = 0, cellHeightPx: Int = 0) {

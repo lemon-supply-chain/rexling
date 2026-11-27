@@ -422,8 +422,12 @@ class FloatingTabsTest {
     }
 
     @Test
-    fun floatingExpandedSideRailPlacesKeyboardActionLast() {
+    fun floatingSideRailFooterMatchesDockedLayout() {
         val keyboardLabel = appString(R.string.a11y_show_keyboard)
+        var side by mutableStateOf(TabBarPosition.LEFT)
+        var style by mutableStateOf(TabRailStyle.TITLES)
+        var windowWidth by mutableIntStateOf(0)
+        var position by mutableStateOf(Offset(0f, .5f))
         ui.setContent {
             RexTheme(false, ThemeCatalog.defaults[1]) {
                 Box(
@@ -431,7 +435,7 @@ class FloatingTabsTest {
                         .background(MaterialTheme.colorScheme.background)
                         .testTag("Floating expanded rail fixture"),
                 ) {
-                    FloatingTabBar(Offset(0f, .5f), {}) { handle ->
+                    FloatingTabBar(position, { position = it }) { handle ->
                         TerminalTabRail(
                             windows(3),
                             "0",
@@ -439,9 +443,11 @@ class FloatingTabsTest {
                             {},
                             { programs },
                             { 0 },
-                            TabBarPosition.LEFT,
-                            TabRailStyle.TITLES,
+                            side,
+                            style,
+                            onStyle = { style = it },
                             onNewTab = {},
+                            windowWidthDp = windowWidth,
                             floating = true,
                             handle = handle,
                         ) {
@@ -452,7 +458,7 @@ class FloatingTabsTest {
                                 {},
                                 keyboardLabel = keyboardLabel,
                                 onKeyboard = {},
-                                vertical = false,
+                                vertical = style == TabRailStyle.ICONS,
                                 sideRail = true,
                             )
                         }
@@ -460,33 +466,193 @@ class FloatingTabsTest {
                 }
             }
         }
-        val newTab =
-            ui.onNodeWithContentDescription(appString(R.string.label_new_tab))
-                .assertIsDisplayed()
-                .fetchSemanticsNode()
-                .boundsInRoot
-        val switcher =
-            ui.onNodeWithContentDescription(appString(R.string.a11y_tabs_and_panes))
-                .assertIsDisplayed()
-                .fetchSemanticsNode()
-                .boundsInRoot
-        val activity =
-            ui.onNodeWithContentDescription(appString(R.string.activity))
-                .assertIsDisplayed()
-                .fetchSemanticsNode()
-                .boundsInRoot
-        val keyboard =
-            ui.onNodeWithContentDescription(keyboardLabel)
+        fun bounds(description: String) =
+            ui.onNodeWithContentDescription(description)
                 .assertIsDisplayed()
                 .fetchSemanticsNode()
                 .boundsInRoot
 
-        assertEquals(newTab.center.y, switcher.center.y, 1f)
-        assertEquals(switcher.center.y, activity.center.y, 1f)
-        assertEquals(activity.center.y, keyboard.center.y, 1f)
-        assertTrue(newTab.right <= switcher.left)
-        assertTrue(switcher.right <= activity.left)
-        assertTrue(activity.right <= keyboard.left)
+        val leftRail = ui.onNodeWithTag("Floating tab rail").fetchSemanticsNode().boundsInRoot
+        assertEquals(172f, leftRail.width / density, 1f)
+        val leftCollapse = bounds(appString(R.string.show_icons_only))
+        val leftKeyboard = bounds(keyboardLabel)
+        val leftNewTab = bounds(appString(R.string.label_new_tab))
+        val leftSwitcher = bounds(appString(R.string.a11y_tabs_and_panes))
+        val leftActivity = bounds(appString(R.string.activity))
+        assertEquals(leftCollapse.center.y, leftKeyboard.center.y, 1f)
+        assertEquals(leftKeyboard.center.y, leftNewTab.center.y, 1f)
+        assertEquals(leftNewTab.center.y, leftSwitcher.center.y, 1f)
+        assertEquals(leftSwitcher.center.y, leftActivity.center.y, 1f)
+        assertTrue(leftCollapse.right <= leftKeyboard.left)
+        assertTrue(leftKeyboard.right <= leftNewTab.left)
+        assertTrue(leftNewTab.right <= leftSwitcher.left)
+        assertTrue(leftSwitcher.right <= leftActivity.left)
+        assertEquals(leftRail.left + 24f * density, leftCollapse.center.x, 1f)
         save("Floating expanded rail fixture", "floating-side-rail-expanded.png")
+
+        ui.onNodeWithContentDescription(appString(R.string.show_icons_only)).performClick()
+        ui.waitForIdle()
+        val collapsedRail = ui.onNodeWithTag("Floating tab rail").fetchSemanticsNode().boundsInRoot
+        assertEquals(48f, collapsedRail.width / density, 1f)
+        val expand = bounds(appString(R.string.show_tab_titles))
+        val collapsedSwitcher = bounds(appString(R.string.a11y_tabs_and_panes))
+        val collapsedActivity = bounds(appString(R.string.activity))
+        val collapsedKeyboard = bounds(keyboardLabel)
+        assertTrue(collapsedSwitcher.bottom <= collapsedActivity.top)
+        assertTrue(collapsedActivity.bottom <= collapsedKeyboard.top)
+        assertTrue(collapsedKeyboard.bottom <= expand.top)
+        assertEquals(collapsedRail.left + 24f * density, expand.center.x, 1f)
+
+        ui.runOnIdle {
+            side = TabBarPosition.RIGHT
+            style = TabRailStyle.TITLES
+            windowWidth = 800
+            position = Offset(1f, .5f)
+        }
+        ui.waitForIdle()
+        val rightRail = ui.onNodeWithTag("Floating tab rail").fetchSemanticsNode().boundsInRoot
+        assertEquals(200f, rightRail.width / density, 1f)
+        val rightKeyboard = bounds(keyboardLabel)
+        val rightNewTab = bounds(appString(R.string.label_new_tab))
+        val rightSwitcher = bounds(appString(R.string.a11y_tabs_and_panes))
+        val rightActivity = bounds(appString(R.string.activity))
+        val rightCollapse = bounds(appString(R.string.show_icons_only))
+        assertEquals(rightKeyboard.center.y, rightNewTab.center.y, 1f)
+        assertEquals(rightNewTab.center.y, rightSwitcher.center.y, 1f)
+        assertEquals(rightSwitcher.center.y, rightActivity.center.y, 1f)
+        assertEquals(rightActivity.center.y, rightCollapse.center.y, 1f)
+        assertTrue(rightKeyboard.right <= rightNewTab.left)
+        assertTrue(rightNewTab.right <= rightSwitcher.left)
+        assertTrue(rightSwitcher.right <= rightActivity.left)
+        assertTrue(rightActivity.right <= rightCollapse.left)
+        assertEquals(rightRail.right - 24f * density, rightCollapse.center.x, 1f)
+    }
+
+    @Test
+    fun releasingNearEdgeMagneticallySnapsToEdgeAndAutoHides() {
+        var position by mutableStateOf(Offset(.5f, .5f))
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Box(Modifier.size(400.dp, 600.dp)) {
+                    FloatingTabBar(
+                        position,
+                        { position = it },
+                        hideAtEdges = true,
+                        idleHideMillis = 300,
+                    ) { handle ->
+                        Row(
+                            Modifier.size(160.dp, 40.dp)
+                                .background(Color(0xff3a5f8a))
+                                .testTag("Bar content"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            handle()
+                            Box(Modifier.weight(1f).fillMaxHeight())
+                        }
+                    }
+                }
+            }
+        }
+        val movePx = 95f * density
+        ui.onNodeWithTag("Floating tab handle").performTouchInput {
+            down(center)
+            advanceEventTime(700)
+            moveBy(Offset(-movePx, 0f))
+            up()
+        }
+        ui.waitForIdle()
+        assertEquals(0f, position.x, 0.01f)
+        ui.waitUntil(3_000) {
+            runCatching { ui.onNodeWithTag("Floating tab expand").assertIsDisplayed() }.isSuccess
+        }
+    }
+
+    @Test
+    fun swipingEdgeBarTowardEdgeTucksImmediatelyAndPullingHandleReveals() {
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Box(Modifier.size(400.dp, 600.dp)) {
+                    FloatingTabBar(
+                        Offset(0f, .5f),
+                        {},
+                        hideAtEdges = true,
+                        idleHideMillis = 30_000,
+                    ) { handle ->
+                        Row(
+                            Modifier.size(160.dp, 40.dp)
+                                .background(Color(0xff3a5f8a))
+                                .testTag("Bar content"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            handle()
+                            Box(Modifier.weight(1f).fillMaxHeight().testTag("Swipe body"))
+                        }
+                    }
+                }
+            }
+        }
+        ui.onNodeWithTag("Bar content").assertIsDisplayed()
+        ui.onNodeWithTag("Swipe body").performTouchInput { swipeLeft() }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Bar content").assertDoesNotExist()
+        ui.onNodeWithTag("Floating tab expand").assertIsDisplayed()
+
+        ui.onNodeWithTag("Floating tab expand").performTouchInput {
+            swipeRight(startX = centerX, endX = centerX + 56f * density)
+        }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Bar content").assertIsDisplayed()
+    }
+
+    @Test
+    fun dismissSignalHidesEdgeBarImmediatelyUnlessKeptVisibleOrCentered() {
+        var position by mutableStateOf(Offset(1f, .5f))
+        var keepVisible by mutableStateOf(true)
+        var dismissSignal by mutableIntStateOf(0)
+        ui.setContent {
+            RexTheme(false, ThemeCatalog.defaults[1]) {
+                Box(Modifier.size(400.dp, 600.dp)) {
+                    FloatingTabBar(
+                        position,
+                        { position = it },
+                        hideAtEdges = true,
+                        keepVisible = keepVisible,
+                        dismissSignal = dismissSignal,
+                        idleHideMillis = 30_000,
+                    ) { handle ->
+                        Row(
+                            Modifier.size(160.dp, 40.dp)
+                                .background(Color(0xff3a5f8a))
+                                .testTag("Bar content"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            handle()
+                            Box(Modifier.weight(1f).fillMaxHeight())
+                        }
+                    }
+                }
+            }
+        }
+        // keepVisible prevents dismissSignal from hiding the bar.
+        ui.runOnIdle { dismissSignal++ }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Bar content").assertIsDisplayed()
+
+        // Once unlocked on an edge, dismissSignal tucks the bar immediately.
+        ui.runOnIdle {
+            keepVisible = false
+            dismissSignal++
+        }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Bar content").assertDoesNotExist()
+        ui.onNodeWithTag("Floating tab expand").assertIsDisplayed()
+
+        // Centered bar ignores dismissSignal.
+        ui.runOnIdle {
+            position = Offset(.5f, .5f)
+            dismissSignal++
+        }
+        ui.waitForIdle()
+        ui.onNodeWithTag("Bar content").assertIsDisplayed()
     }
 }

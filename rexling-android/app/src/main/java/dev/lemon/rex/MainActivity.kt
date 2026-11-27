@@ -23,6 +23,8 @@ import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +44,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
@@ -1277,6 +1281,7 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                     )
                                         }
                                     }
+                                    var terminalActivityToken by remember { mutableIntStateOf(0) }
                                     val captureTerminal =
                                         floatingBackdrop ||
                                             ownerBackdrop ||
@@ -1284,104 +1289,123 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                             shortcutBackdrop ||
                                             floatingTabs ||
                                             model.images.state != null
-                                    if (carouselBlocks.isEmpty())
-                                        Box(
-                                            Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Text(
-                                                stringResource(R.string.floating_panes_minimized),
-                                                style = SettingsType.detail,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    Box(
+                                        Modifier.fillMaxSize().pointerInput(floatingTabs) {
+                                            if (!floatingTabs) return@pointerInput
+                                            awaitEachGesture {
+                                                awaitFirstDown(
+                                                    requireUnconsumed = false,
+                                                    pass = PointerEventPass.Initial,
+                                                )
+                                                terminalActivityToken++
+                                            }
+                                        },
+                                    ) {
+                                        if (carouselBlocks.isEmpty())
+                                            Box(
+                                                Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    stringResource(
+                                                        R.string.floating_panes_minimized,
+                                                    ),
+                                                    style = SettingsType.detail,
+                                                    color =
+                                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        else if (tiles != null && window != null) {
+                                            MultiPaneLayout(
+                                                client,
+                                                displayedSession,
+                                                window.id,
+                                                tiles,
+                                                chosen,
+                                                liveBlock,
+                                                controlled,
+                                                state.programs,
+                                                state.mirrorWaiting,
+                                                fontSize,
+                                                onFocus = { id, grid ->
+                                                    client.selectBlock(id, grid, keepTiled = true)
+                                                },
+                                                onView = onView,
+                                                onImage = imageCommit,
+                                                onPaste = ::pasteClipboard,
+                                                imeEnterSubmits = model.enterSubmits,
+                                                keyboardChrome = {
+                                                    if (model.toolbarWithKeyboardOnly)
+                                                        toolbarHeight[0]
+                                                    else 0
+                                                },
+                                                headerHeightSaved = currentHeaderSavings,
+                                                headerOverlap = currentHeaderOverlap,
+                                                extendsUnderNavigation = extendUnderNav,
+                                                hazeState = terminalHaze,
+                                                captureBackdrop = captureTerminal,
+                                                bottomPaddingDp =
+                                                    if (floating.isNotEmpty()) 28 else 6,
+                                                navigationClearance = tiledNavigationClearance,
+                                                splits = window.splits,
+                                                zoomed = window.zoomed,
+                                                paneActionsEnabled = ready,
+                                                floatingPanes = floatingOverlay,
+                                                allowFloat = allowFloatingOverlay && tiles.size > 1,
+                                                onMinimizeFloating = ::minimizeFloating,
+                                                onDockFloating = { dockFloatingPane = it },
+                                                onClosePane = { id ->
+                                                    blocks
+                                                        .firstOrNull { it.id == id }
+                                                        ?.let { closeTarget = closePaneTarget(it) }
+                                                },
+                                                floatingMotion = floatingMotion,
+                                            )
+                                        } else {
+                                            LiveTerminal(
+                                                client,
+                                                carouselBlocks,
+                                                chosen,
+                                                liveBlock,
+                                                state.programs,
+                                                controlled,
+                                                fontSize,
+                                                client::type,
+                                                client::scroll,
+                                                client::wheel,
+                                                client::takeControl,
+                                                client::scrollToBottom,
+                                                client::resize,
+                                                ::openPane,
+                                                { picker = "panes" },
+                                                onView,
+                                                Modifier.fillMaxSize(),
+                                                floatingDock = floating.isNotEmpty(),
+                                                paneLayout = window?.layout.orEmpty(),
+                                                titles = state.titles,
+                                                directories = state.directories,
+                                                hazeState = terminalHaze,
+                                                captureBackdrop = captureTerminal,
+                                                onImage = imageCommit,
+                                                onPaste = ::pasteClipboard,
+                                                padding = model.terminalPadding,
+                                                extendPadding = model.extendPadding,
+                                                imeEnterSubmits = model.enterSubmits,
+                                                keyboardChrome = {
+                                                    if (model.toolbarWithKeyboardOnly)
+                                                        toolbarHeight[0]
+                                                    else 0
+                                                },
+                                                headerHeightSaved = currentHeaderSavings,
+                                                headerOverlap = currentHeaderOverlap,
+                                                squareCorners = squarePaneCorners,
+                                                extendsUnderNavigation = extendUnderNav,
+                                                navigationClearance = singlePaneNavigationClearance,
+                                                bottomOverlayInset = bottomOverlayInset,
+                                                floatingMotion = floatingMotion,
+                                                swipeBackdrop = swipeBackdrop,
                                             )
                                         }
-                                    else if (tiles != null && window != null) {
-                                        MultiPaneLayout(
-                                            client,
-                                            displayedSession,
-                                            window.id,
-                                            tiles,
-                                            chosen,
-                                            liveBlock,
-                                            controlled,
-                                            state.programs,
-                                            state.mirrorWaiting,
-                                            fontSize,
-                                            onFocus = { id, grid ->
-                                                client.selectBlock(id, grid, keepTiled = true)
-                                            },
-                                            onView = onView,
-                                            onImage = imageCommit,
-                                            onPaste = ::pasteClipboard,
-                                            imeEnterSubmits = model.enterSubmits,
-                                            keyboardChrome = {
-                                                if (model.toolbarWithKeyboardOnly) toolbarHeight[0]
-                                                else 0
-                                            },
-                                            headerHeightSaved = currentHeaderSavings,
-                                            headerOverlap = currentHeaderOverlap,
-                                            extendsUnderNavigation = extendUnderNav,
-                                            hazeState = terminalHaze,
-                                            captureBackdrop = captureTerminal,
-                                            bottomPaddingDp = if (floating.isNotEmpty()) 28 else 6,
-                                            navigationClearance = tiledNavigationClearance,
-                                            splits = window.splits,
-                                            zoomed = window.zoomed,
-                                            paneActionsEnabled = ready,
-                                            floatingPanes = floatingOverlay,
-                                            allowFloat = allowFloatingOverlay && tiles.size > 1,
-                                            onMinimizeFloating = ::minimizeFloating,
-                                            onDockFloating = { dockFloatingPane = it },
-                                            onClosePane = { id ->
-                                                blocks
-                                                    .firstOrNull { it.id == id }
-                                                    ?.let { closeTarget = closePaneTarget(it) }
-                                            },
-                                            floatingMotion = floatingMotion,
-                                        )
-                                    } else {
-                                        LiveTerminal(
-                                            client,
-                                            carouselBlocks,
-                                            chosen,
-                                            liveBlock,
-                                            state.programs,
-                                            controlled,
-                                            fontSize,
-                                            client::type,
-                                            client::scroll,
-                                            client::wheel,
-                                            client::takeControl,
-                                            client::scrollToBottom,
-                                            client::resize,
-                                            ::openPane,
-                                            { picker = "panes" },
-                                            onView,
-                                            Modifier.fillMaxSize(),
-                                            floatingDock = floating.isNotEmpty(),
-                                            paneLayout = window?.layout.orEmpty(),
-                                            titles = state.titles,
-                                            directories = state.directories,
-                                            hazeState = terminalHaze,
-                                            captureBackdrop = captureTerminal,
-                                            onImage = imageCommit,
-                                            onPaste = ::pasteClipboard,
-                                            padding = model.terminalPadding,
-                                            extendPadding = model.extendPadding,
-                                            imeEnterSubmits = model.enterSubmits,
-                                            keyboardChrome = {
-                                                if (model.toolbarWithKeyboardOnly) toolbarHeight[0]
-                                                else 0
-                                            },
-                                            headerHeightSaved = currentHeaderSavings,
-                                            headerOverlap = currentHeaderOverlap,
-                                            squareCorners = squarePaneCorners,
-                                            extendsUnderNavigation = extendUnderNav,
-                                            navigationClearance = singlePaneNavigationClearance,
-                                            bottomOverlayInset = bottomOverlayInset,
-                                            floatingMotion = floatingMotion,
-                                            swipeBackdrop = swipeBackdrop,
-                                        )
                                     }
                                     if (
                                         showSinglePaneActions &&
@@ -1622,6 +1646,9 @@ private fun RexWorkspace(model: RexModel, client: RexConnection) {
                                                     keepVisible =
                                                         (fannedWindow != null && !paneObscured) ||
                                                             floatingTabMenuOpen,
+                                                    dismissSignal =
+                                                        terminalActivityToken +
+                                                            client.inputInteractionCount,
                                                     onDragStart = { fannedTabId = null },
                                                 ) { handle ->
                                                     if (tabLayout.position == TabBarPosition.BOTTOM)
